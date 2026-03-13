@@ -18,12 +18,12 @@ TideSurf requires a Chromium-based browser installed on the host machine. On mos
 
 ```bash
 # Bun (recommended)
-bun add tidesurf-core
+bun add @tidesurf/core
 
 # npm / yarn / pnpm
-npm install tidesurf-core
-yarn add tidesurf-core
-pnpm add tidesurf-core
+npm install @tidesurf/core
+yarn add @tidesurf/core
+pnpm add @tidesurf/core
 ```
 
 ## Quick start
@@ -31,7 +31,7 @@ pnpm add tidesurf-core
 The simplest way to use TideSurf is to launch a browser, navigate somewhere, and read the compressed page state:
 
 ```typescript
-import { TideSurf } from "tidesurf-core";
+import { TideSurf } from "@tidesurf/core";
 
 const browser = await TideSurf.launch();
 await browser.navigate("https://example.com");
@@ -55,7 +55,7 @@ The `state.xml` output is a clean XML document that strips away all CSS classes,
 TideSurf ships with standardized tool definitions that you can pass directly to any LLM that supports function calling. This makes it straightforward to build an autonomous browsing agent — your LLM receives the compressed page state as context, decides which tool to call, and TideSurf executes the action:
 
 ```typescript
-import { TideSurf, getToolDefinitions } from "tidesurf-core";
+import { TideSurf, getToolDefinitions } from "@tidesurf/core";
 
 const surfing = await TideSurf.launch();
 const tools = getToolDefinitions();   // Standard tool schemas for your LLM
@@ -79,7 +79,7 @@ If you're working with Claude Code or another MCP-compatible client, TideSurf ca
   "mcpServers": {
     "tidesurf": {
       "command": "bunx",
-      "args": ["tidesurf-core", "mcp"]
+      "args": ["tidesurf", "mcp"]
     }
   }
 }

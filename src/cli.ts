@@ -3,9 +3,9 @@
  * TideSurf CLI
  *
  * Usage:
- *   tidesurf-core inspect <url> [--max-tokens N] [--headful]
- *   tidesurf-core mcp [--headful]
- *   tidesurf-core --help
+ *   tidesurf inspect <url> [--max-tokens N] [--headful]
+ *   tidesurf mcp [--headful]
+ *   tidesurf --help
  */
 
 import { TideSurf } from "./index.js";
@@ -13,21 +13,21 @@ import { TideSurf } from "./index.js";
 const args = process.argv.slice(2);
 
 function printUsage() {
-  console.log(`tidesurf-core — DOM compression for LLM agents
+  console.log(`tidesurf — DOM compression for LLM agents
 
 Usage:
-  tidesurf-core inspect <url> [options]   Navigate to a URL and print compressed XML
-  tidesurf-core mcp [options]             Start the MCP server over stdio
-  tidesurf-core --help                    Show this help
+  tidesurf inspect <url> [options]   Navigate to a URL and print compressed XML
+  tidesurf mcp [options]             Start the MCP server over stdio
+  tidesurf --help                    Show this help
 
 Options:
   --max-tokens <n>   Token budget for inspect output (default: unlimited)
   --headful          Launch Chrome with a visible window
 
 Examples:
-  tidesurf-core inspect https://example.com
-  tidesurf-core inspect https://example.com --max-tokens 500
-  tidesurf-core mcp --headful`);
+  tidesurf inspect https://example.com
+  tidesurf inspect https://example.com --max-tokens 500
+  tidesurf mcp --headful`);
 }
 
 function parseFlag(flag: string): string | undefined {
@@ -41,7 +41,7 @@ const hasFlag = (flag: string) => args.includes(flag);
 async function inspect() {
   const url = args[1];
   if (!url) {
-    console.error("Error: missing URL. Usage: tidesurf-core inspect <url>");
+    console.error("Error: missing URL. Usage: tidesurf inspect <url>");
     process.exit(1);
   }
 

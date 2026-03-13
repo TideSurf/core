@@ -2,8 +2,8 @@
 
 [English](README.md) | [日本語](README.ja.md) | **한국어**
 
-[![CI](https://github.com/tidesurf/tidesurf-core/actions/workflows/ci.yml/badge.svg)](https://github.com/tidesurf/tidesurf-core/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/tidesurf-core)](https://www.npmjs.com/package/tidesurf-core)
+[![CI](https://github.com/tidesurf/@tidesurf/core/actions/workflows/ci.yml/badge.svg)](https://github.com/tidesurf/@tidesurf/core/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/@tidesurf/core)](https://www.npmjs.com/package/@tidesurf/core)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 
 **스크린샷도 비전 모델도 필요하지 않습니다. DOM을 압축하여 LLM에 직접 전달합니다.**
@@ -13,13 +13,13 @@ TideSurf는 브라우저의 DOM을 경량 XML로 변환하여 LLM이 바로 처�
 ## 설치
 
 ```bash
-bun add tidesurf-core
+bun add @tidesurf/core
 ```
 
 ## 빠른 시작
 
 ```typescript
-import { TideSurf } from "tidesurf-core";
+import { TideSurf } from "@tidesurf/core";
 
 const browser = await TideSurf.launch();
 await browser.navigate("https://example.com");

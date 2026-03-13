@@ -13,7 +13,7 @@ import {
   ElementNotFoundError, // The given element ID doesn't exist on the page
   NavigationError,      // Navigation to a URL failed
   ValidationError,      // Input validation failed (e.g. invalid URL format)
-} from "tidesurf-core";
+} from "@tidesurf/core";
 ```
 
 ## Catching specific errors

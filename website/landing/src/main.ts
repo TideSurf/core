@@ -79,7 +79,7 @@ const translations: Translations = {
   'quickstart.label': { en: 'Quick Start', ja: 'クイックスタート', ko: '빠른 시작' },
   'quickstart.title': { en: 'Get started in seconds', ja: '数秒で開始', ko: '몇 초면 시작할 수 있습니다' },
   'step1.title': { en: 'Install', ja: 'インストール', ko: '설치' },
-  'step1.desc': { en: 'Add tidesurf-core to your project', ja: 'プロジェクトにtidesurf-coreを追加', ko: '프로젝트에 tidesurf-core를 추가합니다' },
+  'step1.desc': { en: 'Add @tidesurf/core to your project', ja: 'プロジェクトに@tidesurf/coreを追加', ko: '프로젝트에 @tidesurf/core를 추가합니다' },
   'step2.title': { en: 'Launch', ja: '起動', ko: '실행' },
   'step2.desc': { en: 'Start a browser instance', ja: 'ブラウザインスタンスを開始', ko: '브라우저 인스턴스를 시작합니다' },
   'step3.title': { en: 'Control', ja: '制御', ko: '제어' },
@@ -328,10 +328,10 @@ function initSlotMachine(): void {
   if (!track || !copyBtn) return;
 
   const commands = [
-    'bun add tidesurf-core',
-    'npm install tidesurf-core',
-    'yarn add tidesurf-core',
-    'pnpm add tidesurf-core',
+    'bun add @tidesurf/core',
+    'npm install @tidesurf/core',
+    'yarn add @tidesurf/core',
+    'pnpm add @tidesurf/core',
   ];
   const total = commands.length;
   let current = 0;
@@ -384,7 +384,7 @@ interface CodeLine {
 }
 
 const quickstartLines: CodeLine[] = [
-  { text: 'import { TideSurf } from "tidesurf-core"', step: 1 },
+  { text: 'import { TideSurf } from "@tidesurf/core"', step: 1 },
   { text: '', step: 1 },
   { text: 'const browser = await TideSurf.launch()', step: 2 },
   { text: 'await browser.navigate("https://example.com")', step: 2 },

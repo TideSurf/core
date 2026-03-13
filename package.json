@@ -1,12 +1,12 @@
 {
-  "name": "tidesurf-core",
+  "name": "@tidesurf/core",
   "version": "0.1.0",
   "description": "Connect Chromium to LLM agents via token-efficient DOM compression",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "tidesurf-core": "dist/cli.js"
+    "tidesurf": "dist/cli.js"
   },
   "exports": {
     ".": {
@@ -33,6 +33,9 @@
     "url": "https://github.com/tidesurf/tidesurf-core"
   },
   "homepage": "https://tidesurf.github.io/tidesurf-core",
+  "publishConfig": {
+    "access": "public"
+  },
   "author": "TideSurf Contributors",
   "keywords": [
     "browser",
