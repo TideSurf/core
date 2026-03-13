@@ -6,13 +6,23 @@
 
 <p align="center"><a href="README.md">English</a> | <strong>日本語</strong> | <a href="README.ko.md">한국어</a></p>
 
-[![CI](https://github.com/TideSurf/tidesurf-core/actions/workflows/ci.yml/badge.svg)](https://github.com/TideSurf/tidesurf-core/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/@tidesurf/core)](https://www.npmjs.com/package/@tidesurf/core)
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+<p align="center">
+  <a href="https://github.com/TideSurf/tidesurf-core/actions/workflows/ci.yml"><img src="https://github.com/TideSurf/tidesurf-core/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://www.npmjs.com/package/@tidesurf/core"><img src="https://img.shields.io/npm/v/@tidesurf/core" alt="npm"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
+</p>
 
-**スクリーンショットもビジョンモデルも不要です。DOMを圧縮して、LLMに直接渡します。**
+<p align="center">
+  <strong>スクリーンショットもビジョンモデルも不要です。<br>DOMを圧縮して、LLMに直接渡します。</strong>
+</p>
 
-TideSurfはブラウザのDOMを軽量なXMLに変換し、LLMがそのまま扱える形にします。生HTMLでは5,000〜50,000トークン以上になるページも、100〜800トークンに収まります。LLMが出した操作指示はCDPを通じてブラウザ上で実行されます。
+<p align="center">
+  TideSurfはブラウザのDOMを軽量なXMLに変換し、LLMがそのまま扱える形にします。<br>
+  生HTMLでは5,000〜50,000トークン以上になるページも、100〜800トークンに収まります。<br>
+  LLMが出した操作指示はCDPを通じてブラウザ上で実行されます。
+</p>
+
+<br>
 
 ## インストール
 
@@ -40,7 +50,7 @@ await browser.close();
 
 ## ベンチマーク
 
-実サイトでのトークン圧縮率を測定した結果です。
+<p align="center">実サイトでのトークン圧縮率を測定した結果です。</p>
 
 | サイト | 生HTML | TideSurf | 圧縮率 | 倍率 |
 |--------|--------|----------|--------|------|
@@ -54,7 +64,9 @@ await browser.close();
 
 ## ドキュメント
 
-詳しくは **[tidesurf.org/docs](https://tidesurf.org/docs)** をご覧ください。
+<p align="center">
+  詳しくは <strong><a href="https://tidesurf.org/docs">tidesurf.org/docs</a></strong> をご覧ください。
+</p>
 
 - [はじめに](https://tidesurf.org/docs/#getting-started) — インストールからLLM連携までの手順をご案内します
 - [ページフォーマット](https://tidesurf.org/docs/#page-format) — DOMがどのように圧縮されるかをご説明します
@@ -66,4 +78,4 @@ await browser.close();
 
 ## ライセンス
 
-Apache 2.0
+<p align="center">Apache 2.0</p>

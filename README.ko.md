@@ -6,13 +6,23 @@
 
 <p align="center"><a href="README.md">English</a> | <a href="README.ja.md">日本語</a> | <strong>한국어</strong></p>
 
-[![CI](https://github.com/TideSurf/tidesurf-core/actions/workflows/ci.yml/badge.svg)](https://github.com/TideSurf/tidesurf-core/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/@tidesurf/core)](https://www.npmjs.com/package/@tidesurf/core)
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+<p align="center">
+  <a href="https://github.com/TideSurf/tidesurf-core/actions/workflows/ci.yml"><img src="https://github.com/TideSurf/tidesurf-core/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://www.npmjs.com/package/@tidesurf/core"><img src="https://img.shields.io/npm/v/@tidesurf/core" alt="npm"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
+</p>
 
-**스크린샷도 비전 모델도 필요하지 않습니다. DOM을 압축하여 LLM에 직접 전달합니다.**
+<p align="center">
+  <strong>스크린샷도 비전 모델도 필요하지 않습니다.<br>DOM을 압축하여 LLM에 직접 전달합니다.</strong>
+</p>
 
-TideSurf는 브라우저의 DOM을 경량 XML로 변환하여 LLM이 바로 처리할 수 있도록 합니다. 원본 HTML에서 5,000~50,000 토큰 이상이 필요한 페이지도 100~800 토큰으로 충분합니다. LLM이 내린 조작 명령은 CDP를 통해 브라우저에서 실행됩니다.
+<p align="center">
+  TideSurf는 브라우저의 DOM을 경량 XML로 변환하여 LLM이 바로 처리할 수 있도록 합니다.<br>
+  원본 HTML에서 5,000~50,000 토큰 이상이 필요한 페이지도 100~800 토큰으로 충분합니다.<br>
+  LLM이 내린 조작 명령은 CDP를 통해 브라우저에서 실행됩니다.
+</p>
+
+<br>
 
 ## 설치
 
@@ -40,7 +50,7 @@ await browser.close();
 
 ## 벤치마크
 
-실제 웹사이트에서 측정한 토큰 압축 결과입니다.
+<p align="center">실제 웹사이트에서 측정한 토큰 압축 결과입니다.</p>
 
 | 사이트 | 원본 HTML | TideSurf | 압축률 | 배율 |
 |--------|-----------|----------|--------|------|
@@ -54,7 +64,9 @@ await browser.close();
 
 ## 문서
 
-자세한 내용은 **[tidesurf.org/docs](https://tidesurf.org/docs)** 에서 확인하실 수 있습니다.
+<p align="center">
+  자세한 내용은 <strong><a href="https://tidesurf.org/docs">tidesurf.org/docs</a></strong> 에서 확인하실 수 있습니다.
+</p>
 
 - [시작하기](https://tidesurf.org/docs/#getting-started) — 설치부터 LLM 연동까지의 과정을 안내합니다
 - [페이지 포맷](https://tidesurf.org/docs/#page-format) — DOM이 어떻게 압축되는지 설명합니다
@@ -66,4 +78,4 @@ await browser.close();
 
 ## 라이선스
 
-Apache 2.0
+<p align="center">Apache 2.0</p>

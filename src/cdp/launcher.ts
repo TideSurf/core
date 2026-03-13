@@ -86,7 +86,12 @@ export async function launchChrome(options: LaunchOptions = {}): Promise<LaunchR
 
   // CI environments (GitHub Actions, Docker) often run as root
   if (process.env["CI"] || process.getuid?.() === 0) {
-    args.push("--no-sandbox", "--disable-setuid-sandbox");
+    args.push(
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-gpu",
+      "--disable-dev-shm-usage",
+    );
   }
 
   let proc: ChildProcess;
