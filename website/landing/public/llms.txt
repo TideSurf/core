@@ -1,0 +1,70 @@
+# TideSurf
+
+> The connector between Chromium and LLM agents — no screenshots, no vision models, just the DOM compressed for machines.
+
+TideSurf launches Chrome via CDP, walks the live DOM, and compresses it into token-efficient XML (100–800 tokens per page vs 5,000–50,000+ for raw HTML). Interactive elements get stable IDs (L=link, B=button, I=input, S=select) so agents can act on them. Ships with 12 standard tool definitions and an MCP adapter.
+
+## Install
+
+```
+bun add @tidesurf/core
+```
+
+## Quick Start
+
+```typescript
+import { TideSurf } from "@tidesurf/core";
+
+const browser = await TideSurf.launch();
+await browser.navigate("https://example.com");
+
+const state = await browser.getState();
+console.log(state.xml);
+
+const page = browser.getPage();
+await page.click("B1");
+await page.type("I1", "hello world");
+
+await browser.close();
+```
+
+## Tools
+
+- `get_state` — get page as compressed XML (optional `maxTokens` budget)
+- `navigate` — go to a URL
+- `click` — click element by ID (e.g. `B1`, `L3`)
+- `type` — type into input by ID (e.g. `I1`)
+- `select` — pick dropdown option by ID (e.g. `S1`)
+- `scroll` — scroll up/down
+- `extract` — extract text via CSS selector
+- `evaluate` — run JavaScript in page context
+- `list_tabs` — list open tabs
+- `new_tab` — open new tab
+- `switch_tab` — switch to tab by ID
+- `close_tab` — close tab by ID
+
+## MCP
+
+```json
+{
+  "mcpServers": {
+    "tidesurf": {
+      "command": "bunx",
+      "args": ["tidesurf", "mcp"]
+    }
+  }
+}
+```
+
+## CLI
+
+```
+bunx tidesurf inspect <url>        # print compressed XML
+bunx tidesurf mcp                  # start MCP server
+```
+
+## Links
+
+- Docs: https://tidesurf.org/docs
+- GitHub: https://github.com/TideSurf/tidesurf-core
+- npm: https://www.npmjs.com/package/@tidesurf/core
