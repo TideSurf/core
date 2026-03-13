@@ -38,6 +38,20 @@ await page.type("I1", "hello world");
 await browser.close();
 ```
 
+## Benchmarks
+
+Real-world token compression measured against live sites:
+
+| Site | Raw HTML | TideSurf | Reduction | Ratio |
+|------|----------|----------|-----------|-------|
+| Wikipedia | 123,631 tokens | 25,189 tokens | 80% | **4.9x** |
+| GitHub | 84,668 tokens | 10,968 tokens | 87% | **7.7x** |
+| Reddit | 47,489 tokens | 21,972 tokens | 54% | **2.2x** |
+| MDN Docs | 24,919 tokens | 18,769 tokens | 25% | **1.3x** |
+| Hacker News | 8,694 tokens | 7,364 tokens | 15% | **1.2x** |
+
+> Run `bun scripts/benchmark-live.ts` to reproduce.
+
 ## Documentation
 
 Full docs at **[docs.tidesurf.org](https://docs.tidesurf.org)**:

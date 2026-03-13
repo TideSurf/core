@@ -95,6 +95,11 @@ const translations: Translations = {
     ja: 'APIリファレンス',
     ko: 'API 참조'
   },
+  'sidebar.bench': {
+    en: 'Benchmarks',
+    ja: 'ベンチマーク',
+    ko: '벤치마크'
+  },
   'sidebar.arch': {
     en: 'Architecture',
     ja: 'アーキテクチャ',

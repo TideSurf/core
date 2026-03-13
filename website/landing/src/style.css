@@ -767,6 +767,236 @@ main {
   opacity: 0.4;
 }
 
+/* ── Benchmarks ── */
+
+.benchmarks {
+  padding-bottom: 4rem;
+}
+
+/* Hero stats row */
+.bench-hero {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 3rem;
+  margin: 0 auto 4rem;
+  max-width: 800px;
+}
+
+.bench-stat {
+  text-align: center;
+  flex: 1;
+}
+
+.bench-stat-value {
+  display: block;
+  font-size: 3.5rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.bench-stat-primary .bench-stat-value {
+  font-size: 4.5rem;
+  color: var(--accent);
+}
+
+.bench-stat-unit {
+  font-size: 0.5em;
+  font-weight: 600;
+  opacity: 0.6;
+}
+
+.bench-stat-caption {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.bench-stat-divider {
+  width: 1px;
+  height: 3.5rem;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+/* Bar chart */
+.bench-chart {
+  max-width: 800px;
+  margin: 0 auto 4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.bench-row-label {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.4rem;
+}
+
+.bench-site {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.bench-ratio-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-subtle);
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.bench-ratio-best {
+  background: var(--accent);
+  color: #fff;
+}
+
+.bench-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.bench-bar {
+  height: 2rem;
+  border-radius: 0.35rem;
+  display: flex;
+  align-items: center;
+  padding: 0 0.75rem;
+  position: relative;
+  width: 0;
+  transition: width 1s cubic-bezier(0.22, 1, 0.36, 1);
+  min-width: fit-content;
+}
+
+.bench-chart.is-visible .bench-bar {
+  width: var(--target-width);
+}
+
+.bench-bar-raw {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+}
+
+.bench-bar-compressed {
+  background: linear-gradient(90deg, var(--accent), var(--accent-sky));
+}
+
+.bench-bar-value {
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bench-bar-raw .bench-bar-value {
+  color: var(--text-secondary);
+}
+
+.bench-bar-compressed .bench-bar-value {
+  color: #fff;
+}
+
+/* Stagger the bar animations */
+.bench-chart.is-visible .bench-row:nth-child(1) .bench-bar { transition-delay: 0s; }
+.bench-chart.is-visible .bench-row:nth-child(2) .bench-bar { transition-delay: 0.08s; }
+.bench-chart.is-visible .bench-row:nth-child(3) .bench-bar { transition-delay: 0.16s; }
+.bench-chart.is-visible .bench-row:nth-child(4) .bench-bar { transition-delay: 0.24s; }
+.bench-chart.is-visible .bench-row:nth-child(5) .bench-bar { transition-delay: 0.32s; }
+
+.bench-legend {
+  display: flex;
+  gap: 1.5rem;
+  justify-content: center;
+  padding-top: 1rem;
+}
+
+.bench-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.bench-legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.bench-legend-raw {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+}
+
+.bench-legend-compressed {
+  background: linear-gradient(90deg, var(--accent), var(--accent-sky));
+}
+
+/* Explanation cards */
+.bench-explain {
+  max-width: 800px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2rem;
+}
+
+.bench-explain-block {
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--bg-secondary);
+}
+
+.bench-explain-block h3 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 0.6rem;
+}
+
+.bench-explain-block p {
+  font-size: 0.85rem;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 768px) {
+  .bench-hero {
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+  .bench-stat-divider {
+    width: 3rem;
+    height: 1px;
+  }
+  .bench-stat-primary .bench-stat-value {
+    font-size: 3.5rem;
+  }
+  .bench-stat-value {
+    font-size: 2.5rem;
+  }
+  .bench-explain {
+    grid-template-columns: 1fr;
+  }
+  .bench-bar-value {
+    font-size: 0.7rem;
+  }
+}
+
 /* ── Features ── */
 
 .feature-list {

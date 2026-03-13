@@ -38,6 +38,20 @@ await page.type("I1", "hello world");
 await browser.close();
 ```
 
+## 벤치마크
+
+실제 웹사이트에서 측정한 토큰 압축 결과입니다.
+
+| 사이트 | 원본 HTML | TideSurf | 압축률 | 배율 |
+|--------|-----------|----------|--------|------|
+| Wikipedia | 123,631 토큰 | 25,189 토큰 | 80% | **4.9x** |
+| GitHub | 84,668 토큰 | 10,968 토큰 | 87% | **7.7x** |
+| Reddit | 47,489 토큰 | 21,972 토큰 | 54% | **2.2x** |
+| MDN Docs | 24,919 토큰 | 18,769 토큰 | 25% | **1.3x** |
+| Hacker News | 8,694 토큰 | 7,364 토큰 | 15% | **1.2x** |
+
+> `bun scripts/benchmark-live.ts`로 직접 재현하실 수 있습니다.
+
 ## 문서
 
 자세한 내용은 **[docs.tidesurf.org](https://docs.tidesurf.org)** 에서 확인하실 수 있습니다.

@@ -38,6 +38,31 @@ const translations: Translations = {
   'compare.table.label': { en: 'Data table', ja: 'データテーブル', ko: '데이터 테이블' },
   'compare.raw': { en: 'Raw HTML', ja: '生HTML', ko: '원본 HTML' },
   'compare.tidesurf': { en: 'TideSurf XML', ja: 'TideSurf XML', ko: 'TideSurf XML' },
+  'bench.label': { en: 'Performance', ja: 'パフォーマンス', ko: '성능' },
+  'bench.title': { en: 'Real-world compression', ja: '実サイトでの圧縮結果', ko: '실제 사이트 압축 결과' },
+  'bench.stat.peak': { en: 'Peak compression on GitHub', ja: 'GitHubでの最大圧縮率', ko: 'GitHub 최대 압축률' },
+  'bench.stat.reduction': { en: 'Token reduction', ja: 'トークン圧縮率', ko: '토큰 압축률' },
+  'bench.stat.speed': { en: 'Average parse time', ja: '平均解析時間', ko: '평균 파싱 시간' },
+  'bench.legend.raw': { en: 'Raw HTML', ja: '生HTML', ko: '원본 HTML' },
+  'bench.legend.tidesurf': { en: 'TideSurf XML', ja: 'TideSurf XML', ko: 'TideSurf XML' },
+  'bench.why.title': { en: 'Why this matters', ja: 'なぜ重要なのか', ko: '왜 중요한가' },
+  'bench.why.body': {
+    en: 'Every token your agent reads costs money and eats into the context window. A GitHub page that takes 84,668 tokens raw fits in just 10,968 with TideSurf — that\'s the difference between one page filling your context and browsing dozens of pages in a single session.',
+    ja: 'エージェントが読むトークンにはすべてコストが発生し、コンテキストウィンドウを消費します。生HTMLで84,668トークンのGitHubページがTideSurfでは10,968トークンに収まります。1ページでコンテキストが埋まるか、1セッションで数十ページを閲覧できるかの違いです。',
+    ko: '에이전트가 읽는 모든 토큰에는 비용이 발생하며 컨텍스트 윈도우를 소모합니다. 원본 HTML로 84,668 토큰인 GitHub 페이지가 TideSurf에서는 10,968 토큰으로 줄어듭니다. 한 페이지로 컨텍스트가 가득 차는 것과 한 세션에서 수십 페이지를 탐색하는 것의 차이입니다.'
+  },
+  'bench.how.title': { en: 'How we measure', ja: '測定方法', ko: '측정 방법' },
+  'bench.how.body': {
+    en: 'We launch headless Chrome, navigate to each site, and compare the full rendered DOM against TideSurf\'s compressed XML output. Token counts use cl100k_base estimation. No cherry-picking — these are live pages, measured as-is.',
+    ja: 'ヘッドレスChromeを起動し、各サイトに遷移して、レンダリング済みDOMとTideSurfの圧縮XMLを比較しています。トークン数はcl100k_base推定を使用しています。意図的な選別はしていません。すべて実際のページをそのまま計測しています。',
+    ko: '헤드리스 Chrome을 실행하여 각 사이트에 접속한 후, 렌더링된 전체 DOM과 TideSurf의 압축 XML 출력을 비교합니다. 토큰 수는 cl100k_base 추정을 사용합니다. 의도적인 선별 없이 실제 페이지를 있는 그대로 측정합니다.'
+  },
+  'bench.varies.title': { en: 'Compression varies', ja: '圧縮率はサイトによって異なります', ko: '압축률은 사이트마다 다릅니다' },
+  'bench.varies.body': {
+    en: 'Heavy sites like GitHub (deep nesting, SVGs, generated classes) compress dramatically. Minimal sites like Hacker News are already lean — TideSurf still strips what it can, but the gains are modest. The more bloated the source, the more TideSurf helps.',
+    ja: 'GitHubのように重いサイト（深いネスト、SVG、自動生成クラス）は劇的に圧縮されます。Hacker Newsのような軽量なサイトはすでにシンプルなため、TideSurfの効果は控えめです。ソースが肥大化しているほど、TideSurfの効果は大きくなります。',
+    ko: 'GitHub처럼 무거운 사이트(깊은 중첩, SVG, 자동 생성 클래스)는 극적으로 압축됩니다. Hacker News처럼 이미 가벼운 사이트는 효과가 제한적입니다. 원본이 비대할수록 TideSurf의 효과가 커집니다.'
+  },
   'features.label': { en: 'Features', ja: '機能', ko: '기능' },
   'features.title': { en: 'Built for agents', ja: 'エージェントのために構築', ko: 'AI 에이전트를 위한 설계' },
   'feature.compression.title': { en: 'DOM compression', ja: 'DOM圧縮', ko: 'DOM 압축' },

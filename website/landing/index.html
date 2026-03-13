@@ -580,6 +580,138 @@
                 </div>
             </section>
 
+            <!-- ── Benchmarks ── -->
+            <section class="section benchmarks">
+                <div class="section-header reveal">
+                    <span class="section-label" data-i18n="bench.label">Performance</span>
+                    <h2 data-i18n="bench.title">Real-world compression</h2>
+                </div>
+
+                <!-- Hero stats -->
+                <div class="bench-hero reveal">
+                    <div class="bench-stat bench-stat-primary">
+                        <span class="bench-stat-value">7.7<span class="bench-stat-unit">x</span></span>
+                        <span class="bench-stat-caption" data-i18n="bench.stat.peak">Peak compression on GitHub</span>
+                    </div>
+                    <div class="bench-stat-divider"></div>
+                    <div class="bench-stat">
+                        <span class="bench-stat-value">87<span class="bench-stat-unit">%</span></span>
+                        <span class="bench-stat-caption" data-i18n="bench.stat.reduction">Token reduction</span>
+                    </div>
+                    <div class="bench-stat-divider"></div>
+                    <div class="bench-stat">
+                        <span class="bench-stat-value">18<span class="bench-stat-unit">ms</span></span>
+                        <span class="bench-stat-caption" data-i18n="bench.stat.speed">Average parse time</span>
+                    </div>
+                </div>
+
+                <!-- Bar chart -->
+                <div class="bench-chart reveal" id="bench-chart">
+                    <div class="bench-row" data-raw="123631" data-compressed="25189">
+                        <div class="bench-row-label">
+                            <span class="bench-site">Wikipedia</span>
+                            <span class="bench-ratio-badge">4.9x</span>
+                        </div>
+                        <div class="bench-bars">
+                            <div class="bench-bar bench-bar-raw" style="--target-width: 100%">
+                                <span class="bench-bar-value">123,631</span>
+                            </div>
+                            <div class="bench-bar bench-bar-compressed" style="--target-width: 20.4%">
+                                <span class="bench-bar-value">25,189</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bench-row" data-raw="84668" data-compressed="10968">
+                        <div class="bench-row-label">
+                            <span class="bench-site">GitHub</span>
+                            <span class="bench-ratio-badge bench-ratio-best">7.7x</span>
+                        </div>
+                        <div class="bench-bars">
+                            <div class="bench-bar bench-bar-raw" style="--target-width: 68.5%">
+                                <span class="bench-bar-value">84,668</span>
+                            </div>
+                            <div class="bench-bar bench-bar-compressed" style="--target-width: 8.9%">
+                                <span class="bench-bar-value">10,968</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bench-row" data-raw="47489" data-compressed="21972">
+                        <div class="bench-row-label">
+                            <span class="bench-site">Reddit</span>
+                            <span class="bench-ratio-badge">2.2x</span>
+                        </div>
+                        <div class="bench-bars">
+                            <div class="bench-bar bench-bar-raw" style="--target-width: 38.4%">
+                                <span class="bench-bar-value">47,489</span>
+                            </div>
+                            <div class="bench-bar bench-bar-compressed" style="--target-width: 17.8%">
+                                <span class="bench-bar-value">21,972</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bench-row" data-raw="24919" data-compressed="18769">
+                        <div class="bench-row-label">
+                            <span class="bench-site">MDN Docs</span>
+                            <span class="bench-ratio-badge">1.3x</span>
+                        </div>
+                        <div class="bench-bars">
+                            <div class="bench-bar bench-bar-raw" style="--target-width: 20.2%">
+                                <span class="bench-bar-value">24,919</span>
+                            </div>
+                            <div class="bench-bar bench-bar-compressed" style="--target-width: 15.2%">
+                                <span class="bench-bar-value">18,769</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bench-row" data-raw="8694" data-compressed="7364">
+                        <div class="bench-row-label">
+                            <span class="bench-site">Hacker News</span>
+                            <span class="bench-ratio-badge">1.2x</span>
+                        </div>
+                        <div class="bench-bars">
+                            <div class="bench-bar bench-bar-raw" style="--target-width: 7.0%">
+                                <span class="bench-bar-value">8,694</span>
+                            </div>
+                            <div class="bench-bar bench-bar-compressed" style="--target-width: 6.0%">
+                                <span class="bench-bar-value">7,364</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bench-legend">
+                        <span class="bench-legend-item"><span class="bench-legend-swatch bench-legend-raw"></span> <span data-i18n="bench.legend.raw">Raw HTML</span></span>
+                        <span class="bench-legend-item"><span class="bench-legend-swatch bench-legend-compressed"></span> <span data-i18n="bench.legend.tidesurf">TideSurf XML</span></span>
+                    </div>
+                </div>
+
+                <!-- Explanation -->
+                <div class="bench-explain reveal">
+                    <div class="bench-explain-block">
+                        <h3 data-i18n="bench.why.title">Why this matters</h3>
+                        <p data-i18n="bench.why.body">
+                            Every token your agent reads costs money and eats into the context window.
+                            A GitHub page that takes 84,668 tokens raw fits in just 10,968 with TideSurf — that's
+                            the difference between one page filling your context and browsing dozens of pages in a single session.
+                        </p>
+                    </div>
+                    <div class="bench-explain-block">
+                        <h3 data-i18n="bench.how.title">How we measure</h3>
+                        <p data-i18n="bench.how.body">
+                            We launch headless Chrome, navigate to each site, and compare the full rendered DOM
+                            against TideSurf's compressed XML output. Token counts use cl100k_base estimation.
+                            No cherry-picking — these are live pages, measured as-is.
+                        </p>
+                    </div>
+                    <div class="bench-explain-block">
+                        <h3 data-i18n="bench.varies.title">Compression varies</h3>
+                        <p data-i18n="bench.varies.body">
+                            Heavy sites like GitHub (deep nesting, SVGs, generated classes) compress dramatically.
+                            Minimal sites like Hacker News are already lean — TideSurf still strips what it can,
+                            but the gains are modest. The more bloated the source, the more TideSurf helps.
+                        </p>
+                    </div>
+                </div>
+            </section>
+
             <!-- ── Features ── -->
             <section class="section features">
                 <div class="section-header reveal">
