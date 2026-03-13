@@ -1,6 +1,6 @@
 /*
  * TideSurf Docs
- * Outfit · Greyscale + Blue
+ * Gothic A1 · Greyscale + Blue
  */
 
 *,
@@ -29,7 +29,7 @@
   --ease-out: cubic-bezier(0, 0, 0.2, 1);
   --duration: 0.25s;
   --duration-slow: 0.6s;
-  --font: "Outfit", "Gothic A1", system-ui, -apple-system, sans-serif;
+  --font: "Gothic A1", system-ui, -apple-system, sans-serif;
   --font-mono: "SF Mono", "Fira Code", "JetBrains Mono", monospace;
 
   --sidebar-w: 280px;
