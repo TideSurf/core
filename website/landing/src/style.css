@@ -159,6 +159,7 @@ body {
 
 .nav-links {
   display: flex;
+  align-items: center;
   gap: 2rem;
 }
 
@@ -195,6 +196,28 @@ body {
 
 .nav-links a.github-star:hover .star-icon {
   opacity: 1;
+}
+
+.nav-links a.github-star .star-separator {
+  width: 1px;
+  height: 14px;
+  background: var(--border);
+  margin: 0 0.1rem;
+}
+
+.nav-links a.github-star .star-count {
+  font-weight: 700;
+  font-size: 0.78rem;
+  min-width: 1ch;
+}
+
+.nav-links a.github-star .star-count:empty {
+  display: none;
+}
+
+.nav-links a.github-star .star-count:empty ~ .star-separator,
+.nav-links a.github-star .star-separator:has(+ .star-count:empty) {
+  display: none;
 }
 
 .nav-controls {
