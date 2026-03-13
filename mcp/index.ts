@@ -6,7 +6,7 @@
  * Exposes all browser tools as native MCP tools over stdio.
  *
  * Usage:
- *   bun mcp/index.ts [--headful] [--auto-connect] [--port 9222]
+ *   bun mcp/index.ts [--headful] [--auto-connect] [--port 9222] [--read-only]
  *
  * Configure in .mcp.json:
  *   { "mcpServers": { "tidesurf": { "command": "bun", "args": ["mcp/index.ts", "--headful"] } } }
@@ -22,6 +22,7 @@ import { TideSurf } from "../src/index.js";
 
 const headful = process.argv.includes("--headful");
 const autoConnect = process.argv.includes("--auto-connect");
+const readOnly = process.argv.includes("--read-only");
 
 function parsePort(): number | undefined {
   const idx = process.argv.indexOf("--port");
@@ -51,11 +52,11 @@ async function browser(): Promise<TideSurf> {
   if (!surfing) {
     if (autoConnect) {
       console.error(`[tidesurf-mcp] Connecting to running Chrome (port ${port ?? 9222})...`);
-      surfing = await TideSurf.connect({ port });
+      surfing = await TideSurf.connect({ port, readOnly });
       console.error("[tidesurf-mcp] Connected to existing browser.");
     } else {
       console.error(`[tidesurf-mcp] Launching browser (${headful ? "headful" : "headless"})...`);
-      surfing = await TideSurf.launch({ headless: !headful, port });
+      surfing = await TideSurf.launch({ headless: !headful, port, readOnly });
       console.error("[tidesurf-mcp] Browser ready.");
     }
   }
@@ -70,7 +71,7 @@ function text(t: string) {
 
 const server = new McpServer({
   name: "tidesurf",
-  version: "0.1.0",
+  version: "0.2.0",
 });
 
 // --- Page tools ---
@@ -82,11 +83,17 @@ server.registerTool(
       "Get the current page as compressed XML. Interactive elements have IDs (L=link, B=button, I=input, S=select) for use with click/type/select.",
     inputSchema: {
       maxTokens: z.number().optional().describe("Token budget — prunes low-priority elements to fit"),
+      viewport: z.boolean().optional().describe("Only include visible viewport elements"),
+      mode: z.enum(["full", "minimal", "interactive"]).optional().describe("Output mode"),
     },
   },
-  async ({ maxTokens }) => {
+  async ({ maxTokens, viewport, mode }) => {
     const s = await browser();
-    const state = await s.getState(maxTokens ? { maxTokens } : undefined);
+    const state = await s.getState({
+      ...(maxTokens ? { maxTokens } : {}),
+      ...(viewport ? { viewport } : {}),
+      ...(mode ? { mode } : {}),
+    });
     return text(state.xml);
   }
 );
@@ -257,6 +264,105 @@ server.registerTool(
     return text(`Closed tab ${tabId}`);
   }
 );
+
+// --- Search / Screenshot / Clipboard read ---
+
+server.registerTool(
+  "search",
+  {
+    description: "Search for text on the page. Returns matches with element IDs and surrounding context.",
+    inputSchema: {
+      query: z.string().describe("Text to search for (case-insensitive)"),
+      maxResults: z.number().optional().describe("Max matches to return (default: 10)"),
+    },
+  },
+  async ({ query, maxResults }) => {
+    const page = (await browser()).getPage();
+    const results = await page.search(query, maxResults);
+    return text(JSON.stringify(results, null, 2));
+  }
+);
+
+server.registerTool(
+  "screenshot",
+  {
+    description: "Capture a screenshot of the page or a specific element. Returns base64 PNG.",
+    inputSchema: {
+      elementId: z.string().optional().describe("Element ID to capture (default: viewport)"),
+      fullPage: z.boolean().optional().describe("Capture the entire scrollable page"),
+    },
+  },
+  async ({ elementId, fullPage }) => {
+    const page = (await browser()).getPage();
+    const base64 = await page.screenshot({ elementId, fullPage });
+    return { content: [{ type: "image" as const, data: base64, mimeType: "image/png" }] };
+  }
+);
+
+server.registerTool(
+  "clipboard_read",
+  {
+    description: "Read the current clipboard contents.",
+    inputSchema: {},
+  },
+  async () => {
+    const page = (await browser()).getPage();
+    const t = await page.clipboardRead();
+    return text(t);
+  }
+);
+
+// --- Write tools (skipped in read-only mode) ---
+
+if (!readOnly) {
+  server.registerTool(
+    "upload",
+    {
+      description: "Upload a file to a file input element.",
+      inputSchema: {
+        id: z.string().describe("File input element ID (e.g. I1)"),
+        filePath: z.string().describe("Path to the file to upload"),
+      },
+    },
+    async ({ id, filePath }) => {
+      const page = (await browser()).getPage();
+      await page.upload(id, [filePath]);
+      return text(`Uploaded to ${id}`);
+    }
+  );
+
+  server.registerTool(
+    "clipboard_write",
+    {
+      description: "Write text to the clipboard.",
+      inputSchema: {
+        text: z.string().describe("Text to write to clipboard"),
+      },
+    },
+    async ({ text: t }) => {
+      const page = (await browser()).getPage();
+      await page.clipboardWrite(t);
+      return text("Clipboard updated");
+    }
+  );
+
+  server.registerTool(
+    "download",
+    {
+      description: "Click a download link/button and capture the downloaded file.",
+      inputSchema: {
+        id: z.string().describe("Element ID of the download link/button"),
+        downloadDir: z.string().optional().describe("Directory to save to (default: temp dir)"),
+        timeout: z.number().optional().describe("Max wait time in ms (default: 30000)"),
+      },
+    },
+    async ({ id, downloadDir, timeout }) => {
+      const page = (await browser()).getPage();
+      const result = await page.download(id, { downloadDir, timeout });
+      return text(JSON.stringify(result));
+    }
+  );
+}
 
 // --- Lifecycle ---
 

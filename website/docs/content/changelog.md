@@ -1,24 +1,32 @@
 # Changelog
 
+## 0.2.0 (2026-03-14)
+
+### New tools
+
+6 new tools (total: 18): search, screenshot, upload, clipboard_read, clipboard_write, download.
+
+### Output modes
+
+- `get_state({ mode: "interactive" })` — only clickable/typeable elements
+- `get_state({ mode: "minimal" })` — landmarks, headings, text summaries
+- `get_state({ viewport: true })` — visible viewport only, with scroll position metadata
+
+### Read-only mode
+
+`readOnly: true` on launch/connect disables write tools. CLI: `--read-only`.
+
 ## 0.1.2 (2026-03-14)
 
 ### Auto Connect
 
-Connect to an already-running Chrome instance instead of launching a new one.
-
 - `TideSurf.connect(options?)` — attach to existing Chrome via CDP
-- `TideSurfConnectOptions` type (`port`, `host`, `timeout`)
-- `discoverBrowser()` utility for Chrome instance discovery with timeout
+- `discoverBrowser()` utility with timeout and retry
 - `--auto-connect` and `--port` CLI/MCP flags
-- `close()` skips process cleanup when auto-connected
-- Port validation (`validatePort()`) across all entry points
-- Targets first page tab explicitly to avoid service worker / chrome:// attachment
 
 ### Demo
 
 - TideTravel interactive demo site
-- `bun run demo` server script
-- Demo prompt for end-to-end booking flow
 
 ## 0.1.0 (2026-03-13)
 

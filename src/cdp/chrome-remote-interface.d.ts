@@ -20,11 +20,33 @@ declare module "chrome-remote-interface" {
       enable(): Promise<void>;
       getDocument(params: { depth?: number; pierce?: boolean }): Promise<{ root: unknown }>;
       resolveNode(params: { backendNodeId: number }): Promise<{ object: { objectId?: string } }>;
+      setFileInputFiles(params: { files: string[]; backendNodeId: number }): Promise<void>;
+      getBoxModel(params: { backendNodeId: number }): Promise<{
+        model: {
+          content: number[];
+          padding: number[];
+          border: number[];
+          margin: number[];
+          width: number;
+          height: number;
+        };
+      }>;
     };
     Page: {
       enable(): Promise<void>;
       navigate(params: { url: string }): Promise<unknown>;
       loadEventFired(): Promise<unknown>;
+      captureScreenshot(params: {
+        format?: string;
+        clip?: { x: number; y: number; width: number; height: number; scale: number };
+        captureBeyondViewport?: boolean;
+      }): Promise<{ data: string }>;
+      setDownloadBehavior(params: {
+        behavior: string;
+        downloadPath?: string;
+      }): Promise<void>;
+      on(event: string, callback: (params: any) => void): void;
+      removeListener(event: string, callback: (params: any) => void): void;
     };
     Runtime: {
       enable(): Promise<void>;
@@ -32,6 +54,7 @@ declare module "chrome-remote-interface" {
         expression: string;
         returnByValue?: boolean;
         awaitPromise?: boolean;
+        userGesture?: boolean;
       }): Promise<{
         result: { value?: unknown };
         exceptionDetails?: { text?: string };
@@ -50,6 +73,7 @@ declare module "chrome-remote-interface" {
         key?: string;
       }): Promise<void>;
     };
+    send(method: string, params?: Record<string, unknown>): Promise<unknown>;
     close(): Promise<void>;
   }
 

@@ -25,6 +25,7 @@ export class TideSurf {
   private userDataDir: string;
   private ownsTempDir: boolean;
   private port: number;
+  private readOnly: boolean;
   private exitHandler: (() => void) | null = null;
 
   private constructor(
@@ -33,7 +34,8 @@ export class TideSurf {
     tabManager: TabManager,
     userDataDir: string,
     ownsTempDir: boolean,
-    port: number
+    port: number,
+    readOnly: boolean = false
   ) {
     this.chromeProcess = chromeProcess;
     this.activePage = page;
@@ -41,7 +43,8 @@ export class TideSurf {
     this.userDataDir = userDataDir;
     this.ownsTempDir = ownsTempDir;
     this.port = port;
-    this.executor = createToolExecutor(this);
+    this.readOnly = readOnly;
+    this.executor = createToolExecutor(this, this.readOnly);
 
     // Register exit handler to kill Chrome if parent dies (only if we own the process)
     if (chromeProcess) {
@@ -82,7 +85,7 @@ export class TideSurf {
     const page = new SurfingPage(conn);
     const tabManager = new TabManager(port);
 
-    return new TideSurf(proc, page, tabManager, userDataDir, ownsTempDir, port);
+    return new TideSurf(proc, page, tabManager, userDataDir, ownsTempDir, port, options.readOnly ?? false);
   }
 
   /**
@@ -114,7 +117,7 @@ export class TideSurf {
     const page = new SurfingPage(conn);
     const tabManager = new TabManager(port, host);
 
-    return new TideSurf(null, page, tabManager, "", false, port);
+    return new TideSurf(null, page, tabManager, "", false, port, options.readOnly ?? false);
   }
 
   /**
@@ -151,7 +154,14 @@ export class TideSurf {
    * Get tool definitions for LLM function calling.
    */
   getToolDefinitions() {
-    return getToolDefinitions();
+    return getToolDefinitions({ readOnly: this.readOnly });
+  }
+
+  /**
+   * Whether this instance is in read-only mode.
+   */
+  isReadOnly(): boolean {
+    return this.readOnly;
   }
 
   // --- Tab management ---
@@ -174,7 +184,7 @@ export class TideSurf {
     const page = new SurfingPage(conn);
     this.pages.set(tab.id, page);
     this.activePage = page;
-    this.executor = createToolExecutor(this);
+    this.executor = createToolExecutor(this, this.readOnly);
     return tab;
   }
 
@@ -190,7 +200,7 @@ export class TideSurf {
       this.pages.set(tabId, page);
     }
     this.activePage = page;
-    this.executor = createToolExecutor(this);
+    this.executor = createToolExecutor(this, this.readOnly);
   }
 
   /**

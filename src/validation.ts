@@ -67,3 +67,12 @@ export function validateElementId(id: string): void {
     );
   }
 }
+
+/**
+ * Validate a file path string
+ */
+export function validateFilePath(filePath: string): void {
+  if (!filePath || typeof filePath !== "string") {
+    throw new ValidationError("File path must be a non-empty string");
+  }
+}

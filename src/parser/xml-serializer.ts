@@ -1,4 +1,4 @@
-import type { OSNode } from "../types.js";
+import type { OSNode, ScrollPosition } from "../types.js";
 
 /**
  * Escape XML special characters
@@ -76,12 +76,18 @@ function serializeAttributes(attrs: Record<string, string>): string {
 }
 
 /**
- * Wrap nodes in a <page> element with url and title
+ * Wrap nodes in a <page> element with url and title.
+ * When scrollPosition is provided, adds scroll-y, scroll-height, viewport-height attributes.
  */
 export function wrapPage(
   xml: string,
   url: string,
-  title: string
+  title: string,
+  scrollPosition?: ScrollPosition
 ): string {
-  return `<page url="${escapeXml(url)}" title="${escapeXml(title)}">\n${xml}\n</page>`;
+  let attrs = `url="${escapeXml(url)}" title="${escapeXml(title)}"`;
+  if (scrollPosition) {
+    attrs += ` scroll-y="${scrollPosition.scrollY}" scroll-height="${scrollPosition.scrollHeight}" viewport-height="${scrollPosition.viewportHeight}"`;
+  }
+  return `<page ${attrs}>\n${xml}\n</page>`;
 }

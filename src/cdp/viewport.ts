@@ -1,5 +1,6 @@
 import type { CDPConnection } from "./connection.js";
 import { evaluate } from "./connection.js";
+import type { ScrollPosition } from "../types.js";
 
 /**
  * Inject JS to mark elements visible in the viewport with data-os-visible="1".
@@ -24,4 +25,19 @@ export async function markVisibleElements(conn: CDPConnection): Promise<void> {
   }
 })()`
   );
+}
+
+/**
+ * Get the current scroll position and viewport dimensions.
+ */
+export async function getScrollPosition(conn: CDPConnection): Promise<ScrollPosition> {
+  const result = await evaluate(
+    conn,
+    `(() => ({
+  scrollY: window.scrollY,
+  scrollHeight: document.documentElement.scrollHeight,
+  viewportHeight: window.innerHeight
+}))()`
+  );
+  return result as ScrollPosition;
 }

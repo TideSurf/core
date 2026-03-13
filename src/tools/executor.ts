@@ -6,19 +6,48 @@ interface ToolInput {
   input: Record<string, unknown>;
 }
 
+const WRITE_TOOLS = new Set([
+  "navigate",
+  "click",
+  "type",
+  "select",
+  "scroll",
+  "new_tab",
+  "close_tab",
+  "upload",
+  "clipboard_write",
+  "download",
+]);
+
 /**
  * Create a tool executor bound to an TideSurf instance.
  * Handles all tools including tab management.
  */
-export function createToolExecutor(instance: TideSurf) {
+export function createToolExecutor(
+  instance: TideSurf,
+  readOnly: boolean = false
+) {
   return async (tool: ToolInput): Promise<ToolResult> => {
     try {
+      if (readOnly && WRITE_TOOLS.has(tool.name)) {
+        return {
+          success: false,
+          error: `Tool "${tool.name}" is disabled in read-only mode`,
+        };
+      }
+
       const page = instance.getPage();
 
       switch (tool.name) {
         case "get_state": {
           const maxTokens = tool.input["maxTokens"] as number | undefined;
-          const state = await instance.getState(maxTokens ? { maxTokens } : undefined);
+          const viewport = tool.input["viewport"] as boolean | undefined;
+          const mode = tool.input["mode"] as
+            | "full"
+            | "minimal"
+            | "interactive"
+            | undefined;
+          const state = await instance.getState({ maxTokens, viewport, mode });
           return { success: true, data: state.xml };
         }
         case "navigate": {
@@ -80,6 +109,41 @@ export function createToolExecutor(instance: TideSurf) {
           const tabId = tool.input["tabId"] as string;
           await instance.closeTab(tabId);
           return { success: true, data: `Closed tab ${tabId}` };
+        }
+        // New tools
+        case "search": {
+          const query = tool.input["query"] as string;
+          const maxResults = tool.input["maxResults"] as number | undefined;
+          const results = await page.search(query, maxResults);
+          return { success: true, data: results };
+        }
+        case "screenshot": {
+          const elementId = tool.input["elementId"] as string | undefined;
+          const fullPage = tool.input["fullPage"] as boolean | undefined;
+          const base64 = await page.screenshot({ elementId, fullPage });
+          return { success: true, data: base64 };
+        }
+        case "upload": {
+          const id = tool.input["id"] as string;
+          const filePath = tool.input["filePath"] as string;
+          await page.upload(id, [filePath]);
+          return { success: true, data: `Uploaded to ${id}` };
+        }
+        case "clipboard_read": {
+          const text = await page.clipboardRead();
+          return { success: true, data: text };
+        }
+        case "clipboard_write": {
+          const text = tool.input["text"] as string;
+          await page.clipboardWrite(text);
+          return { success: true, data: "Clipboard updated" };
+        }
+        case "download": {
+          const id = tool.input["id"] as string;
+          const downloadDir = tool.input["downloadDir"] as string | undefined;
+          const timeout = tool.input["timeout"] as number | undefined;
+          const result = await page.download(id, { downloadDir, timeout });
+          return { success: true, data: result };
         }
         default:
           return { success: false, error: `Unknown tool: ${tool.name}` };

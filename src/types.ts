@@ -58,6 +58,10 @@ export interface PageState {
  */
 export interface GetStateOptions {
   maxTokens?: number;
+  /** Only include elements visible in the current viewport */
+  viewport?: boolean;
+  /** Output mode: "full" (default), "minimal" (landmarks + summaries), "interactive" (only elements with IDs) */
+  mode?: "full" | "minimal" | "interactive";
 }
 
 /**
@@ -70,6 +74,8 @@ export interface TideSurfOptions {
   userDataDir?: string;
   defaultViewport?: { width: number; height: number };
   timeout?: number;
+  /** Disable write tools (click, type, select, scroll, navigate, etc.) */
+  readOnly?: boolean;
 }
 
 /**
@@ -82,6 +88,8 @@ export interface TideSurfConnectOptions {
   host?: string;
   /** Connect timeout in ms */
   timeout?: number;
+  /** Disable write tools */
+  readOnly?: boolean;
 }
 
 /**
@@ -104,6 +112,51 @@ export interface ToolResult {
   success: boolean;
   data?: unknown;
   error?: string;
+}
+
+/**
+ * Result from searching the page
+ */
+export interface SearchResult {
+  /** TideSurf element ID if interactive (e.g. "B3") */
+  elementId?: string;
+  /** Surrounding text context */
+  text: string;
+  /** HTML tag name */
+  tag: string;
+  /** Match index (1-based) */
+  index: number;
+}
+
+/**
+ * Options for screenshot
+ */
+export interface ScreenshotOptions {
+  /** Capture a specific element by its TideSurf ID */
+  elementId?: string;
+  /** Capture the full scrollable page (default: viewport only) */
+  fullPage?: boolean;
+}
+
+/**
+ * Result from a download operation
+ */
+export interface DownloadResult {
+  /** Path to the downloaded file */
+  filePath: string;
+  /** Original file name */
+  fileName: string;
+  /** File size in bytes */
+  totalBytes: number;
+}
+
+/**
+ * Scroll position metadata for viewport mode
+ */
+export interface ScrollPosition {
+  scrollY: number;
+  scrollHeight: number;
+  viewportHeight: number;
 }
 
 /**

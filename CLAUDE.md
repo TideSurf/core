@@ -29,7 +29,7 @@ src/
 │   ├── xml-serializer.ts # OSNode → compressed XML string
 │   └── token-budget.ts  # Token estimation + priority-based pruning
 ├── tools/
-│   ├── definitions.ts   # 12 standard tool definitions for LLM function calling
+│   ├── definitions.ts   # 18 tool definitions for LLM function calling
 │   └── executor.ts      # Tool execution engine
 mcp/
 └── index.ts             # Standalone MCP server adapter (bun mcp/index.ts)
@@ -60,4 +60,6 @@ bun run test:all         # All tests
 - **ID scheme** — Interactive elements get prefix-based IDs: `L` (links), `B` (buttons), `I` (inputs), `S` (selects). These are stable within a single getState() call.
 - **Token budgeting** — `getState({ maxTokens })` prunes low-priority elements to fit a budget. Priority: interactive > visible text > structural.
 - **Auto-connect** — `TideSurf.connect()` attaches to an already-running Chrome instead of spawning one. Uses `discoverBrowser()` to probe CDP on a given port. When auto-connected, `close()` only disconnects CDP — it never kills the external process.
+- **Output modes** — `getState({ mode })` supports `"full"`, `"minimal"` (landmarks + summaries), and `"interactive"` (only elements with IDs). Viewport mode (`viewport: true`) filters to visible elements only.
+- **Read-only mode** — `readOnly: true` disables write tools. Agent can observe but not interact.
 - **MCP as optional** — `@modelcontextprotocol/sdk` and `zod` are `optionalDependencies`. The CLI `mcp` subcommand dynamically imports them.

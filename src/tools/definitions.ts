@@ -1,7 +1,22 @@
 import type { ToolDefinition } from "../types.js";
 
-export function getToolDefinitions(): ToolDefinition[] {
-  return [
+const WRITE_TOOLS = new Set([
+  "navigate",
+  "click",
+  "type",
+  "select",
+  "scroll",
+  "new_tab",
+  "close_tab",
+  "upload",
+  "clipboard_write",
+  "download",
+]);
+
+export function getToolDefinitions(options?: {
+  readOnly?: boolean;
+}): ToolDefinition[] {
+  const allTools: ToolDefinition[] = [
     {
       name: "get_state",
       description:
@@ -13,6 +28,17 @@ export function getToolDefinitions(): ToolDefinition[] {
             type: "number",
             description:
               "Optional token budget. If set, the output will be pruned to fit within this limit, prioritizing interactive and visible elements.",
+          },
+          viewport: {
+            type: "boolean",
+            description:
+              "Only include elements visible in the current viewport. Returns scroll position metadata.",
+          },
+          mode: {
+            type: "string",
+            enum: ["full", "minimal", "interactive"],
+            description:
+              "Output mode. 'minimal' returns landmarks and summaries. 'interactive' returns only clickable/typeable elements.",
           },
         },
       },
@@ -132,7 +158,8 @@ export function getToolDefinitions(): ToolDefinition[] {
     },
     {
       name: "list_tabs",
-      description: "List all open browser tabs with their IDs, URLs, and titles.",
+      description:
+        "List all open browser tabs with their IDs, URLs, and titles.",
       input_schema: {
         type: "object",
         properties: {},
@@ -179,5 +206,115 @@ export function getToolDefinitions(): ToolDefinition[] {
         required: ["tabId"],
       },
     },
+    // --- New tools ---
+    {
+      name: "search",
+      description:
+        "Search for text on the current page (case-insensitive). Returns matching elements with their IDs and surrounding context.",
+      input_schema: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Text to search for on the page (case-insensitive)",
+          },
+          maxResults: {
+            type: "number",
+            description: "Maximum matches to return (default: 10)",
+          },
+        },
+        required: ["query"],
+      },
+    },
+    {
+      name: "screenshot",
+      description:
+        "Take a screenshot of the current page. Returns a base64-encoded PNG image.",
+      input_schema: {
+        type: "object",
+        properties: {
+          elementId: {
+            type: "string",
+            description: "Capture a specific element by its ID",
+          },
+          fullPage: {
+            type: "boolean",
+            description: "Capture the entire scrollable page",
+          },
+        },
+      },
+    },
+    {
+      name: "upload",
+      description:
+        "Upload a file to a file input element by its ID.",
+      input_schema: {
+        type: "object",
+        properties: {
+          id: {
+            type: "string",
+            description: "File input element ID (e.g. I1)",
+          },
+          filePath: {
+            type: "string",
+            description: "Path to the file to upload",
+          },
+        },
+        required: ["id", "filePath"],
+      },
+    },
+    {
+      name: "clipboard_read",
+      description:
+        "Read the current contents of the system clipboard.",
+      input_schema: {
+        type: "object",
+        properties: {},
+      },
+    },
+    {
+      name: "clipboard_write",
+      description:
+        "Write text to the system clipboard.",
+      input_schema: {
+        type: "object",
+        properties: {
+          text: {
+            type: "string",
+            description: "Text to write to the clipboard",
+          },
+        },
+        required: ["text"],
+      },
+    },
+    {
+      name: "download",
+      description:
+        "Click a download link/button and wait for the file to download. Returns the file path, name, and size.",
+      input_schema: {
+        type: "object",
+        properties: {
+          id: {
+            type: "string",
+            description: "Element ID of the download link/button to click",
+          },
+          downloadDir: {
+            type: "string",
+            description: "Directory to save the file (default: temp dir)",
+          },
+          timeout: {
+            type: "number",
+            description: "Max wait time in ms (default: 30000)",
+          },
+        },
+        required: ["id"],
+      },
+    },
   ];
+
+  if (options?.readOnly) {
+    return allTools.filter((t) => !WRITE_TOOLS.has(t.name));
+  }
+
+  return allTools;
 }

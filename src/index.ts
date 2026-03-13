@@ -20,6 +20,7 @@ export {
   validateExpression,
   validateElementId,
   validatePort,
+  validateFilePath,
 } from "./validation.js";
 
 export { withTimeout } from "./cdp/timeout.js";
@@ -38,6 +39,10 @@ export type {
   CDPNode,
   ClassifyAction,
   ClassifyResult,
+  SearchResult,
+  ScreenshotOptions,
+  DownloadResult,
+  ScrollPosition,
 } from "./types.js";
 
 export type { TabInfo } from "./cdp/tab-manager.js";

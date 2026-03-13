@@ -274,6 +274,149 @@ export async function waitForStable(
 }
 
 /**
+ * Capture a screenshot of the page.
+ * @returns Base64-encoded PNG string
+ */
+export async function captureScreenshot(
+  conn: CDPConnection,
+  options?: {
+    clip?: { x: number; y: number; width: number; height: number; scale: number };
+    fullPage?: boolean;
+  }
+): Promise<string> {
+  const params: {
+    format: string;
+    clip?: { x: number; y: number; width: number; height: number; scale: number };
+    captureBeyondViewport?: boolean;
+  } = { format: "png" };
+
+  if (options?.clip) {
+    params.clip = options.clip;
+  }
+
+  if (options?.fullPage) {
+    params.captureBeyondViewport = true;
+  }
+
+  const { data } = await conn.Page.captureScreenshot(params);
+  return data;
+}
+
+/**
+ * Set files on a file input element.
+ */
+export async function setFileInput(
+  conn: CDPConnection,
+  backendNodeId: number,
+  filePaths: string[]
+): Promise<void> {
+  await conn.DOM.setFileInputFiles({ files: filePaths, backendNodeId });
+
+  // Dispatch a change event so the page reacts
+  const { object } = await conn.DOM.resolveNode({ backendNodeId });
+  if (object.objectId) {
+    try {
+      await conn.Runtime.callFunctionOn({
+        objectId: object.objectId,
+        functionDeclaration:
+          "function() { this.dispatchEvent(new Event('change', { bubbles: true })); }",
+        returnByValue: true,
+      });
+    } finally {
+      await conn.Runtime.releaseObject({ objectId: object.objectId }).catch(() => {});
+    }
+  }
+}
+
+/**
+ * Read text from the clipboard.
+ */
+export async function clipboardRead(conn: CDPConnection): Promise<string> {
+  const result = await conn.Runtime.evaluate({
+    expression: "navigator.clipboard.readText()",
+    awaitPromise: true,
+    userGesture: true,
+    returnByValue: true,
+  });
+  if (result.exceptionDetails) {
+    throw new Error(
+      `Clipboard read failed: ${result.exceptionDetails.text ?? "unknown error"}`
+    );
+  }
+  return String(result.result.value ?? "");
+}
+
+/**
+ * Write text to the clipboard.
+ */
+export async function clipboardWrite(
+  conn: CDPConnection,
+  text: string
+): Promise<void> {
+  const result = await conn.Runtime.evaluate({
+    expression: `navigator.clipboard.writeText(${JSON.stringify(text)})`,
+    awaitPromise: true,
+    userGesture: true,
+    returnByValue: true,
+  });
+  if (result.exceptionDetails) {
+    throw new Error(
+      `Clipboard write failed: ${result.exceptionDetails.text ?? "unknown error"}`
+    );
+  }
+}
+
+/**
+ * Search the page for text matching a query.
+ * Returns matching text contexts with tag names.
+ */
+export async function searchPage(
+  conn: CDPConnection,
+  query: string,
+  maxResults: number = 10
+): Promise<Array<{ text: string; tag: string; index: number }>> {
+  const result = await conn.Runtime.evaluate({
+    expression: `(() => {
+  const query = ${JSON.stringify(query)}.toLowerCase();
+  const max = ${maxResults};
+  const results = [];
+  const walker = document.createTreeWalker(
+    document.body || document.documentElement,
+    NodeFilter.SHOW_TEXT,
+    null
+  );
+  let index = 1;
+  let node;
+  while ((node = walker.nextNode()) && results.length < max) {
+    const text = node.textContent || "";
+    if (text.toLowerCase().includes(query)) {
+      const parent = node.parentElement;
+      if (parent) {
+        const context = text.trim().substring(0, 100);
+        if (context) {
+          results.push({
+            text: context,
+            tag: parent.tagName.toLowerCase(),
+            index: index++,
+          });
+        }
+      }
+    }
+  }
+  return results;
+})()`,
+    returnByValue: true,
+    awaitPromise: false,
+  });
+  if (result.exceptionDetails) {
+    throw new Error(
+      `Search failed: ${result.exceptionDetails.text ?? "unknown error"}`
+    );
+  }
+  return (result.result.value as Array<{ text: string; tag: string; index: number }>) ?? [];
+}
+
+/**
  * Close the CDP connection
  */
 export async function disconnect(conn: CDPConnection): Promise<void> {
