@@ -175,7 +175,7 @@ body {
 
 .nav-controls {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 0.5rem;
 }
 
@@ -201,6 +201,7 @@ body {
 
 .lang-switcher {
   display: flex;
+  align-items: center;
   gap: 2px;
   background: var(--bg-elevated);
   border-radius: 10px;
