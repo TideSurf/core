@@ -6,17 +6,19 @@
     TideSurf
 </h2>
 
-<p align="center"><a href="README.md">English</a> | <strong>日本語</strong> | <a href="README.ko.md">한국어</a></p>
+<p align="center">
+    <a href="README.md">English</a> | <strong>日本語</strong> | <a href="README.ko.md">한국어</a>
+</p>
 
-<h2 align="center">
+<p align="center">
   <strong><a href="https://tidesurf.org">About</a></strong> |
   <strong><a href="https://tidesurf.org/docs">Documentations</a></strong>
-</h2>
+</p>
 
-<h3 align="center">
+<p align="center">
   スクリーンショットもビジョンモデルも不要です。<br>
   DOMを圧縮して、LLMに直接渡します。
-</h3>
+</p>
 
 <br>
 
