@@ -75,6 +75,23 @@ function serializeAttributes(attrs: Record<string, string>): string {
   return parts.join(" ");
 }
 
+function summarizePageUrl(url: string, maxLength: number = 160): string {
+  if (url.startsWith("data:")) {
+    const commaIndex = url.indexOf(",");
+    const header = commaIndex === -1 ? url : url.slice(0, commaIndex);
+    const summarized = `${header},...`;
+    return summarized.length <= maxLength
+      ? summarized
+      : `${summarized.slice(0, maxLength - 3)}...`;
+  }
+
+  if (url.length <= maxLength) {
+    return url;
+  }
+
+  return `${url.slice(0, maxLength - 3)}...`;
+}
+
 /**
  * Wrap nodes in a <page> element with url and title.
  * When scrollPosition is provided, adds scroll-y, scroll-height, viewport-height attributes.
@@ -85,7 +102,8 @@ export function wrapPage(
   title: string,
   scrollPosition?: ScrollPosition
 ): string {
-  let attrs = `url="${escapeXml(url)}" title="${escapeXml(title)}"`;
+  const safeUrl = summarizePageUrl(url);
+  let attrs = `url="${escapeXml(safeUrl)}" title="${escapeXml(title)}"`;
   if (scrollPosition) {
     attrs += ` scroll-y="${scrollPosition.scrollY}" scroll-height="${scrollPosition.scrollHeight}" viewport-height="${scrollPosition.viewportHeight}"`;
   }

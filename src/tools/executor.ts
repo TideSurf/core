@@ -12,9 +12,11 @@ const WRITE_TOOLS = new Set([
   "type",
   "select",
   "scroll",
+  "evaluate",
   "new_tab",
   "close_tab",
   "upload",
+  "clipboard_read",
   "clipboard_write",
   "download",
 ]);

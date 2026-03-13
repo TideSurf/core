@@ -69,11 +69,22 @@ body {
         color 0.6s var(--ease);
 }
 
-*,
-*::before,
-*::after {
-    transition-duration: 0.6s;
-    transition-timing-function: var(--ease);
+[hidden] {
+    display: none !important;
+}
+
+.nav-logo:focus-visible,
+.nav-links a:focus-visible,
+.control-btn:focus-visible,
+.lang-btn:focus-visible,
+.github-star:focus-visible,
+.sidebar-link:focus-visible,
+.search-result:focus-visible,
+.toc-link:focus-visible,
+.copy-code-btn:focus-visible,
+.mobile-menu-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
 }
 
 /* ─────────────────────────────────────
@@ -336,7 +347,7 @@ body.mobile-menu-open .mobile-overlay {
     padding: 0.625rem 1.25rem;
     text-decoration: none;
     border-bottom: 1px solid var(--border);
-    transition: background 0.15s;
+    transition: background 0.15s var(--ease);
 }
 
 .search-result-title {
@@ -676,7 +687,7 @@ main hr {
     align-items: center;
     justify-content: center;
     opacity: 0.5;
-    transition: all 0.2s;
+    transition: all 0.2s var(--ease);
 }
 
 .copy-code-btn.copied {
@@ -698,6 +709,20 @@ main code {
 
 [data-theme="dark"] main code {
     background: rgba(37, 99, 235, 0.12);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html {
+        scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
 }
 
 main pre code {

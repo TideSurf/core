@@ -178,28 +178,26 @@ describe("classify", () => {
     });
   });
 
-  describe("SECTION promotion", () => {
-    it("promotes SECTION with interactive children to section", () => {
-      const children = [{ nodeName: "BUTTON", attributes: [] }];
-      expect(classify("SECTION", {}, children)).toEqual({
+  describe("semantic landmarks", () => {
+    it("keeps SECTION as section", () => {
+      expect(classify("SECTION")).toEqual({
         action: "KEEP",
         mappedTag: "section",
       });
     });
 
-    it("collapses SECTION without interactive children", () => {
-      const children = [{ nodeName: "DIV", attributes: [] }];
-      expect(classify("SECTION", {}, children)).toEqual({
-        action: "COLLAPSE",
+    it("keeps ARTICLE as article", () => {
+      expect(classify("ARTICLE")).toEqual({
+        action: "KEEP",
+        mappedTag: "article",
       });
     });
 
-    it("promotes ARTICLE with role=button child", () => {
-      const children = [{ nodeName: "DIV", attributes: ["role", "button"] }];
-      expect(classify("ARTICLE", {}, children)).toEqual({
-        action: "KEEP",
-        mappedTag: "section",
-      });
+    it("keeps MAIN, HEADER, FOOTER, and ASIDE", () => {
+      expect(classify("MAIN")).toEqual({ action: "KEEP", mappedTag: "main" });
+      expect(classify("HEADER")).toEqual({ action: "KEEP", mappedTag: "header" });
+      expect(classify("FOOTER")).toEqual({ action: "KEEP", mappedTag: "footer" });
+      expect(classify("ASIDE")).toEqual({ action: "KEEP", mappedTag: "aside" });
     });
   });
 });

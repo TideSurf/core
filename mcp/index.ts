@@ -19,6 +19,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { TideSurf } from "../src/index.js";
+import { VERSION } from "../src/version.js";
 
 const headful = process.argv.includes("--headful");
 const autoConnect = process.argv.includes("--auto-connect");
@@ -71,7 +72,7 @@ function text(t: string) {
 
 const server = new McpServer({
   name: "tidesurf",
-  version: "0.2.0",
+  version: VERSION,
 });
 
 // --- Page tools ---
@@ -196,20 +197,22 @@ server.registerTool(
   }
 );
 
-server.registerTool(
-  "evaluate",
-  {
-    description: "Execute JavaScript in the page and return the result.",
-    inputSchema: {
-      expression: z.string().describe("JavaScript expression to evaluate"),
+if (!readOnly) {
+  server.registerTool(
+    "evaluate",
+    {
+      description: "Execute JavaScript in the page and return the result.",
+      inputSchema: {
+        expression: z.string().describe("JavaScript expression to evaluate"),
+      },
     },
-  },
-  async ({ expression }) => {
-    const page = (await browser()).getPage();
-    const result = await page.evaluate(expression);
-    return text(String(result));
-  }
-);
+    async ({ expression }) => {
+      const page = (await browser()).getPage();
+      const result = await page.evaluate(expression);
+      return text(String(result));
+    }
+  );
+}
 
 // --- Tab tools ---
 
@@ -271,12 +274,12 @@ if (!readOnly) {
   );
 }
 
-// --- Search / Screenshot / Clipboard read ---
+// --- Search / Screenshot ---
 
 server.registerTool(
   "search",
   {
-    description: "Search for text on the page. Returns matches with element IDs and surrounding context.",
+    description: "Search for text on the page. Returns matches with snippets, tag names, match indices, and nearest interactive element IDs when available.",
     inputSchema: {
       query: z.string().describe("Text to search for (case-insensitive)"),
       maxResults: z.number().optional().describe("Max matches to return (default: 10)"),
@@ -305,22 +308,22 @@ server.registerTool(
   }
 );
 
-server.registerTool(
-  "clipboard_read",
-  {
-    description: "Read the current clipboard contents.",
-    inputSchema: {},
-  },
-  async () => {
-    const page = (await browser()).getPage();
-    const t = await page.clipboardRead();
-    return text(t);
-  }
-);
-
-// --- Write tools (skipped in read-only mode) ---
+// --- Write and sensitive tools (skipped in read-only mode) ---
 
 if (!readOnly) {
+  server.registerTool(
+    "clipboard_read",
+    {
+      description: "Read the current clipboard contents.",
+      inputSchema: {},
+    },
+    async () => {
+      const page = (await browser()).getPage();
+      const t = await page.clipboardRead();
+      return text(t);
+    }
+  );
+
   server.registerTool(
     "upload",
     {

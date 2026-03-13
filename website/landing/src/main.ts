@@ -14,6 +14,11 @@ const translations: Translations = {
   "hero.title.line1": { en: "Surf", ja: "波に", ko: "파도를" },
   "hero.title.line2": { en: "the", ja: "", ko: "" },
   "hero.title.line3": { en: "Tide", ja: "乗れ", ko: "타라" },
+  "hero.badge": {
+    en: "v0.2.3 · safer read-only · 18 tools",
+    ja: "v0.2.3 ・ より安全な読み取り専用 ・ 18ツール",
+    ko: "v0.2.3 · 더 안전한 읽기 전용 · 18개 도구",
+  },
   "hero.tagline1": {
     en: "Your AI doesn't need eyes to browse.",
     ja: "AIにスクリーンショットは要らない。",
@@ -132,9 +137,9 @@ const translations: Translations = {
     ko: "클래스, 래퍼 div, 스크립트, 스타일을 제거하되 인터랙티브 요소와 시맨틱 구조, 텍스트는 보존합니다.",
   },
   "feature.tools.title": {
-    en: "12 standard tools",
-    ja: "12の標準ツール",
-    ko: "12가지 표준 도구",
+    en: "18 standard tools",
+    ja: "18の標準ツール",
+    ko: "18가지 표준 도구",
   },
   "feature.tools.desc": {
     en: "Navigate, click, type, scroll, extract and more. Works with any LLM that supports function calling",
@@ -224,6 +229,27 @@ let currentLang: Language = "en";
 let currentTheme: Theme = "dark";
 let canvas: HTMLCanvasElement | null = null;
 let ctx: CanvasRenderingContext2D | null = null;
+const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+function prefersReducedMotion(): boolean {
+  return motionQuery.matches;
+}
+
+function safeStorageGet(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeStorageSet(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Ignore storage failures.
+  }
+}
 
 // ── Tide Animation ──
 
@@ -568,6 +594,12 @@ function initSlotMachine(): void {
   const total = commands.length;
   let current = 0;
 
+  if (prefersReducedMotion()) {
+    copyBtn.dataset.copy = commands[0];
+    track.style.transform = "translateY(0)";
+    return;
+  }
+
   setInterval(() => {
     current++;
     track.style.transition = "transform 0.45s cubic-bezier(0.23, 1, 0.32, 1)";
@@ -676,7 +708,7 @@ function highlightTS(line: string): string {
 
   // Types/constructors
   result = result.replace(
-    /\b(TideSurf|TideSurfConfig|BrowserState|PageAction)\b/g,
+    /\b(TideSurf|PageState|ToolDefinition|DownloadResult|SearchResult)\b/g,
     '<span class="tk-type">$1</span>',
   );
 
@@ -723,18 +755,12 @@ function initQuickstart(): void {
     .join("");
   codeEl.innerHTML = html;
 
-  // Set initial highlight to step 1
-  updateCodeHighlight(1);
+  setActiveQuickstartStep(1);
 
-  // Bind step clicks
-  document.querySelectorAll(".step[data-step]").forEach((step) => {
+  document.querySelectorAll<HTMLButtonElement>(".step[data-step]").forEach((step) => {
     step.addEventListener("click", () => {
       const stepNum = parseInt(step.getAttribute("data-step") || "1", 10);
-      document
-        .querySelectorAll(".step[data-step]")
-        .forEach((s) => s.classList.remove("active"));
-      step.classList.add("active");
-      updateCodeHighlight(stepNum);
+      setActiveQuickstartStep(stepNum);
     });
   });
 }
@@ -746,10 +772,21 @@ function updateCodeHighlight(activeStep: number): void {
   });
 }
 
+function setActiveQuickstartStep(activeStep: number): void {
+  document.querySelectorAll<HTMLButtonElement>(".step[data-step]").forEach((step) => {
+    const stepNum = parseInt(step.getAttribute("data-step") || "0", 10);
+    const isActive = stepNum === activeStep;
+    step.classList.toggle("active", isActive);
+    step.setAttribute("aria-pressed", isActive ? "true" : "false");
+  });
+
+  updateCodeHighlight(activeStep);
+}
+
 // ── Theme ──
 
 function initTheme(): void {
-  const saved = localStorage.getItem("tidesurf-theme") as Theme | null;
+  const saved = safeStorageGet("tidesurf-theme") as Theme | null;
   currentTheme =
     saved ||
     (window.matchMedia("(prefers-color-scheme: dark)").matches
@@ -763,7 +800,7 @@ function initTheme(): void {
 
 function toggleTheme(): void {
   currentTheme = currentTheme === "dark" ? "light" : "dark";
-  localStorage.setItem("tidesurf-theme", currentTheme);
+  safeStorageSet("tidesurf-theme", currentTheme);
   applyTheme();
 }
 
@@ -774,7 +811,7 @@ function applyTheme(): void {
 // ── Language ──
 
 function initLanguage(): void {
-  const saved = localStorage.getItem("tidesurf-lang") as Language | null;
+  const saved = safeStorageGet("tidesurf-lang") as Language | null;
   currentLang = saved || detectLanguage();
   applyLanguage();
 
@@ -783,7 +820,7 @@ function initLanguage(): void {
       const lang = (e.currentTarget as HTMLElement).dataset.lang as Language;
       if (lang && lang !== currentLang) {
         currentLang = lang;
-        localStorage.setItem("tidesurf-lang", lang);
+        safeStorageSet("tidesurf-lang", lang);
         applyLanguage();
         updateLangButtons();
       }
@@ -922,6 +959,13 @@ function initNavScroll(): void {
 // ── Scroll Reveal ──
 
 function initScrollReveal(): void {
+  if (prefersReducedMotion()) {
+    document.querySelectorAll(".reveal").forEach((el) => {
+      el.classList.add("is-visible");
+    });
+    return;
+  }
+
   const observer = new IntersectionObserver(
     (entries) => {
       entries.forEach((entry) => {
@@ -946,7 +990,35 @@ function highlightAllCodeBlocks(): void {
   });
 }
 
-function init(): void {
+async function initGitHubStars(): Promise<void> {
+  const el = document.getElementById("star-count");
+  if (!el) {
+    return;
+  }
+
+  try {
+    const response = await fetch("https://api.github.com/repos/TideSurf/core", {
+      headers: { Accept: "application/vnd.github+json" },
+    });
+    if (!response.ok) {
+      return;
+    }
+
+    const data = (await response.json()) as { stargazers_count?: number };
+    if (data.stargazers_count == null) {
+      return;
+    }
+
+    el.textContent =
+      data.stargazers_count >= 1000
+        ? `${(data.stargazers_count / 1000).toFixed(1)}k`
+        : String(data.stargazers_count);
+  } catch {
+    // Ignore network failures for the decorative star counter.
+  }
+}
+
+async function init(): Promise<void> {
   initTideAnimation();
   initFloatingTags();
   initMouseParallax();
@@ -961,10 +1033,13 @@ function init(): void {
   initNavScroll();
   initScrollReveal();
   updateLangButtons();
+  await initGitHubStars();
 }
 
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", init);
+  document.addEventListener("DOMContentLoaded", () => {
+    void init();
+  });
 } else {
-  init();
+  void init();
 }
