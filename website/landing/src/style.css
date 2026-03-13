@@ -170,6 +170,32 @@ body {
   transition: color var(--duration) var(--ease);
 }
 
+.nav-links a.github-star {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  transition: border-color var(--duration) var(--ease), color var(--duration) var(--ease), background var(--duration) var(--ease);
+}
+
+.nav-links a.github-star:hover {
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+  background: var(--accent-subtle);
+}
+
+.nav-links a.github-star .star-icon {
+  opacity: 0.5;
+  transition: opacity var(--duration) var(--ease);
+}
+
+.nav-links a.github-star:hover .star-icon {
+  opacity: 1;
+}
 
 .nav-controls {
   display: flex;
