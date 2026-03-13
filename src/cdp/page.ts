@@ -195,17 +195,11 @@ export class SurfingPage {
   async search(query: string, maxResults: number = 10): Promise<SearchResult[]> {
     const rawResults = await cdp.searchPage(this.conn, query, maxResults);
 
-    // Build a reverse map: backendNodeId -> element ID
-    // We can't directly map JS results to backendNodeIds, but we can
-    // check text matches against our nodeMap-based elements
-    const results: SearchResult[] = rawResults.map((r) => ({
+    return rawResults.map((r) => ({
       text: r.text,
       tag: r.tag,
       index: r.index,
-      elementId: undefined,
     }));
-
-    return results;
   }
 
   /**

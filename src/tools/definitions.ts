@@ -210,7 +210,7 @@ export function getToolDefinitions(options?: {
     {
       name: "search",
       description:
-        "Search for text on the current page (case-insensitive). Returns matching elements with their IDs and surrounding context.",
+        "Search for text on the current page (case-insensitive). Returns matching elements with their tag, text context, and match index.",
       input_schema: {
         type: "object",
         properties: {

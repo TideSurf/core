@@ -4,6 +4,8 @@ import {
   validateSelector,
   validateExpression,
   validateElementId,
+  validatePort,
+  validateFilePath,
 } from "../../src/validation.js";
 import { ValidationError } from "../../src/errors.js";
 
@@ -69,5 +71,51 @@ describe("validateElementId", () => {
     expect(() => validateElementId("button")).toThrow(ValidationError);
     expect(() => validateElementId("1B")).toThrow(ValidationError);
     expect(() => validateElementId("B")).toThrow(ValidationError);
+  });
+});
+
+describe("validatePort", () => {
+  it("accepts valid ports", () => {
+    expect(() => validatePort(1)).not.toThrow();
+    expect(() => validatePort(80)).not.toThrow();
+    expect(() => validatePort(9222)).not.toThrow();
+    expect(() => validatePort(65535)).not.toThrow();
+  });
+
+  it("rejects port 0", () => {
+    expect(() => validatePort(0)).toThrow(ValidationError);
+  });
+
+  it("rejects negative ports", () => {
+    expect(() => validatePort(-1)).toThrow(ValidationError);
+  });
+
+  it("rejects ports above 65535", () => {
+    expect(() => validatePort(99999)).toThrow(ValidationError);
+  });
+
+  it("rejects NaN", () => {
+    expect(() => validatePort(NaN)).toThrow(ValidationError);
+  });
+
+  it("rejects floats", () => {
+    expect(() => validatePort(80.5)).toThrow(ValidationError);
+  });
+});
+
+describe("validateFilePath", () => {
+  it("accepts non-empty strings", () => {
+    expect(() => validateFilePath("/tmp/file.txt")).not.toThrow();
+    expect(() => validateFilePath("relative/path.png")).not.toThrow();
+  });
+
+  it("rejects empty string", () => {
+    expect(() => validateFilePath("")).toThrow(ValidationError);
+  });
+
+  it("rejects undefined (via type coercion)", () => {
+    expect(() => validateFilePath(undefined as unknown as string)).toThrow(
+      ValidationError
+    );
   });
 });

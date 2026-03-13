@@ -114,4 +114,26 @@ describe("wrapPage", () => {
     expect(result).toContain("a=1&amp;b=2");
     expect(result).toContain("&quot;quoted&quot;");
   });
+
+  it("adds scroll attributes when scrollPosition is provided", () => {
+    const xml = '<button id="B1">Click</button>';
+    const result = wrapPage(xml, "https://example.com", "Test", {
+      scrollY: 250,
+      scrollHeight: 3000,
+      viewportHeight: 800,
+    });
+    expect(result).toContain('scroll-y="250"');
+    expect(result).toContain('scroll-height="3000"');
+    expect(result).toContain('viewport-height="800"');
+    // Should still have url and title
+    expect(result).toContain('url="https://example.com"');
+    expect(result).toContain('title="Test"');
+  });
+
+  it("omits scroll attributes when scrollPosition is undefined", () => {
+    const result = wrapPage("", "https://example.com", "Test");
+    expect(result).not.toContain("scroll-y");
+    expect(result).not.toContain("scroll-height");
+    expect(result).not.toContain("viewport-height");
+  });
 });

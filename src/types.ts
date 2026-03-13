@@ -118,8 +118,6 @@ export interface ToolResult {
  * Result from searching the page
  */
 export interface SearchResult {
-  /** TideSurf element ID if interactive (e.g. "B3") */
-  elementId?: string;
   /** Surrounding text context */
   text: string;
   /** HTML tag name */
