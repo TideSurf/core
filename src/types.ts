@@ -76,6 +76,8 @@ export interface TideSurfOptions {
   timeout?: number;
   /** Disable write tools (click, type, select, scroll, navigate, etc.) */
   readOnly?: boolean;
+  /** Allowed host filesystem roots for upload/download operations (defaults to cwd + tmpdir) */
+  fileAccessRoots?: string[];
 }
 
 /**
@@ -86,10 +88,14 @@ export interface TideSurfConnectOptions {
   port?: number;
   /** CDP host to connect to (default: localhost) */
   host?: string;
+  /** Viewport size to apply to the connected tab */
+  defaultViewport?: { width: number; height: number };
   /** Connect timeout in ms */
   timeout?: number;
   /** Disable write tools */
   readOnly?: boolean;
+  /** Allowed host filesystem roots for upload/download operations (defaults to cwd + tmpdir) */
+  fileAccessRoots?: string[];
 }
 
 /**
@@ -124,6 +130,8 @@ export interface SearchResult {
   tag: string;
   /** Match index (1-based) */
   index: number;
+  /** Closest interactive TideSurf ID, when one exists */
+  elementId?: string;
 }
 
 /**

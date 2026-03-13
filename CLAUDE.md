@@ -32,7 +32,7 @@ src/
 │   ├── definitions.ts   # 18 tool definitions for LLM function calling
 │   └── executor.ts      # Tool execution engine
 mcp/
-└── index.ts             # Standalone MCP server adapter (bun mcp/index.ts)
+└── index.ts             # Local MCP server adapter (bun mcp/index.ts)
 ```
 
 ## Dev commands

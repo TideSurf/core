@@ -9,6 +9,7 @@
  */
 
 import { TideSurf } from "./index.js";
+import { VERSION } from "./version.js";
 
 const args = process.argv.slice(2);
 
@@ -26,7 +27,7 @@ Options:
   --auto-connect     Connect to an already-running Chrome instance instead of
                      launching a new one. Requires remote debugging enabled in
                      Chrome (chrome://inspect#remote-debugging or --remote-debugging-port)
-  --read-only        Disable write tools (click, type, select, upload, etc.)
+  --read-only        Disable mutating and unsafe tools (click, type, evaluate, upload, etc.)
   --port <n>         CDP port (default: 9222). Used with --auto-connect to specify
                      which port to connect on, or with launch to set the debug port
 
@@ -151,7 +152,7 @@ async function mcp() {
     return { content: [{ type: "text" as const, text: t }] };
   }
 
-  const server = new McpServer({ name: "tidesurf", version: "0.2.0" });
+  const server = new McpServer({ name: "tidesurf", version: VERSION });
 
   // --- Page tools ---
 
@@ -239,14 +240,16 @@ async function mcp() {
     return text(t);
   });
 
-  server.registerTool("evaluate", {
-    description: "Execute JavaScript in the page and return the result.",
-    inputSchema: { expression: z.string().describe("JavaScript expression to evaluate") },
-  }, async ({ expression }: { expression: string }) => {
-    const page = (await browser()).getPage();
-    const result = await page.evaluate(expression);
-    return text(String(result));
-  });
+  if (!readOnly) {
+    server.registerTool("evaluate", {
+      description: "Execute JavaScript in the page and return the result.",
+      inputSchema: { expression: z.string().describe("JavaScript expression to evaluate") },
+    }, async ({ expression }: { expression: string }) => {
+      const page = (await browser()).getPage();
+      const result = await page.evaluate(expression);
+      return text(String(result));
+    });
+  }
 
   // --- Tab tools ---
 
@@ -286,10 +289,10 @@ async function mcp() {
     });
   }
 
-  // --- Search / Screenshot / Clipboard read ---
+  // --- Search / Screenshot ---
 
   server.registerTool("search", {
-    description: "Search for text on the page. Returns matches with element IDs and surrounding context.",
+    description: "Search for text on the page. Returns matches with snippets, tag names, match indices, and nearest interactive element IDs when available.",
     inputSchema: {
       query: z.string().describe("Text to search for (case-insensitive)"),
       maxResults: z.number().optional().describe("Max matches to return (default: 10)"),
@@ -312,18 +315,18 @@ async function mcp() {
     return { content: [{ type: "image" as const, data: base64, mimeType: "image/png" }] };
   });
 
-  server.registerTool("clipboard_read", {
-    description: "Read the current clipboard contents.",
-    inputSchema: {},
-  }, async () => {
-    const page = (await browser()).getPage();
-    const t = await page.clipboardRead();
-    return text(t);
-  });
-
-  // --- Write tools (skipped in read-only mode) ---
+  // --- Write and sensitive tools (skipped in read-only mode) ---
 
   if (!readOnly) {
+    server.registerTool("clipboard_read", {
+      description: "Read the current clipboard contents.",
+      inputSchema: {},
+    }, async () => {
+      const page = (await browser()).getPage();
+      const t = await page.clipboardRead();
+      return text(t);
+    });
+
     server.registerTool("upload", {
       description: "Upload a file to a file input element.",
       inputSchema: {

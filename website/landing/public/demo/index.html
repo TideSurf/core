@@ -1322,14 +1322,29 @@ function showConfirmation() {
     const seatFee = selectedSeat && (selectedSeat.endsWith('A') || selectedSeat.endsWith('F')) ? 35 : 0;
     const total = basePrice + taxes + seatFee;
 
-    document.getElementById('conf-details').innerHTML = `
-        <div class="row"><span>Passenger</span><strong>${name}</strong></div>
-        <div class="row"><span>Route</span><strong>${originName} → ${destName}</strong></div>
-        <div class="row"><span>Flight</span><strong>${selectedFlight.airline}</strong></div>
-        <div class="row"><span>Departure</span><strong>${selectedFlight.departure}</strong></div>
-        <div class="row"><span>Seat</span><strong>${selectedSeat || '—'}</strong></div>
-        <div class="row"><span>Total Paid</span><strong>$${total.toLocaleString()}</strong></div>
-    `;
+    const details = document.getElementById('conf-details');
+    details.replaceChildren();
+
+    [
+        ['Passenger', name],
+        ['Route', `${originName} → ${destName}`],
+        ['Flight', selectedFlight.airline],
+        ['Departure', selectedFlight.departure],
+        ['Seat', selectedSeat || '—'],
+        ['Total Paid', `$${total.toLocaleString()}`],
+    ].forEach(([label, value]) => {
+        const row = document.createElement('div');
+        row.className = 'row';
+
+        const labelEl = document.createElement('span');
+        labelEl.textContent = label;
+
+        const valueEl = document.createElement('strong');
+        valueEl.textContent = value;
+
+        row.append(labelEl, valueEl);
+        details.appendChild(row);
+    });
 
     const overlay = document.getElementById('confirmation');
     overlay.classList.add('active');

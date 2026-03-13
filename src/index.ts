@@ -3,6 +3,7 @@ export { getToolDefinitions } from "./tools/definitions.js";
 export { SurfingPage } from "./cdp/page.js";
 export { TabManager } from "./cdp/tab-manager.js";
 export { discoverBrowser } from "./cdp/launcher.js";
+export { VERSION } from "./version.js";
 
 export {
   TideSurfError,

@@ -7,23 +7,50 @@ import type {
   SearchResult,
   ScreenshotOptions,
   DownloadResult,
+  OSNode,
 } from "../types.js";
 import * as cdp from "./connection.js";
 import { walkDOM } from "../parser/dom-walker.js";
 import { serializeToXml, wrapPage } from "../parser/xml-serializer.js";
 import { markVisibleElements, getScrollPosition } from "./viewport.js";
-import { pruneToFit, estimateTokens } from "../parser/token-budget.js";
+import { pruneToFit } from "../parser/token-budget.js";
 import { filterViewportOnly } from "../parser/viewport-filter.js";
 import { filterInteractive, filterMinimal } from "../parser/mode-filter.js";
-import { ElementNotFoundError } from "../errors.js";
+import { ElementNotFoundError, ValidationError } from "../errors.js";
 import {
   validateUrl,
   validateSelector,
   validateExpression,
   validateElementId,
-  validateFilePath,
+  validateDownloadDirectory,
+  validatePositiveInteger,
+  validatePositiveNumber,
+  validateSearchQuery,
+  validateUploadFilePath,
+  resolveFileAccessRoots,
 } from "../validation.js";
 import { setupDownloads, downloadFile } from "./download-manager.js";
+
+function collectVisibleIds(nodes: OSNode[]): Set<string> {
+  const ids = new Set<string>();
+
+  const visit = (list: OSNode[]) => {
+    for (const node of list) {
+      if (node.id) {
+        ids.add(node.id);
+      }
+      if (node.attributes["id"]) {
+        ids.add(node.attributes["id"]);
+      }
+      if (node.children.length > 0) {
+        visit(node.children);
+      }
+    }
+  };
+
+  visit(nodes);
+  return ids;
+}
 
 /**
  * SurfingPage — high-level page interaction built on CDP
@@ -31,9 +58,14 @@ import { setupDownloads, downloadFile } from "./download-manager.js";
 export class SurfingPage {
   private conn: CDPConnection;
   private lastNodeMap: NodeMap = new Map();
+  private fileAccessRoots: string[];
 
-  constructor(conn: CDPConnection) {
+  constructor(
+    conn: CDPConnection,
+    fileAccessRoots: string[] = resolveFileAccessRoots()
+  ) {
     this.conn = conn;
+    this.fileAccessRoots = fileAccessRoots;
   }
 
   /**
@@ -42,6 +74,10 @@ export class SurfingPage {
    * @returns PageState with url, title, xml, and nodeMap
    */
   async getState(options?: GetStateOptions): Promise<PageState> {
+    if (options?.maxTokens !== undefined) {
+      validatePositiveInteger(options.maxTokens, "maxTokens");
+    }
+
     // 1. Clear stale visibility markers to prevent carryover from prior calls
     await cdp.evaluate(
       this.conn,
@@ -87,14 +123,23 @@ export class SurfingPage {
       scrollPosition = await getScrollPosition(this.conn);
     }
 
+    const visibleIds = collectVisibleIds(nodes);
+    const filteredNodeMap: NodeMap = new Map();
+    for (const id of visibleIds) {
+      const backendNodeId = nodeMap.get(id);
+      if (backendNodeId !== undefined) {
+        filteredNodeMap.set(id, backendNodeId);
+      }
+    }
+
     // Only update lastNodeMap after all operations succeed
-    this.lastNodeMap = nodeMap;
+    this.lastNodeMap = filteredNodeMap;
 
     return {
       url,
       title,
       xml: wrapPage(xml, url, title, scrollPosition),
-      nodeMap,
+      nodeMap: filteredNodeMap,
     };
   }
 
@@ -139,6 +184,9 @@ export class SurfingPage {
    * @param amount - Pixels to scroll (default 500)
    */
   async scroll(direction: "up" | "down", amount?: number): Promise<void> {
+    if (amount !== undefined) {
+      validatePositiveNumber(amount, "amount");
+    }
     await cdp.scroll(this.conn, direction, amount);
     await cdp.waitForStable(this.conn);
   }
@@ -193,13 +241,47 @@ export class SurfingPage {
    * @returns Array of SearchResult with optional element IDs
    */
   async search(query: string, maxResults: number = 10): Promise<SearchResult[]> {
-    const rawResults = await cdp.searchPage(this.conn, query, maxResults);
+    validateSearchQuery(query);
+    validatePositiveInteger(maxResults, "maxResults");
+    const needle = query.trim().toLowerCase();
+    const { nodes, nodeMap } = walkDOM(await cdp.getFullDOM(this.conn));
+    const results: SearchResult[] = [];
 
-    return rawResults.map((r) => ({
-      text: r.text,
-      tag: r.tag,
-      index: r.index,
-    }));
+    const walk = (node: OSNode, parentTag?: string, nearestId?: string): void => {
+      if (results.length >= maxResults) {
+        return;
+      }
+
+      const currentTag = node.tag === "#text" ? parentTag ?? "text" : node.tag;
+      const currentId = node.id ?? nearestId;
+      const text = node.text?.trim();
+
+      if (text && text.toLowerCase().includes(needle)) {
+        results.push({
+          text: text.slice(0, 100),
+          tag: currentTag,
+          index: results.length + 1,
+          elementId: currentId,
+        });
+      }
+
+      for (const child of node.children) {
+        walk(child, currentTag, currentId);
+        if (results.length >= maxResults) {
+          return;
+        }
+      }
+    };
+
+    for (const node of nodes) {
+      walk(node);
+      if (results.length >= maxResults) {
+        break;
+      }
+    }
+
+    this.lastNodeMap = nodeMap;
+    return results;
   }
 
   /**
@@ -208,6 +290,10 @@ export class SurfingPage {
    * @returns Base64-encoded PNG string
    */
   async screenshot(options?: ScreenshotOptions): Promise<string> {
+    if (options?.elementId && options.fullPage) {
+      throw new ValidationError("screenshot cannot target an element and fullPage at the same time");
+    }
+
     if (options?.elementId) {
       validateElementId(options.elementId);
       const backendNodeId = this.resolveId(options.elementId);
@@ -255,11 +341,11 @@ export class SurfingPage {
    */
   async upload(id: string, filePaths: string[]): Promise<void> {
     validateElementId(id);
-    for (const fp of filePaths) {
-      validateFilePath(fp);
-    }
+    const validatedFilePaths = filePaths.map((fp) =>
+      validateUploadFilePath(fp, this.fileAccessRoots)
+    );
     const backendNodeId = this.resolveId(id);
-    await cdp.setFileInput(this.conn, backendNodeId, filePaths);
+    await cdp.setFileInput(this.conn, backendNodeId, validatedFilePaths);
     await cdp.waitForStable(this.conn);
   }
 
@@ -291,9 +377,17 @@ export class SurfingPage {
     options?: { downloadDir?: string; timeout?: number }
   ): Promise<DownloadResult> {
     validateElementId(id);
+    if (options?.timeout !== undefined) {
+      validatePositiveInteger(options.timeout, "timeout");
+    }
     const backendNodeId = this.resolveId(id);
 
-    const downloadDir = await setupDownloads(this.conn, options?.downloadDir);
+    const downloadDir = await setupDownloads(
+      this.conn,
+      options?.downloadDir
+        ? validateDownloadDirectory(options.downloadDir, this.fileAccessRoots)
+        : undefined
+    );
     const downloadPromise = downloadFile(
       this.conn,
       downloadDir,

@@ -40,12 +40,16 @@ export async function downloadFile(
 ): Promise<DownloadResult> {
   let onBegin: ((params: { guid: string; suggestedFilename: string }) => void) | null = null;
   let onProgress: ((params: { guid: string; state: string; totalBytes?: number }) => void) | null = null;
+  let unsubscribeBegin: (() => void) | null = null;
+  let unsubscribeProgress: (() => void) | null = null;
 
   function cleanup() {
-    if (onBegin) conn.Page.removeListener("downloadWillBegin", onBegin);
-    if (onProgress) conn.Page.removeListener("downloadProgress", onProgress);
+    unsubscribeBegin?.();
+    unsubscribeProgress?.();
     onBegin = null;
     onProgress = null;
+    unsubscribeBegin = null;
+    unsubscribeProgress = null;
   }
 
   const downloadPromise = new Promise<DownloadResult>((resolve, reject) => {
@@ -72,8 +76,8 @@ export async function downloadFile(
       }
     };
 
-    conn.Page.on("downloadWillBegin", onBegin);
-    conn.Page.on("downloadProgress", onProgress);
+    unsubscribeBegin = conn.Page.on("downloadWillBegin", onBegin);
+    unsubscribeProgress = conn.Page.on("downloadProgress", onProgress);
   });
 
   try {

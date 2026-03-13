@@ -21,7 +21,7 @@ const browser = await TideSurf.launch();
 // Or connect to an already-running Chrome (re-use logged-in sessions)
 // const browser = await TideSurf.connect({ port: 9222 });
 
-// Or read-only mode (observe but don't interact)
+// Or read-only mode (observe without mutating pages)
 // const browser = await TideSurf.launch({ readOnly: true });
 
 await browser.navigate("https://example.com");
@@ -54,7 +54,7 @@ await browser.close();
 - `scroll` — scroll up/down
 - `extract` — extract text via CSS selector
 - `evaluate` — run JavaScript in page context
-- `search` — find text on the page with context
+- `search` — find text on the page with nearest interactive IDs when available
 - `screenshot` — capture viewport, full page, or element as PNG
 - `upload` — upload file to file input
 - `download` — click download link and capture the file
@@ -106,6 +106,12 @@ Read-only mode:
 }
 ```
 
+Read-only mode disables write-capable tools, including `evaluate`.
+
+Read-only mode keeps: `get_state`, `extract`, `list_tabs`, `switch_tab`, `search`, `screenshot`.
+
+`clipboard_read`, `evaluate`, `upload`, and custom `downloadDir` access are disabled or constrained in read-only/safe mode. File I/O is confined to the current working directory and the OS temp directory unless `fileAccessRoots` is set explicitly.
+
 ## CLI
 
 ```
@@ -113,7 +119,7 @@ bunx tidesurf inspect <url>                              # print compressed XML
 bunx tidesurf inspect <url> --auto-connect               # use running Chrome
 bunx tidesurf mcp                                        # start MCP server
 bunx tidesurf mcp --auto-connect                         # MCP with running Chrome
-bunx tidesurf mcp --auto-connect --read-only             # observe only
+bunx tidesurf mcp --auto-connect --read-only             # observe without evaluate
 bunx tidesurf mcp --auto-connect --port 9333             # custom CDP port
 ```
 

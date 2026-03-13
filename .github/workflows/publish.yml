@@ -18,9 +18,7 @@ jobs:
           node-version: 20
           registry-url: https://registry.npmjs.org
       - run: bun install
-      - run: bun run typecheck
-      - run: bun run test
-      - run: bun run build
+      - run: bun run verify:release
       - run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

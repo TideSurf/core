@@ -6,9 +6,11 @@ const WRITE_TOOLS = new Set([
   "type",
   "select",
   "scroll",
+  "evaluate",
   "new_tab",
   "close_tab",
   "upload",
+  "clipboard_read",
   "clipboard_write",
   "download",
 ]);
@@ -210,7 +212,7 @@ export function getToolDefinitions(options?: {
     {
       name: "search",
       description:
-        "Search for text on the current page (case-insensitive). Returns matching elements with their tag, text context, and match index.",
+        "Search for text on the current page (case-insensitive). Returns matching snippets, their tag, match index, and nearest interactive element ID when available.",
       input_schema: {
         type: "object",
         properties: {

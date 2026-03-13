@@ -9,20 +9,22 @@
  *   POST /        — Execute a single tool: {"name":"navigate","input":{"url":"..."}}
  *   POST /batch   — Execute multiple tools sequentially: [cmd1, cmd2, ...]
  *   GET  /health  — Check if server is running
- *   GET  /quit    — Graceful shutdown
+ *   POST /quit    — Graceful shutdown
  */
 
 import { Elysia, t } from "elysia";
 import { TideSurf } from "../src/index.js";
+import { validatePort } from "../src/validation.js";
 
 const headful = process.argv.includes("--headful");
 const portIdx = process.argv.indexOf("--port");
-const port = portIdx !== -1 ? Number(process.argv[portIdx + 1]) : 7370;
+const port = portIdx !== -1 ? Number.parseInt(process.argv[portIdx + 1] ?? "", 10) : 7370;
+validatePort(port);
 
 console.error(`[tidesurf] Launching browser (${headful ? "headful" : "headless"})...`);
 const surfing = await TideSurf.launch({ headless: !headful });
 const executor = surfing.getToolExecutor();
-console.error(`[tidesurf] Ready on http://localhost:${port}`);
+console.error(`[tidesurf] Ready on http://127.0.0.1:${port}`);
 
 async function execOne(cmd: { name: string; input?: Record<string, unknown> }) {
   return executor({ name: cmd.name, input: cmd.input ?? {} });
@@ -30,7 +32,7 @@ async function execOne(cmd: { name: string; input?: Record<string, unknown> }) {
 
 const app = new Elysia()
   .get("/health", () => ({ status: "ok" }))
-  .get("/quit", async () => {
+  .post("/quit", async () => {
     setTimeout(async () => {
       await surfing.close();
       process.exit(0);
@@ -69,4 +71,4 @@ const app = new Elysia()
     success: false,
     error: error instanceof Error ? error.message : String(error),
   }))
-  .listen(port);
+  .listen({ hostname: "127.0.0.1", port });

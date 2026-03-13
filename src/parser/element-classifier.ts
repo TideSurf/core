@@ -37,6 +37,12 @@ const KEEP_TAG_MAP: Record<string, string> = {
   LABEL: "label",
   DIALOG: "dialog",
   IFRAME: "iframe",
+  SECTION: "section",
+  ARTICLE: "article",
+  MAIN: "main",
+  HEADER: "header",
+  FOOTER: "footer",
+  ASIDE: "aside",
 };
 
 const ROLE_TAG_MAP: Record<string, string> = {
@@ -54,8 +60,6 @@ const ROLE_TAG_MAP: Record<string, string> = {
   cell: "cell",
 };
 
-const SECTION_TAGS = new Set(["SECTION", "ARTICLE", "MAIN", "HEADER", "FOOTER", "ASIDE"]);
-
 /**
  * Parse a flat attribute array ["key","value","key","value"] into a Record
  */
@@ -69,26 +73,12 @@ export function parseAttributes(attrs?: string[]): Record<string, string> {
 }
 
 /**
- * Check if a node has interactive descendants (for SECTION_TAGS promotion)
- */
-export function hasInteractiveContent(children?: { nodeName: string; attributes?: string[] }[]): boolean {
-  if (!children) return false;
-  for (const child of children) {
-    const upper = child.nodeName.toUpperCase();
-    if (KEEP_TAG_MAP[upper]) return true;
-    const attrs = parseAttributes(child.attributes as string[] | undefined);
-    if (attrs["role"] && ROLE_TAG_MAP[attrs["role"]]) return true;
-  }
-  return false;
-}
-
-/**
  * Classify a DOM element into KEEP, COLLAPSE, or DISCARD
  */
 export function classify(
   nodeName: string,
   attributes?: Record<string, string>,
-  children?: { nodeName: string; attributes?: string[] }[]
+  _children?: { nodeName: string; attributes?: string[] }[]
 ): ClassifyResult {
   const upper = nodeName.toUpperCase();
 
@@ -129,11 +119,6 @@ export function classify(
   // Keep tags
   if (KEEP_TAG_MAP[upper]) {
     return { action: "KEEP", mappedTag: KEEP_TAG_MAP[upper] };
-  }
-
-  // Section tags with interactive content → KEEP as "section"
-  if (SECTION_TAGS.has(upper) && hasInteractiveContent(children)) {
-    return { action: "KEEP", mappedTag: "section" };
   }
 
   // Everything else: COLLAPSE (promote children)

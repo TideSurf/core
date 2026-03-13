@@ -7,7 +7,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createServer, type Server } from "node:http";
 import { readFile } from "node:fs/promises";
 import { TideSurf } from "../../src/index.js";
 import { estimateTokens } from "../../src/parser/token-budget.js";
@@ -15,9 +14,8 @@ import { estimateTokens } from "../../src/parser/token-budget.js";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixturesDir = join(__dirname, "..", "fixtures");
 
-let server: Server;
-let serverPort: number;
 let surfing: TideSurf;
+let fixtureHtml: Record<string, string> = {};
 
 interface BenchResult {
   page: string;
@@ -38,29 +36,46 @@ function countInteractiveIds(xml: string): number {
   return matches ? matches.length : 0;
 }
 
-describe("Compression benchmarks", () => {
+function toDataUrl(html: string): string {
+  return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+}
+
+async function canLaunchBrowser(): Promise<boolean> {
+  let browser: TideSurf | null = null;
+  try {
+    browser = await TideSurf.launch({ headless: true, port: 9554 });
+    return true;
+  } catch {
+    return false;
+  } finally {
+    await browser?.close().catch(() => {});
+  }
+}
+
+const browserAvailable = await canLaunchBrowser();
+const describeBench = browserAvailable ? describe : describe.skip;
+
+if (!browserAvailable) {
+  console.warn("Skipping compression benchmarks: Chrome could not be launched in this environment.");
+}
+
+describeBench("Compression benchmarks", () => {
   beforeAll(async () => {
-    server = createServer(async (req, res) => {
-      const pathname = req.url ?? "/";
-      const filename = pathname === "/" ? "basic.html" : pathname.slice(1);
-      try {
-        const content = await readFile(join(fixturesDir, filename), "utf-8");
-        res.writeHead(200, { "Content-Type": "text/html" });
-        res.end(content);
-      } catch {
-        res.writeHead(404);
-        res.end("Not found");
-      }
-    });
-    await new Promise<void>((resolve) => server.listen(0, resolve));
-    const addr = server.address();
-    serverPort = typeof addr === "object" && addr ? addr.port : 0;
+    const pageFiles = [
+      "basic.html",
+      "interactive.html",
+      "bench-ecommerce.html",
+      "bench-news.html",
+    ] as const;
+    const entries = await Promise.all(
+      pageFiles.map(async (name) => [name, await readFile(join(fixturesDir, name), "utf-8")] as const)
+    );
+    fixtureHtml = Object.fromEntries(entries);
     surfing = await TideSurf.launch({ headless: true, port: 9555 });
   }, 30000);
 
   afterAll(async () => {
     await surfing?.close();
-    server?.close();
 
     // Print results table
     console.log("\n");
@@ -133,12 +148,12 @@ describe("Compression benchmarks", () => {
 
   for (const page of pages) {
     it(`${page.name}: compresses ${page.desc}`, async () => {
-      // Navigate first
-      await surfing.navigate(`http://localhost:${serverPort}/${page.file}`);
+      const sourceHtml = fixtureHtml[page.file];
 
-      // Get source HTML (what the server sent)
-      const resp = await fetch(`http://localhost:${serverPort}/${page.file}`);
-      const sourceHtml = await resp.text();
+      // Navigate first
+      await surfing.navigate(toDataUrl(sourceHtml));
+
+      // Get source HTML (what the page loaded from)
       const sourceHtmlTokens = estimateTokens(sourceHtml);
 
       // Get rendered DOM (what Chrome actually has — includes computed elements)
@@ -179,7 +194,7 @@ describe("Compression benchmarks", () => {
   }
 
   it("token budget: ecommerce within 300 tokens", async () => {
-    await surfing.navigate(`http://localhost:${serverPort}/bench-ecommerce.html`);
+    await surfing.navigate(toDataUrl(fixtureHtml["bench-ecommerce.html"]));
 
     const full = await surfing.getState();
     const budgeted = await surfing.getState({ maxTokens: 300 });
@@ -199,7 +214,7 @@ describe("Compression benchmarks", () => {
   }, 15000);
 
   it("speed: getState < 500ms average", async () => {
-    await surfing.navigate(`http://localhost:${serverPort}/bench-ecommerce.html`);
+    await surfing.navigate(toDataUrl(fixtureHtml["bench-ecommerce.html"]));
 
     // Warm up
     await surfing.getState();

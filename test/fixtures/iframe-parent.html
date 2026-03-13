@@ -3,6 +3,9 @@
 <head><title>Iframe Parent</title></head>
 <body>
   <h1>Parent Page</h1>
-  <iframe src="iframe-child.html" id="child-frame"></iframe>
+  <iframe
+    id="child-frame"
+    srcdoc="<!DOCTYPE html><html><head><title>Iframe Child</title></head><body><h2>Child Frame Content</h2><a href='/link'>Child Link</a></body></html>"
+  ></iframe>
 </body>
 </html>

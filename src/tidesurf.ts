@@ -8,6 +8,8 @@ import { createToolExecutor } from "./tools/executor.js";
 import { getToolDefinitions } from "./tools/definitions.js";
 import { withRetry } from "./cdp/retry.js";
 import { rmSync } from "node:fs";
+import { applyViewport } from "./cdp/viewport.js";
+import { resolveFileAccessRoots } from "./validation.js";
 
 /**
  * Main entry point for TideSurf.
@@ -26,7 +28,10 @@ export class TideSurf {
   private ownsTempDir: boolean;
   private port: number;
   private readOnly: boolean;
+  private defaultViewport?: TideSurfOptions["defaultViewport"];
+  private fileAccessRoots: string[];
   private exitHandler: (() => void) | null = null;
+  private activeTabId: string | null;
 
   private constructor(
     chromeProcess: ChildProcess | null,
@@ -35,7 +40,10 @@ export class TideSurf {
     userDataDir: string,
     ownsTempDir: boolean,
     port: number,
-    readOnly: boolean = false
+    readOnly: boolean = false,
+    activeTabId: string | null = null,
+    defaultViewport?: TideSurfOptions["defaultViewport"],
+    fileAccessRoots: string[] = resolveFileAccessRoots()
   ) {
     this.chromeProcess = chromeProcess;
     this.activePage = page;
@@ -44,7 +52,14 @@ export class TideSurf {
     this.ownsTempDir = ownsTempDir;
     this.port = port;
     this.readOnly = readOnly;
+    this.activeTabId = activeTabId;
+    this.defaultViewport = defaultViewport;
+    this.fileAccessRoots = fileAccessRoots;
     this.executor = createToolExecutor(this, this.readOnly);
+
+    if (activeTabId) {
+      this.pages.set(activeTabId, page);
+    }
 
     // Register exit handler to kill Chrome if parent dies (only if we own the process)
     if (chromeProcess) {
@@ -67,6 +82,7 @@ export class TideSurf {
    * @throws {CDPConnectionError} if CDP connection fails
    */
   static async launch(options: TideSurfOptions = {}): Promise<TideSurf> {
+    const fileAccessRoots = resolveFileAccessRoots(options.fileAccessRoots);
     const { process: proc, port, userDataDir, ownsTempDir } = await withRetry(
       () =>
         launchChrome({
@@ -78,14 +94,32 @@ export class TideSurf {
       { maxAttempts: 3 }
     );
 
-    const conn = await withRetry(
-      () => connect({ port, timeout: options.timeout }),
+    const { targetId } = await withRetry(
+      () => discoverBrowser({ port, timeout: options.timeout }),
       { maxAttempts: 3 }
     );
-    const page = new SurfingPage(conn);
+    const conn = await withRetry(
+      () => connect({ port, tab: targetId, timeout: options.timeout }),
+      { maxAttempts: 3 }
+    );
+    if (options.defaultViewport) {
+      await applyViewport(conn, options.defaultViewport);
+    }
+    const page = new SurfingPage(conn, fileAccessRoots);
     const tabManager = new TabManager(port);
 
-    return new TideSurf(proc, page, tabManager, userDataDir, ownsTempDir, port, options.readOnly ?? false);
+    return new TideSurf(
+      proc,
+      page,
+      tabManager,
+      userDataDir,
+      ownsTempDir,
+      port,
+      options.readOnly ?? false,
+      targetId,
+      options.defaultViewport,
+      fileAccessRoots
+    );
   }
 
   /**
@@ -101,6 +135,7 @@ export class TideSurf {
    * @throws {CDPConnectionError} if no Chrome instance is found
    */
   static async connect(options: TideSurfConnectOptions = {}): Promise<TideSurf> {
+    const fileAccessRoots = resolveFileAccessRoots(options.fileAccessRoots);
     const { port, host, targetId } = await withRetry(
       () => discoverBrowser({
         port: options.port,
@@ -114,10 +149,24 @@ export class TideSurf {
       () => connect({ port, host, tab: targetId, timeout: options.timeout }),
       { maxAttempts: 3 }
     );
-    const page = new SurfingPage(conn);
+    if (options.defaultViewport) {
+      await applyViewport(conn, options.defaultViewport);
+    }
+    const page = new SurfingPage(conn, fileAccessRoots);
     const tabManager = new TabManager(port, host);
 
-    return new TideSurf(null, page, tabManager, "", false, port, options.readOnly ?? false);
+    return new TideSurf(
+      null,
+      page,
+      tabManager,
+      "",
+      false,
+      port,
+      options.readOnly ?? false,
+      targetId,
+      options.defaultViewport,
+      fileAccessRoots
+    );
   }
 
   /**
@@ -181,9 +230,13 @@ export class TideSurf {
   async newTab(url?: string): Promise<TabInfo> {
     const tab = await this.tabManager.createTab(url);
     const conn = await this.tabManager.connectToTab(tab.id);
-    const page = new SurfingPage(conn);
+    if (this.defaultViewport) {
+      await applyViewport(conn, this.defaultViewport);
+    }
+    const page = new SurfingPage(conn, this.fileAccessRoots);
     this.pages.set(tab.id, page);
     this.activePage = page;
+    this.activeTabId = tab.id;
     this.executor = createToolExecutor(this, this.readOnly);
     return tab;
   }
@@ -196,10 +249,14 @@ export class TideSurf {
     let page = this.pages.get(tabId);
     if (!page) {
       const conn = await this.tabManager.connectToTab(tabId);
-      page = new SurfingPage(conn);
+      if (this.defaultViewport) {
+        await applyViewport(conn, this.defaultViewport);
+      }
+      page = new SurfingPage(conn, this.fileAccessRoots);
       this.pages.set(tabId, page);
     }
     this.activePage = page;
+    this.activeTabId = tabId;
     this.executor = createToolExecutor(this, this.readOnly);
   }
 
@@ -210,7 +267,7 @@ export class TideSurf {
    */
   async closeTab(tabId: string): Promise<void> {
     const page = this.pages.get(tabId);
-    const isActiveTab = page === this.activePage;
+    const isActiveTab = tabId === this.activeTabId;
 
     if (page) {
       try {
@@ -227,6 +284,8 @@ export class TideSurf {
       const remaining = await this.tabManager.listTabs();
       if (remaining.length > 0) {
         await this.switchTab(remaining[0].id);
+      } else {
+        await this.newTab("about:blank");
       }
     }
   }

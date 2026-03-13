@@ -45,8 +45,7 @@ declare module "chrome-remote-interface" {
         behavior: string;
         downloadPath?: string;
       }): Promise<void>;
-      on(event: string, callback: (params: any) => void): void;
-      removeListener(event: string, callback: (params: any) => void): void;
+      on(event: string, callback: (params: any) => void): () => void;
     };
     Runtime: {
       enable(): Promise<void>;
@@ -71,6 +70,14 @@ declare module "chrome-remote-interface" {
         type: string;
         text?: string;
         key?: string;
+      }): Promise<void>;
+    };
+    Emulation: {
+      setDeviceMetricsOverride(params: {
+        width: number;
+        height: number;
+        deviceScaleFactor: number;
+        mobile: boolean;
       }): Promise<void>;
     };
     send(method: string, params?: Record<string, unknown>): Promise<unknown>;

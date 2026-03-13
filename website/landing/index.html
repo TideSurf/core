@@ -3,6 +3,10 @@
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+        <meta
+            http-equiv="Content-Security-Policy"
+            content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://tidesurf.org; connect-src 'self' https://api.github.com; object-src 'none'; base-uri 'self'; form-action 'self'"
+        />
         <title>TideSurf</title>
         <meta
             name="description"
@@ -24,22 +28,15 @@
             rel="stylesheet"
         />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+        <script src="/theme-init.js"></script>
         <link rel="stylesheet" href="/src/style.css" />
-        <script>
-            // Apply saved theme immediately to prevent flash
-            (function() {
-                var t = localStorage.getItem('tidesurf-theme') ||
-                    (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-                document.documentElement.setAttribute('data-theme', t);
-            })();
-        </script>
     </head>
     <body>
         <canvas id="tide-canvas" class="tide-canvas"></canvas>
 
         <nav class="nav">
             <div class="nav-left">
-                <a href="/" class="nav-logo">
+                <a href="/" class="nav-logo" aria-label="TideSurf home">
                     <svg class="logo-mark" width="28" height="20" viewBox="0 0 28 20" fill="none">
                         <path d="M2 5 C7 1, 11 1, 14 5 C17 9, 21 9, 26 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity="0.12"/>
                         <path d="M2 10 C7 6, 11 6, 14 10 C17 14, 21 14, 26 10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity="0.3"/>
@@ -141,6 +138,7 @@
             </div>
             <div class="floating-tags" id="floating-tags"></div>
             <div class="hero-content">
+                <div class="hero-pill" data-i18n="hero.badge">v0.2.3 · safer read-only · 18 tools</div>
                 <h1 class="hero-title">
                     <span
                         class="hero-word hero-word-1"
@@ -955,12 +953,12 @@ console.log(state.xml)
                         </div>
                     </div>
 
-                    <!-- 02 12 standard tools -->
+                    <!-- 02 18 standard tools -->
                     <div class="feature-block reveal">
                         <div class="feature-block-header">
                             <span class="feature-num">02</span>
                             <h3 data-i18n="feature.tools.title">
-                                12 standard tools
+                                18 standard tools
                             </h3>
                         </div>
                         <div class="feature-block-body">
@@ -1730,14 +1728,14 @@ await browser.closeTab(tabs[1].id)</code></pre>
                                 </p>
                                 <div class="feature-code">
                                     <pre><code>import type {
-  BrowserState,
-  PageAction
+  PageState,
+  ToolDefinition
 } from "@tidesurf/core"
 
-const config: TideSurfConfig = {
-  headless: true,
-  maxTokens: 800
-}</code></pre>
+const state: PageState =
+  await browser.getState()
+const tools: ToolDefinition[] =
+  browser.getToolDefinitions()</code></pre>
                                 </div>
                             </div>
                         </div>
@@ -1972,7 +1970,7 @@ const browser = await TideSurf.connect()
                 </div>
                 <div class="quickstart-wrapper reveal">
                     <div class="quickstart-steps">
-                        <div class="step active" data-step="1">
+                        <button type="button" class="step active" data-step="1" aria-pressed="true">
                             <span class="step-number">1</span>
                             <div class="step-content">
                                 <h4 data-i18n="step1.title">Install</h4>
@@ -1980,8 +1978,8 @@ const browser = await TideSurf.connect()
                                     Add @tidesurf/core to your project
                                 </p>
                             </div>
-                        </div>
-                        <div class="step" data-step="2">
+                        </button>
+                        <button type="button" class="step" data-step="2" aria-pressed="false">
                             <span class="step-number">2</span>
                             <div class="step-content">
                                 <h4 data-i18n="step2.title">Launch</h4>
@@ -1989,8 +1987,8 @@ const browser = await TideSurf.connect()
                                     Start a browser instance
                                 </p>
                             </div>
-                        </div>
-                        <div class="step" data-step="3">
+                        </button>
+                        <button type="button" class="step" data-step="3" aria-pressed="false">
                             <span class="step-number">3</span>
                             <div class="step-content">
                                 <h4 data-i18n="step3.title">Control</h4>
@@ -1998,7 +1996,7 @@ const browser = await TideSurf.connect()
                                     Navigate and interact with pages
                                 </p>
                             </div>
-                        </div>
+                        </button>
                     </div>
                     <div class="code-block">
                         <div class="code-header">
@@ -2039,14 +2037,6 @@ const browser = await TideSurf.connect()
             </div>
         </footer>
 
-        <script>
-            fetch("https://api.github.com/repos/TideSurf/core")
-                .then(function(r){return r.json()})
-                .then(function(d){
-                    var el=document.getElementById("star-count");
-                    if(el&&d.stargazers_count!=null) el.textContent=d.stargazers_count>=1000?(d.stargazers_count/1000).toFixed(1)+"k":d.stargazers_count;
-                }).catch(function(){});
-        </script>
         <script type="module" src="/src/main.ts"></script>
     </body>
 </html>

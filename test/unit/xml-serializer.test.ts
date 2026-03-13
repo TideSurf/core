@@ -115,6 +115,24 @@ describe("wrapPage", () => {
     expect(result).toContain("&quot;quoted&quot;");
   });
 
+  it("summarizes data URLs to avoid token blowups", () => {
+    const dataUrl =
+      "data:text/html;charset=utf-8," + encodeURIComponent("<html>" + "x".repeat(2000) + "</html>");
+    const result = wrapPage("", dataUrl, "Bench");
+
+    expect(result).toContain('url="data:text/html;charset=utf-8,..."');
+    expect(result).not.toContain("x".repeat(100));
+  });
+
+  it("truncates very long non-data URLs", () => {
+    const longUrl = `https://example.com/${"segment/".repeat(40)}index.html`;
+    const result = wrapPage("", longUrl, "Bench");
+    const urlAttr = result.match(/url="([^"]+)"/)?.[1] ?? "";
+
+    expect(urlAttr.endsWith("...")).toBe(true);
+    expect(urlAttr.length).toBeLessThanOrEqual(160);
+  });
+
   it("adds scroll attributes when scrollPosition is provided", () => {
     const xml = '<button id="B1">Click</button>';
     const result = wrapPage(xml, "https://example.com", "Test", {

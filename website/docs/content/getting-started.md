@@ -97,7 +97,7 @@ tidesurf mcp --auto-connect
 
 ## Read-only mode
 
-Launch or connect with `readOnly: true` to prevent the agent from modifying pages. Only observation tools (get_state, extract, evaluate, search, screenshot, clipboard_read) and tab switching remain available.
+Launch or connect with `readOnly: true` to prevent the agent from modifying pages or accessing sensitive local state. Only observation tools (`get_state`, `extract`, `list_tabs`, `switch_tab`, `search`, `screenshot`) remain available. `evaluate` and `clipboard_read` are intentionally disabled in read-only mode.
 
 ```typescript
 const browser = await TideSurf.launch({ readOnly: true });
@@ -109,6 +109,16 @@ From the CLI:
 ```bash
 tidesurf mcp --read-only
 tidesurf mcp --auto-connect --read-only
+```
+
+## Filesystem access
+
+By default, TideSurf only allows `upload` and custom `downloadDir` paths inside the current working directory and the OS temp directory. Override that policy explicitly when you need a wider host filesystem boundary:
+
+```typescript
+const browser = await TideSurf.launch({
+  fileAccessRoots: [process.cwd(), "/absolute/shared-fixtures"],
+});
 ```
 
 ## Integrating with an LLM agent

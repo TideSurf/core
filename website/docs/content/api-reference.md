@@ -18,8 +18,12 @@ Launches a new Chrome instance and connects to it via CDP. Returns a `TideSurf` 
 |---|---|---|---|
 | `headless` | `boolean` | `true` | Run Chrome in headless mode |
 | `chromePath` | `string` | auto-detect | Path to Chrome executable |
-| `cdpPort` | `number` | `9222` | Chrome DevTools Protocol port |
-| `timeout` | `number` | `30000` | Default timeout in milliseconds |
+| `port` | `number` | `9222` | Chrome DevTools Protocol port |
+| `userDataDir` | `string` | temp profile | Override the Chrome user data directory |
+| `defaultViewport` | `{ width: number; height: number }` | browser default | Viewport size to apply to the connected tab |
+| `timeout` | `number` | `10000` | CDP connection timeout in milliseconds |
+| `readOnly` | `boolean` | `false` | Disable mutating and sensitive tools, including `evaluate` and `clipboard_read` |
+| `fileAccessRoots` | `string[]` | `[cwd, tmpdir]` | Allowed host filesystem roots for `upload` and `download` |
 
 ### `TideSurf.connect(options?)`
 
@@ -38,6 +42,9 @@ Requires Chrome to have remote debugging enabled (Chrome 144+: `chrome://inspect
 | `port` | `number` | `9222` | CDP port to connect to |
 | `host` | `string` | `"localhost"` | CDP host to connect to |
 | `timeout` | `number` | `10000` | Connection timeout in milliseconds |
+| `defaultViewport` | `{ width: number; height: number }` | browser default | Viewport size to apply to the connected tab |
+| `readOnly` | `boolean` | `false` | Disable mutating and sensitive tools, including `evaluate` and `clipboard_read` |
+| `fileAccessRoots` | `string[]` | `[cwd, tmpdir]` | Allowed host filesystem roots for `upload` and `download` |
 
 **Throws:** `CDPConnectionError` if no Chrome instance is found on the specified port, with an actionable error message explaining how to enable remote debugging.
 
@@ -137,7 +144,7 @@ Selects an option in a dropdown (`<select>`) element by its value attribute.
 scroll(direction: "up" | "down", amount?: number): Promise<void>
 ```
 
-Scrolls the page in the given direction. The `amount` parameter controls how many viewport-heights to scroll (defaults to 1).
+Scrolls the page in the given direction. The `amount` parameter is measured in pixels (defaults to `500`).
 
 ### `extract(selector)`
 
@@ -161,7 +168,7 @@ Navigates the current page to a new URL. Equivalent to calling `browser.navigate
 evaluate(expression: string): Promise<unknown>
 ```
 
-Executes arbitrary JavaScript in the page context and returns the result. Use with caution — this bypasses TideSurf's structured interaction model, but is useful for edge cases where the standard tools don't cover your needs.
+Executes arbitrary JavaScript in the page context and returns the result. Use with caution — this bypasses TideSurf's structured interaction model, but is useful for edge cases where the standard tools don't cover your needs. `evaluate` is not available when `readOnly: true` is enabled.
 
 ### `search(query, maxResults?)`
 
@@ -169,7 +176,7 @@ Executes arbitrary JavaScript in the page context and returns the result. Use wi
 search(query: string, maxResults?: number): Promise<SearchResult[]>
 ```
 
-Finds text on the page (case-insensitive). Returns up to `maxResults` matches (default 10) with surrounding text context.
+Finds text on the page (case-insensitive). Returns up to `maxResults` matches (default 10) with surrounding text context and the nearest interactive TideSurf ID when one exists.
 
 ### `screenshot(options?)`
 
@@ -185,7 +192,7 @@ Captures a PNG screenshot. Returns a base64-encoded string. Options: `elementId`
 upload(id: string, filePaths: string[]): Promise<void>
 ```
 
-Sets files on a `<input type="file">` element via CDP.
+Sets files on a `<input type="file">` element via CDP. The tool wrapper version accepts a single `filePath` string and passes it through to this method. Uploads are confined to `fileAccessRoots`, which default to the current working directory and the OS temp directory.
 
 ### `clipboardRead()`
 
@@ -194,6 +201,8 @@ clipboardRead(): Promise<string>
 ```
 
 Reads the current clipboard text content.
+
+This method is intentionally unavailable when `readOnly: true` is enabled.
 
 ### `clipboardWrite(text)`
 
@@ -209,7 +218,7 @@ Writes text to the system clipboard.
 download(id: string, options?: { downloadDir?: string; timeout?: number }): Promise<DownloadResult>
 ```
 
-Clicks a download link/button and waits for the file to download. Returns the file path, name, and size.
+Clicks a download link/button and waits for the file to download. Returns the file path, name, and size. Custom `downloadDir` paths must stay inside `fileAccessRoots`, which default to the current working directory and the OS temp directory.
 
 ---
 
@@ -231,9 +240,9 @@ These 18 tools are returned by `getToolDefinitions()` and can be used with any L
 | `new_tab` | `url?` | Open a new tab |
 | `switch_tab` | `tabId` | Switch to a different tab |
 | `close_tab` | `tabId` | Close a tab |
-| `search` | `query`, `maxResults?` | Find text on the page |
+| `search` | `query`, `maxResults?` | Find text snippets on the page with nearest interactive IDs |
 | `screenshot` | `elementId?`, `fullPage?` | Capture a PNG screenshot |
-| `upload` | `id`, `filePaths` | Set files on a file input |
+| `upload` | `id`, `filePath` | Set a file on a file input |
 | `clipboard_read` | — | Read clipboard text |
 | `clipboard_write` | `text` | Write text to clipboard |
 | `download` | `id`, `downloadDir?`, `timeout?` | Download a file |

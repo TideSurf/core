@@ -22,7 +22,7 @@ This happens when Chrome launched successfully but TideSurf couldn't establish a
 
 ```typescript
 const browser = await TideSurf.launch({
-  cdpPort: 9223, // Default is 9222
+  port: 9223, // Default is 9222
 });
 ```
 
@@ -92,7 +92,7 @@ This is a fundamental browser security boundary. Same-origin iframes are accesse
 
 If `getState()` returns very little content or doesn't include elements you expect to see:
 
-- **The page may not have finished loading.** Try adding a short delay before calling `getState()`, or navigate with `{ waitUntil: "networkidle" }` if available
+- **The page may not have finished loading.** Try adding a short delay before calling `getState()`, or wait for the page to settle with `await browser.getPage().waitForStable()`
 - **Dynamic content may not have rendered yet.** Single-page apps that load content via JavaScript after the initial page load may need a moment for the framework to mount and render components
 - **The token budget may be too low.** If you're using `maxTokens`, try increasing it or omitting it entirely to see the full output
 

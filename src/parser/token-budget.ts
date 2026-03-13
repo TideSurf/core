@@ -49,7 +49,7 @@ export function pruneToFit(
   }
 
   // Deep clone so we don't mutate input
-  let remaining: OSNode[] = JSON.parse(JSON.stringify(nodes));
+  let remaining: OSNode[] = structuredClone(nodes);
 
   // Score each top-level subtree
   interface Scored {

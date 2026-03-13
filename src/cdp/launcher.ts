@@ -62,6 +62,38 @@ export interface LaunchResult {
   ownsTempDir: boolean;
 }
 
+export function buildChromeArgs(
+  options: { headless: boolean; port: number; userDataDir: string },
+  env: Record<string, string | undefined> = process.env,
+  uid: number | undefined = process.getuid?.()
+): string[] {
+  const args = [
+    `--remote-debugging-port=${options.port}`,
+    `--user-data-dir=${options.userDataDir}`,
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--disable-background-timer-throttling",
+    "--disable-backgrounding-occluded-windows",
+    "--disable-renderer-backgrounding",
+  ];
+
+  if (options.headless) {
+    args.push("--headless=new");
+  }
+
+  const explicitNoSandbox = env["TIDESURF_NO_SANDBOX"] === "1";
+  if (explicitNoSandbox || uid === 0) {
+    args.push(
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-gpu",
+      "--disable-dev-shm-usage"
+    );
+  }
+
+  return args;
+}
+
 /**
  * Launch a Chrome process with remote debugging enabled
  */
@@ -73,30 +105,7 @@ export async function launchChrome(options: LaunchOptions = {}): Promise<LaunchR
   const userDataDir =
     options.userDataDir ?? join(tmpdir(), `tidesurf-${randomUUID()}`);
   const headless = options.headless ?? true;
-
-  const args = [
-    `--remote-debugging-port=${port}`,
-    `--user-data-dir=${userDataDir}`,
-    "--no-first-run",
-    "--no-default-browser-check",
-    "--disable-background-timer-throttling",
-    "--disable-backgrounding-occluded-windows",
-    "--disable-renderer-backgrounding",
-  ];
-
-  if (headless) {
-    args.push("--headless=new");
-  }
-
-  // CI environments (GitHub Actions, Docker) often run as root
-  if (process.env["CI"] || process.getuid?.() === 0) {
-    args.push(
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-gpu",
-      "--disable-dev-shm-usage",
-    );
-  }
+  const args = buildChromeArgs({ headless, port, userDataDir });
 
   let proc: ChildProcess;
   try {

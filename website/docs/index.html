@@ -3,6 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://tidesurf.org; connect-src 'self' https://api.github.com; object-src 'none'; base-uri 'self'; form-action 'self'"
+  >
   <title>TideSurf Docs</title>
   <meta name="description" content="TideSurf documentation - The connector between Chromium and LLM agents">
   <meta property="og:title" content="TideSurf Docs">
@@ -18,14 +22,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@300;400;500;600;700;800&family=Noto+Sans+JP:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <script src="/theme-init.js"></script>
   <link rel="stylesheet" href="/src/style.css">
-  <script>
-    (function() {
-      var t = localStorage.getItem('tidesurf-docs-theme') ||
-        (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-      document.documentElement.setAttribute('data-theme', t);
-    })();
-  </script>
 </head>
 <body>
   <!-- Mobile Menu Toggle -->
@@ -38,7 +36,7 @@
   <!-- Navigation -->
   <nav class="nav">
     <div class="nav-left">
-      <a href="https://tidesurf.org" class="nav-logo">
+      <a href="https://tidesurf.org" class="nav-logo" aria-label="TideSurf home">
         <svg class="logo-mark" width="28" height="20" viewBox="0 0 28 20" fill="none">
           <path d="M2 5 C7 1, 11 1, 14 5 C17 9, 21 9, 26 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity="0.12"/>
           <path d="M2 10 C7 6, 11 6, 14 10 C17 14, 21 14, 26 10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity="0.3"/>
@@ -86,7 +84,7 @@
         </svg>
       </div>
 
-      <div class="search-results" id="search-results" style="display:none"></div>
+      <div class="search-results" id="search-results" hidden></div>
       <div class="sidebar-nav">
         <div class="sidebar-section">
           <span class="sidebar-heading" data-i18n="sidebar.gettingstarted">Getting started</span>
@@ -137,20 +135,11 @@
     <div class="content-area">
       <main id="content"></main>
       <aside class="toc" id="toc">
-        <span class="toc-heading">On this page</span>
+        <span class="toc-heading" data-i18n="toc.heading">On this page</span>
         <nav class="toc-nav" id="toc-nav"></nav>
       </aside>
     </div>
   </div>
-
-  <script>
-    fetch("https://api.github.com/repos/TideSurf/core")
-      .then(function(r){return r.json()})
-      .then(function(d){
-        var el=document.getElementById("star-count");
-        if(el&&d.stargazers_count!=null) el.textContent=d.stargazers_count>=1000?(d.stargazers_count/1000).toFixed(1)+"k":d.stargazers_count;
-      }).catch(function(){});
-  </script>
   <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head><title>Advanced Tools</title></head>
+<body>
+  <h1>Advanced Tooling</h1>
+  <p id="search-target">Download the quarterly report after uploading a passenger manifest.</p>
+  <a href="data:text/plain;charset=utf-8,quarterly%20report" download="download.txt">Download report</a>
+  <input type="file" id="uploader" />
+  <div id="file-output"></div>
+  <script>
+    const uploader = document.getElementById("uploader");
+    uploader.addEventListener("change", () => {
+      const files = Array.from(uploader.files || []).map((file) => file.name).join(", ");
+      document.getElementById("file-output").textContent = files;
+    });
+  </script>
+</body>
+</html>

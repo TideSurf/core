@@ -9,6 +9,7 @@ export interface CDPConnection {
   Page: Client["Page"];
   Runtime: Client["Runtime"];
   Input: Client["Input"];
+  Emulation: Client["Emulation"];
 }
 
 /**
@@ -31,11 +32,11 @@ export async function connect(options: {
       "CDP connect"
     );
 
-    const { DOM, Page, Runtime, Input } = client;
+    const { DOM, Page, Runtime, Input, Emulation } = client;
 
     await Promise.all([DOM.enable(), Page.enable(), Runtime.enable()]);
 
-    return { client, DOM, Page, Runtime, Input };
+    return { client, DOM, Page, Runtime, Input, Emulation };
   } catch (err) {
     if (err instanceof TideSurfError) throw err;
     throw new CDPConnectionError(

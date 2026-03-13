@@ -99,6 +99,14 @@ function walkNode(
 
   // Special handling for IFRAME
   if (tag === "iframe") {
+    const visible = attrs["data-os-visible"] === "1" ? true : undefined;
+    const filteredAttrs: Record<string, string> = {};
+    for (const key of PASS_THROUGH_ATTRS) {
+      if (attrs[key] !== undefined) {
+        filteredAttrs[key] = attrs[key];
+      }
+    }
+
     if (node.contentDocument) {
       // Same-origin iframe — walk into its content
       const iframeChildren = walkChildren(
@@ -106,17 +114,12 @@ function walkNode(
         assigner,
         nodeMap
       );
-      const filteredAttrs: Record<string, string> = {};
-      for (const key of PASS_THROUGH_ATTRS) {
-        if (attrs[key] !== undefined) {
-          filteredAttrs[key] = attrs[key];
-        }
-      }
       return [
         {
           tag: "iframe",
           attributes: filteredAttrs,
           children: postProcess(iframeChildren),
+          visible,
         },
       ];
     } else {
@@ -124,8 +127,9 @@ function walkNode(
       return [
         {
           tag: "iframe",
-          attributes: { status: "inaccessible" },
+          attributes: { ...filteredAttrs, status: "inaccessible" },
           children: [],
+          visible,
         },
       ];
     }
