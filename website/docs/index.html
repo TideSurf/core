@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>TideSurf Docs</title>
+  <meta name="description" content="TideSurf documentation - The connector between Chromium and LLM agents">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@300;400;500;700&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/src/style.css">
+  <script>
+    (function() {
+      var t = localStorage.getItem('tidesurf-docs-theme') ||
+        (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+</head>
+<body>
+  <!-- Mobile Menu Toggle -->
+  <button id="mobile-menu-toggle" class="mobile-menu-btn" aria-label="Toggle menu">
+    <span></span>
+    <span></span>
+    <span></span>
+  </button>
+
+  <!-- Navigation -->
+  <nav class="nav">
+    <div class="nav-left">
+      <a href="https://tidesurf.org" class="nav-logo">TideSurf</a>
+      <span class="nav-divider">/</span>
+      <span class="nav-section" data-i18n="docs.title">Documentation</span>
+    </div>
+    <div class="nav-right">
+      <div class="nav-links">
+        <a href="https://github.com/tidesurf/tidesurf-core" data-i18n="nav.github">GitHub</a>
+        <a href="https://www.npmjs.com/package/tidesurf-core" data-i18n="nav.npm">npm</a>
+      </div>
+      <div class="nav-controls">
+        <button id="theme-toggle" class="control-btn" aria-label="Toggle theme">
+          <svg class="theme-icon theme-moon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+          <svg class="theme-icon theme-sun" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"/>
+            <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+            <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+          </svg>
+        </button>
+        <div class="lang-switcher">
+          <button class="lang-btn" data-lang="en">EN</button>
+          <button class="lang-btn" data-lang="ja">JP</button>
+          <button class="lang-btn" data-lang="ko">KR</button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-search">
+        <input type="text" id="search-input" placeholder="Search docs..." data-i18n-placeholder="search.placeholder">
+        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"></circle>
+          <path d="m21 21-4.35-4.35"></path>
+        </svg>
+      </div>
+
+      <div class="search-results" id="search-results" style="display:none"></div>
+      <div class="sidebar-nav">
+        <div class="sidebar-section">
+          <span class="sidebar-heading" data-i18n="sidebar.gettingstarted">Getting started</span>
+          <a href="#getting-started" class="sidebar-link" data-page="getting-started" data-i18n="sidebar.intro">Introduction</a>
+        </div>
+        <div class="sidebar-section">
+          <span class="sidebar-heading" data-i18n="sidebar.guide">Guide</span>
+          <a href="#page-format" class="sidebar-link" data-page="page-format" data-i18n="sidebar.pageformat">Page format</a>
+          <a href="#token-budget" class="sidebar-link" data-page="token-budget" data-i18n="sidebar.tokenbudget">Token budget</a>
+          <a href="#multi-tab" class="sidebar-link" data-page="multi-tab" data-i18n="sidebar.multitab">Multi-tab</a>
+          <a href="#error-handling" class="sidebar-link" data-page="error-handling" data-i18n="sidebar.errors">Error handling</a>
+          <a href="#troubleshooting" class="sidebar-link" data-page="troubleshooting" data-i18n="sidebar.troubleshoot">Troubleshooting</a>
+        </div>
+        <div class="sidebar-section">
+          <span class="sidebar-heading" data-i18n="sidebar.reference">Reference</span>
+          <a href="#api-reference" class="sidebar-link" data-page="api-reference" data-i18n="sidebar.api">API reference</a>
+          <a href="#architecture" class="sidebar-link" data-page="architecture" data-i18n="sidebar.arch">Architecture</a>
+        </div>
+      </div>
+
+      <div class="sidebar-footer">
+        <a href="https://github.com/tidesurf/tidesurf-core" class="sidebar-link external">
+          <span>GitHub</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+            <polyline points="15,3 21,3 21,9"></polyline>
+            <line x1="10" y1="14" x2="21" y2="3"></line>
+          </svg>
+        </a>
+        <a href="https://github.com/tidesurf/tidesurf-core/issues" class="sidebar-link external" data-i18n="sidebar.feedback">
+          <span>Feedback</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+            <polyline points="15,3 21,3 21,9"></polyline>
+            <line x1="10" y1="14" x2="21" y2="3"></line>
+          </svg>
+        </a>
+        <span class="sidebar-easter"><!-- Thanks to SaltyAom --></span>
+      </div>
+    </aside>
+
+    <!-- Mobile Overlay -->
+    <div id="mobile-overlay" class="mobile-overlay"></div>
+
+    <!-- Main Content Area -->
+    <div class="content-area">
+      <main id="content"></main>
+      <aside class="toc" id="toc">
+        <span class="toc-heading">On this page</span>
+        <nav class="toc-nav" id="toc-nav"></nav>
+      </aside>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

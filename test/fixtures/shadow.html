@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head><title>Shadow DOM Test</title></head>
+<body>
+  <h1>Shadow DOM Page</h1>
+  <my-component id="host">
+    <!-- Shadow root will be attached via script -->
+  </my-component>
+  <script>
+    const host = document.getElementById('host');
+    const shadow = host.attachShadow({ mode: 'open' });
+    shadow.innerHTML = `
+      <button id="shadow-btn">Shadow Button</button>
+      <span>Shadow Text</span>
+    `;
+  </script>
+</body>
+</html>

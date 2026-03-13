@@ -1,0 +1,246 @@
+import type { ChildProcess } from "node:child_process";
+import type { TideSurfOptions, ToolResult, GetStateOptions, PageState } from "./types.js";
+import { launchChrome } from "./cdp/launcher.js";
+import { connect } from "./cdp/connection.js";
+import { SurfingPage } from "./cdp/page.js";
+import { TabManager, type TabInfo } from "./cdp/tab-manager.js";
+import { createToolExecutor } from "./tools/executor.js";
+import { getToolDefinitions } from "./tools/definitions.js";
+import { withRetry } from "./cdp/retry.js";
+import { rmSync } from "node:fs";
+
+/**
+ * Main entry point for TideSurf.
+ * Launches Chrome, connects via CDP, and provides page interaction + tool execution.
+ */
+export class TideSurf {
+  private chromeProcess: ChildProcess;
+  private activePage: SurfingPage;
+  private pages: Map<string, SurfingPage> = new Map();
+  private tabManager: TabManager;
+  private executor: (tool: {
+    name: string;
+    input: Record<string, unknown>;
+  }) => Promise<ToolResult>;
+  private userDataDir: string;
+  private ownsTempDir: boolean;
+  private port: number;
+  private exitHandler: (() => void) | null = null;
+
+  private constructor(
+    chromeProcess: ChildProcess,
+    page: SurfingPage,
+    tabManager: TabManager,
+    userDataDir: string,
+    ownsTempDir: boolean,
+    port: number
+  ) {
+    this.chromeProcess = chromeProcess;
+    this.activePage = page;
+    this.tabManager = tabManager;
+    this.userDataDir = userDataDir;
+    this.ownsTempDir = ownsTempDir;
+    this.port = port;
+    this.executor = createToolExecutor(this);
+
+    // Register exit handler to kill Chrome if parent dies
+    this.exitHandler = () => {
+      try {
+        this.chromeProcess.kill();
+      } catch {
+        // ignore
+      }
+    };
+    process.on("exit", this.exitHandler);
+  }
+
+  /**
+   * Launch Chrome and connect. Returns a ready-to-use TideSurf instance.
+   * @param options - Launch configuration
+   * @returns Ready TideSurf instance
+   * @throws {ChromeLaunchError} if Chrome cannot be started
+   * @throws {CDPConnectionError} if CDP connection fails
+   */
+  static async launch(options: TideSurfOptions = {}): Promise<TideSurf> {
+    const { process: proc, port, userDataDir, ownsTempDir } = await withRetry(
+      () =>
+        launchChrome({
+          headless: options.headless ?? true,
+          chromePath: options.chromePath,
+          port: options.port,
+          userDataDir: options.userDataDir,
+        }),
+      { maxAttempts: 3 }
+    );
+
+    const conn = await withRetry(
+      () => connect({ port, timeout: options.timeout }),
+      { maxAttempts: 3 }
+    );
+    const page = new SurfingPage(conn);
+    const tabManager = new TabManager(port);
+
+    return new TideSurf(proc, page, tabManager, userDataDir, ownsTempDir, port);
+  }
+
+  /**
+   * Navigate the active page to a URL.
+   * @param url - Target URL
+   */
+  async navigate(url: string): Promise<void> {
+    await this.activePage.navigate(url);
+  }
+
+  /**
+   * Get the compressed page state of the active page.
+   * @param options - Optional settings (maxTokens for token budgeting)
+   */
+  async getState(options?: GetStateOptions): Promise<PageState> {
+    return this.activePage.getState(options);
+  }
+
+  /**
+   * Get the active SurfingPage instance.
+   */
+  getPage(): SurfingPage {
+    return this.activePage;
+  }
+
+  /**
+   * Get the tool executor function.
+   */
+  getToolExecutor() {
+    return this.executor;
+  }
+
+  /**
+   * Get tool definitions for LLM function calling.
+   */
+  getToolDefinitions() {
+    return getToolDefinitions();
+  }
+
+  // --- Tab management ---
+
+  /**
+   * List all open tabs.
+   */
+  async listTabs(): Promise<TabInfo[]> {
+    return this.tabManager.listTabs();
+  }
+
+  /**
+   * Open a new tab, optionally navigating to a URL.
+   * @param url - Optional URL to navigate to
+   * @returns Info about the new tab
+   */
+  async newTab(url?: string): Promise<TabInfo> {
+    const tab = await this.tabManager.createTab(url);
+    const conn = await this.tabManager.connectToTab(tab.id);
+    const page = new SurfingPage(conn);
+    this.pages.set(tab.id, page);
+    this.activePage = page;
+    this.executor = createToolExecutor(this);
+    return tab;
+  }
+
+  /**
+   * Switch the active tab.
+   * @param tabId - Target tab ID
+   */
+  async switchTab(tabId: string): Promise<void> {
+    let page = this.pages.get(tabId);
+    if (!page) {
+      const conn = await this.tabManager.connectToTab(tabId);
+      page = new SurfingPage(conn);
+      this.pages.set(tabId, page);
+    }
+    this.activePage = page;
+    this.executor = createToolExecutor(this);
+  }
+
+  /**
+   * Close a tab by ID.
+   * If closing the active tab, switches to the first remaining tab.
+   * @param tabId - Tab to close
+   */
+  async closeTab(tabId: string): Promise<void> {
+    const page = this.pages.get(tabId);
+    const isActiveTab = page === this.activePage;
+
+    if (page) {
+      try {
+        await page.close();
+      } catch {
+        // ignore
+      }
+      this.pages.delete(tabId);
+    }
+    await this.tabManager.closeTab(tabId);
+
+    // If we closed the active tab, switch to another open tab
+    if (isActiveTab) {
+      const remaining = await this.tabManager.listTabs();
+      if (remaining.length > 0) {
+        await this.switchTab(remaining[0].id);
+      }
+    }
+  }
+
+  /**
+   * Gracefully close Chrome and clean up resources.
+   * SIGTERM → wait 5s → SIGKILL, then cleanup temp dir.
+   */
+  async close(): Promise<void> {
+    // Unregister exit handler
+    if (this.exitHandler) {
+      process.removeListener("exit", this.exitHandler);
+      this.exitHandler = null;
+    }
+
+    // Close all tracked pages (may include the active page)
+    const closedPages = new Set<SurfingPage>();
+    for (const page of this.pages.values()) {
+      try {
+        await page.close();
+      } catch {
+        // ignore
+      }
+      closedPages.add(page);
+    }
+    this.pages.clear();
+
+    // Close the active page if it wasn't already closed above
+    if (!closedPages.has(this.activePage)) {
+      try {
+        await this.activePage.close();
+      } catch {
+        // Connection may already be closed
+      }
+    }
+
+    // Graceful shutdown: SIGTERM → wait → SIGKILL
+    const proc = this.chromeProcess;
+    if (proc.exitCode === null) {
+      proc.kill("SIGTERM");
+
+      const exited = await Promise.race([
+        new Promise<true>((resolve) => proc.on("exit", () => resolve(true))),
+        new Promise<false>((resolve) => setTimeout(() => resolve(false), 5000)),
+      ]);
+
+      if (!exited && proc.exitCode === null) {
+        proc.kill("SIGKILL");
+      }
+    }
+
+    // Cleanup temp directory
+    if (this.ownsTempDir) {
+      try {
+        rmSync(this.userDataDir, { recursive: true, force: true });
+      } catch {
+        // Best effort cleanup
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+*.log
+.env
+.env.*
+coverage/
+.claude
+
+# Chrome user data from TideSurf sessions
+tidesurf-*
+
+# OS junk
+Thumbs.db
+.Spotlight-V100
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

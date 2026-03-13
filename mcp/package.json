@@ -1,0 +1,12 @@
+{
+  "name": "tidesurf-mcp",
+  "version": "0.1.0",
+  "description": "MCP adapter for TideSurf — exposes browser tools as MCP tools for Claude Code and other MCP clients",
+  "type": "module",
+  "main": "index.ts",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.0",
+    "zod": "^4.3.0"
+  },
+  "license": "Apache-2.0"
+}

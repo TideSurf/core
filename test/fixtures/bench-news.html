@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="TechDaily - Your source for the latest technology news, reviews, and analysis.">
+  <meta property="og:title" content="TechDaily - Technology News & Reviews">
+  <meta property="og:type" content="website">
+  <title>TechDaily - Technology News & Reviews</title>
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="stylesheet" href="/css/article.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXX"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-XXXXXX');</script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Georgia, 'Times New Roman', serif; color: #222; background: #fafafa; }
+    a { color: #1a73e8; text-decoration: none; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 20px; }
+    header { background: white; border-bottom: 3px solid #1a73e8; padding: 16px 0; }
+    .header-inner { display: flex; align-items: center; justify-content: space-between; }
+    .logo { font-size: 28px; font-weight: 700; color: #1a73e8; font-family: sans-serif; }
+    .header-nav { display: flex; gap: 20px; align-items: center; }
+    .header-nav a { color: #555; font-size: 14px; font-family: sans-serif; }
+    .header-search { display: flex; align-items: center; gap: 8px; }
+    .header-search input { padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; width: 200px; }
+    .header-search button { padding: 6px 12px; background: #1a73e8; color: white; border: none; border-radius: 4px; font-size: 13px; cursor: pointer; }
+    .topic-bar { background: #f0f0f0; padding: 10px 0; border-bottom: 1px solid #ddd; font-family: sans-serif; }
+    .topic-bar ul { list-style: none; display: flex; gap: 16px; overflow-x: auto; }
+    .topic-bar a { color: #333; font-size: 13px; white-space: nowrap; }
+    .topic-bar a.active { color: #1a73e8; font-weight: 600; }
+    .breaking { background: #dc2626; color: white; padding: 8px 0; font-family: sans-serif; font-size: 13px; }
+    .breaking strong { margin-right: 8px; }
+    .breaking a { color: #fbbf24; }
+    .main-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 32px; padding: 24px 0; }
+    .article-card { margin-bottom: 24px; padding-bottom: 24px; border-bottom: 1px solid #e5e5e5; }
+    .article-card.featured { margin-bottom: 32px; padding-bottom: 32px; }
+    .article-card img { width: 100%; height: auto; border-radius: 6px; margin-bottom: 12px; }
+    .article-meta { font-family: sans-serif; font-size: 12px; color: #888; margin-bottom: 6px; }
+    .article-meta .category { color: #1a73e8; font-weight: 600; text-transform: uppercase; margin-right: 8px; }
+    .article-card h2 { font-size: 22px; line-height: 1.3; margin-bottom: 8px; }
+    .article-card h2 a { color: #222; }
+    .article-card h3 { font-size: 17px; line-height: 1.3; margin-bottom: 6px; }
+    .article-card h3 a { color: #222; }
+    .article-card p { font-size: 15px; line-height: 1.6; color: #555; }
+    .article-card .read-more { font-family: sans-serif; font-size: 13px; color: #1a73e8; margin-top: 8px; display: inline-block; }
+    .sidebar { }
+    .sidebar-section { margin-bottom: 28px; }
+    .sidebar-section h3 { font-family: sans-serif; font-size: 14px; font-weight: 700; text-transform: uppercase; color: #1a73e8; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 2px solid #1a73e8; }
+    .trending-item { display: flex; gap: 8px; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #eee; }
+    .trending-item .number { font-family: sans-serif; font-size: 24px; font-weight: 700; color: #ddd; min-width: 32px; }
+    .trending-item h4 { font-size: 14px; line-height: 1.3; }
+    .trending-item h4 a { color: #222; }
+    .trending-item .meta { font-family: sans-serif; font-size: 11px; color: #999; margin-top: 4px; }
+    .newsletter-box { background: #f0f4ff; padding: 20px; border-radius: 8px; text-align: center; }
+    .newsletter-box h3 { font-family: sans-serif; font-size: 16px; margin-bottom: 8px; }
+    .newsletter-box p { font-size: 13px; color: #666; margin-bottom: 12px; font-family: sans-serif; }
+    .newsletter-box input { width: 100%; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 8px; }
+    .newsletter-box button { width: 100%; padding: 8px; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer; font-family: sans-serif; }
+    .ad-slot { background: #f5f5f5; border: 1px dashed #ddd; padding: 40px; text-align: center; color: #999; font-family: sans-serif; font-size: 13px; margin-bottom: 20px; }
+    footer { background: #222; color: #ccc; padding: 40px 0 20px; margin-top: 40px; font-family: sans-serif; }
+    .footer-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+    .footer-col h4 { color: white; font-size: 14px; margin-bottom: 12px; }
+    .footer-col a { display: block; color: #999; font-size: 13px; margin-bottom: 6px; }
+    .footer-bottom { margin-top: 24px; padding-top: 16px; border-top: 1px solid #444; font-size: 12px; display: flex; justify-content: space-between; }
+    .social-share { display: flex; gap: 8px; margin-top: 8px; }
+    .social-share a { display: inline-block; padding: 4px 8px; font-size: 12px; border-radius: 3px; color: white; font-family: sans-serif; }
+    .cookie-banner { position: fixed; bottom: 0; left: 0; right: 0; background: #333; color: white; padding: 16px; font-family: sans-serif; font-size: 13px; display: flex; justify-content: space-between; align-items: center; z-index: 1000; }
+    .cookie-banner button { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+    .cookie-banner .accept { background: #1a73e8; color: white; }
+    .cookie-banner .settings { background: transparent; color: #ccc; border: 1px solid #666; }
+  </style>
+</head>
+<body>
+  <!-- Breaking news -->
+  <div class="breaking">
+    <div class="container">
+      <strong>BREAKING:</strong>
+      <a href="/article/quantum-computing-breakthrough">Major quantum computing breakthrough: Google achieves 1000-qubit milestone →</a>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header>
+    <div class="container header-inner">
+      <a href="/" class="logo">TechDaily</a>
+      <nav class="header-nav" aria-label="Main navigation">
+        <a href="/news">News</a>
+        <a href="/reviews">Reviews</a>
+        <a href="/analysis">Analysis</a>
+        <a href="/opinion">Opinion</a>
+        <a href="/video">Video</a>
+        <a href="/podcasts">Podcasts</a>
+      </nav>
+      <div class="header-search">
+        <input type="search" placeholder="Search articles..." aria-label="Search articles" />
+        <button type="submit">Search</button>
+      </div>
+      <div style="display:flex; gap:12px; font-family:sans-serif; font-size:13px;">
+        <a href="/login">Sign In</a>
+        <a href="/subscribe" style="background:#1a73e8; color:white; padding:6px 12px; border-radius:4px;">Subscribe</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Topic bar -->
+  <div class="topic-bar">
+    <div class="container">
+      <ul>
+        <li><a href="/ai" class="active">AI & ML</a></li>
+        <li><a href="/mobile">Mobile</a></li>
+        <li><a href="/cloud">Cloud</a></li>
+        <li><a href="/security">Security</a></li>
+        <li><a href="/startups">Startups</a></li>
+        <li><a href="/crypto">Crypto</a></li>
+        <li><a href="/science">Science</a></li>
+        <li><a href="/gaming">Gaming</a></li>
+        <li><a href="/enterprise">Enterprise</a></li>
+        <li><a href="/dev">Developer</a></li>
+        <li><a href="/hardware">Hardware</a></li>
+        <li><a href="/space">Space</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- Main content -->
+  <div class="container main-grid">
+    <!-- Articles -->
+    <main>
+      <!-- Featured article -->
+      <article class="article-card featured">
+        <img src="/images/ai-chip.jpg" alt="Next-gen AI processors on a silicon wafer" />
+        <div class="article-meta">
+          <span class="category">AI & Machine Learning</span>
+          <time datetime="2026-03-13">March 13, 2026</time> · 8 min read
+        </div>
+        <h2><a href="/article/nvidia-blackwell-2">NVIDIA Announces Blackwell Ultra: 2x Performance for AI Training at Half the Power</a></h2>
+        <p>NVIDIA's latest GPU architecture promises to reshape the AI training landscape with unprecedented efficiency gains. The Blackwell Ultra series, announced at GTC 2026, delivers twice the training performance while consuming 50% less power than its predecessor.</p>
+        <div class="social-share">
+          <a href="#" style="background:#1877f2;">Share</a>
+          <a href="#" style="background:#1da1f2;">Tweet</a>
+          <a href="#" style="background:#0077b5;">LinkedIn</a>
+        </div>
+        <a href="/article/nvidia-blackwell-2" class="read-more">Read full article →</a>
+      </article>
+
+      <!-- Article 2 -->
+      <article class="article-card">
+        <div class="article-meta">
+          <span class="category">AI</span>
+          <time datetime="2026-03-13">March 13, 2026</time> · 5 min read
+        </div>
+        <h3><a href="/article/claude-5-release">Anthropic Releases Claude 5: First AI to Pass the Turing Test in Peer-Reviewed Study</a></h3>
+        <p>In a landmark moment for artificial intelligence, Anthropic's Claude 5 has become the first AI system to consistently pass the Turing test in a rigorous, peer-reviewed double-blind study conducted by MIT researchers.</p>
+        <a href="/article/claude-5-release" class="read-more">Read more →</a>
+      </article>
+
+      <!-- Article 3 -->
+      <article class="article-card">
+        <div class="article-meta">
+          <span class="category">Mobile</span>
+          <time datetime="2026-03-12">March 12, 2026</time> · 6 min read
+        </div>
+        <h3><a href="/article/apple-iphone-17">iPhone 17 Pro Leak: Under-Display Face ID and 48MP Periscope Lens Confirmed</a></h3>
+        <p>Reliable supply chain sources have confirmed that Apple's upcoming iPhone 17 Pro will feature under-display Face ID technology, eliminating the Dynamic Island entirely for a truly full-screen design.</p>
+        <a href="/article/apple-iphone-17" class="read-more">Read more →</a>
+      </article>
+
+      <!-- Article 4 -->
+      <article class="article-card">
+        <div class="article-meta">
+          <span class="category">Security</span>
+          <time datetime="2026-03-12">March 12, 2026</time> · 4 min read
+        </div>
+        <h3><a href="/article/zero-day-chrome">Critical Chrome Zero-Day Actively Exploited: Update Immediately</a></h3>
+        <p>Google has released an emergency patch for a critical zero-day vulnerability in Chrome that is being actively exploited in the wild. The flaw affects the V8 JavaScript engine and allows remote code execution.</p>
+        <a href="/article/zero-day-chrome" class="read-more">Read more →</a>
+      </article>
+
+      <!-- Article 5 -->
+      <article class="article-card">
+        <div class="article-meta">
+          <span class="category">Cloud</span>
+          <time datetime="2026-03-11">March 11, 2026</time> · 7 min read
+        </div>
+        <h3><a href="/article/aws-graviton-5">AWS Graviton 5 Benchmarks Show 40% Lead Over Intel Xeon in Cloud Workloads</a></h3>
+        <p>Amazon's latest custom ARM processor, the Graviton 5, is showing remarkable performance in early benchmarks, outpacing Intel's latest Xeon chips by up to 40% in key cloud computing workloads.</p>
+        <a href="/article/aws-graviton-5" class="read-more">Read more →</a>
+      </article>
+
+      <!-- Article 6 -->
+      <article class="article-card">
+        <div class="article-meta">
+          <span class="category">Startups</span>
+          <time datetime="2026-03-11">March 11, 2026</time> · 3 min read
+        </div>
+        <h3><a href="/article/openai-funding">OpenAI Closes $15B Round at $350B Valuation, Plans IPO for 2027</a></h3>
+        <p>OpenAI has closed its latest funding round, raising $15 billion at a staggering $350 billion valuation. The company also confirmed plans for an initial public offering in late 2027.</p>
+        <a href="/article/openai-funding" class="read-more">Read more →</a>
+      </article>
+
+      <!-- Load more -->
+      <div style="text-align:center; padding:20px 0;">
+        <button style="padding:10px 32px; background:white; border:2px solid #1a73e8; color:#1a73e8; border-radius:4px; cursor:pointer; font-size:14px; font-family:sans-serif;">Load More Articles</button>
+      </div>
+    </main>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <!-- Ad slot -->
+      <div class="ad-slot">Advertisement</div>
+
+      <!-- Trending -->
+      <div class="sidebar-section">
+        <h3>Trending Now</h3>
+        <div class="trending-item">
+          <span class="number">1</span>
+          <div>
+            <h4><a href="/article/meta-ar-glasses">Meta's AR Glasses Ship in June: Everything We Know</a></h4>
+            <div class="meta">42.3K views · 2h ago</div>
+          </div>
+        </div>
+        <div class="trending-item">
+          <span class="number">2</span>
+          <div>
+            <h4><a href="/article/rust-linux-kernel">Rust Now Powers 15% of New Linux Kernel Code</a></h4>
+            <div class="meta">38.1K views · 4h ago</div>
+          </div>
+        </div>
+        <div class="trending-item">
+          <span class="number">3</span>
+          <div>
+            <h4><a href="/article/spacex-starship-v3">SpaceX Starship V3 Completes First Orbital Flight</a></h4>
+            <div class="meta">35.7K views · 5h ago</div>
+          </div>
+        </div>
+        <div class="trending-item">
+          <span class="number">4</span>
+          <div>
+            <h4><a href="/article/eu-ai-act-enforcement">EU AI Act Enforcement Begins: What Companies Need to Know</a></h4>
+            <div class="meta">29.4K views · 6h ago</div>
+          </div>
+        </div>
+        <div class="trending-item">
+          <span class="number">5</span>
+          <div>
+            <h4><a href="/article/tesla-robotaxi">Tesla Robotaxi Launches in Austin: First Ride Impressions</a></h4>
+            <div class="meta">27.8K views · 7h ago</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Newsletter -->
+      <div class="sidebar-section">
+        <div class="newsletter-box">
+          <h3>Daily Briefing</h3>
+          <p>Get the top tech stories delivered to your inbox every morning.</p>
+          <input type="email" placeholder="your@email.com" aria-label="Email address" />
+          <button type="submit">Subscribe Free</button>
+          <p style="font-size:11px; color:#999; margin-top:8px;">Join 280,000+ readers. Unsubscribe anytime.</p>
+        </div>
+      </div>
+
+      <!-- Ad slot -->
+      <div class="ad-slot">Advertisement</div>
+
+      <!-- Topics -->
+      <div class="sidebar-section">
+        <h3>Popular Topics</h3>
+        <div style="display:flex; flex-wrap:wrap; gap:6px;">
+          <a href="/tag/ai" style="padding:4px 10px; background:#e8f0fe; border-radius:12px; font-size:12px; font-family:sans-serif;">Artificial Intelligence</a>
+          <a href="/tag/cybersecurity" style="padding:4px 10px; background:#e8f0fe; border-radius:12px; font-size:12px; font-family:sans-serif;">Cybersecurity</a>
+          <a href="/tag/electric-vehicles" style="padding:4px 10px; background:#e8f0fe; border-radius:12px; font-size:12px; font-family:sans-serif;">Electric Vehicles</a>
+          <a href="/tag/web3" style="padding:4px 10px; background:#e8f0fe; border-radius:12px; font-size:12px; font-family:sans-serif;">Web3</a>
+          <a href="/tag/quantum" style="padding:4px 10px; background:#e8f0fe; border-radius:12px; font-size:12px; font-family:sans-serif;">Quantum Computing</a>
+          <a href="/tag/robotics" style="padding:4px 10px; background:#e8f0fe; border-radius:12px; font-size:12px; font-family:sans-serif;">Robotics</a>
+          <a href="/tag/5g" style="padding:4px 10px; background:#e8f0fe; border-radius:12px; font-size:12px; font-family:sans-serif;">5G/6G</a>
+          <a href="/tag/climate-tech" style="padding:4px 10px; background:#e8f0fe; border-radius:12px; font-size:12px; font-family:sans-serif;">Climate Tech</a>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-col">
+          <h4>Sections</h4>
+          <a href="/news">News</a>
+          <a href="/reviews">Reviews</a>
+          <a href="/analysis">Analysis</a>
+          <a href="/opinion">Opinion</a>
+          <a href="/video">Video</a>
+          <a href="/podcasts">Podcasts</a>
+        </div>
+        <div class="footer-col">
+          <h4>Topics</h4>
+          <a href="/ai">AI & ML</a>
+          <a href="/mobile">Mobile</a>
+          <a href="/cloud">Cloud</a>
+          <a href="/security">Security</a>
+          <a href="/startups">Startups</a>
+          <a href="/gaming">Gaming</a>
+        </div>
+        <div class="footer-col">
+          <h4>Company</h4>
+          <a href="/about">About Us</a>
+          <a href="/team">Our Team</a>
+          <a href="/careers">Careers</a>
+          <a href="/advertise">Advertise</a>
+          <a href="/ethics">Ethics Policy</a>
+          <a href="/contact">Contact</a>
+        </div>
+        <div class="footer-col">
+          <h4>Legal</h4>
+          <a href="/privacy">Privacy Policy</a>
+          <a href="/terms">Terms of Service</a>
+          <a href="/cookies">Cookie Policy</a>
+          <a href="/dmca">DMCA</a>
+          <a href="/accessibility">Accessibility</a>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>© 2026 TechDaily. All rights reserved.</span>
+        <div style="display:flex; gap:12px;">
+          <a href="https://twitter.com/techdaily" style="color:#999;">Twitter</a>
+          <a href="https://facebook.com/techdaily" style="color:#999;">Facebook</a>
+          <a href="https://linkedin.com/company/techdaily" style="color:#999;">LinkedIn</a>
+          <a href="/rss" style="color:#999;">RSS</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Cookie consent -->
+  <div class="cookie-banner" id="cookie-banner">
+    <span>We use cookies to improve your experience. By continuing to use this site, you agree to our <a href="/cookies" style="color:#1a73e8;">cookie policy</a>.</span>
+    <div style="display:flex; gap:8px;">
+      <button class="settings" onclick="document.getElementById('cookie-banner').style.display='none'">Cookie Settings</button>
+      <button class="accept" onclick="document.getElementById('cookie-banner').style.display='none'">Accept All</button>
+    </div>
+  </div>
+
+  <script>
+    // Analytics
+    document.querySelectorAll('article a').forEach(link => {
+      link.addEventListener('click', () => gtag('event', 'article_click', { url: link.href }));
+    });
+  </script>
+</body>
+</html>

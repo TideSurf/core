@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ShopMax - Electronics & More</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="analytics.js" defer></script>
+  <script src="tracking.js" async></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #333; }
+    .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+    header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 12px 24px; }
+    .header-top { display: flex; align-items: center; justify-content: space-between; max-width: 1200px; margin: 0 auto; }
+    .logo { font-size: 24px; font-weight: 700; text-decoration: none; color: white; }
+    .search-bar { flex: 1; max-width: 500px; margin: 0 24px; display: flex; }
+    .search-bar input { flex: 1; padding: 8px 16px; border: none; border-radius: 4px 0 0 4px; font-size: 14px; }
+    .search-bar button { padding: 8px 16px; background: #f59e0b; border: none; border-radius: 0 4px 4px 0; color: white; cursor: pointer; }
+    .header-actions { display: flex; gap: 16px; align-items: center; }
+    .header-actions a { color: white; text-decoration: none; font-size: 14px; }
+    nav { background: #1a1a2e; padding: 8px 24px; }
+    nav ul { list-style: none; display: flex; gap: 24px; max-width: 1200px; margin: 0 auto; }
+    nav a { color: #ccc; text-decoration: none; font-size: 14px; }
+    .breadcrumb { padding: 12px 24px; background: #f5f5f5; font-size: 13px; }
+    .breadcrumb a { color: #667eea; text-decoration: none; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 24px; display: grid; grid-template-columns: 250px 1fr; gap: 24px; }
+    .sidebar { }
+    .filter-group { margin-bottom: 20px; }
+    .filter-group h3 { font-size: 14px; margin-bottom: 8px; }
+    .filter-group label { display: block; font-size: 13px; margin-bottom: 4px; cursor: pointer; }
+    .price-range { display: flex; gap: 8px; align-items: center; }
+    .price-range input { width: 80px; padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; }
+    .product-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+    .product-card { border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; transition: box-shadow 0.2s; }
+    .product-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+    .product-card img { width: 100%; height: 200px; object-fit: cover; }
+    .product-info { padding: 16px; }
+    .product-title { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+    .product-price { font-size: 18px; font-weight: 700; color: #dc2626; }
+    .product-original-price { font-size: 13px; color: #999; text-decoration: line-through; }
+    .product-rating { font-size: 13px; color: #f59e0b; }
+    .add-to-cart { width: 100%; padding: 8px; background: #667eea; color: white; border: none; border-radius: 4px; cursor: pointer; margin-top: 8px; }
+    .pagination { display: flex; justify-content: center; gap: 8px; padding: 24px 0; }
+    .pagination a, .pagination span { padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; text-decoration: none; color: #333; }
+    .pagination .active { background: #667eea; color: white; border-color: #667eea; }
+    footer { background: #1a1a2e; color: #ccc; padding: 40px 24px; margin-top: 40px; }
+    .footer-grid { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+    .footer-col h4 { color: white; margin-bottom: 12px; font-size: 14px; }
+    .footer-col a { display: block; color: #999; text-decoration: none; font-size: 13px; margin-bottom: 6px; }
+    .newsletter { margin-top: 8px; display: flex; }
+    .newsletter input { flex: 1; padding: 8px; border: 1px solid #444; background: #2a2a3e; color: white; border-radius: 4px 0 0 4px; }
+    .newsletter button { padding: 8px 16px; background: #667eea; color: white; border: none; border-radius: 0 4px 4px 0; }
+    .footer-bottom { max-width: 1200px; margin: 20px auto 0; padding-top: 20px; border-top: 1px solid #333; display: flex; justify-content: space-between; font-size: 12px; }
+    .sort-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .sort-bar select { padding: 6px 12px; border: 1px solid #ddd; border-radius: 4px; }
+    .badge { display: inline-block; padding: 2px 6px; font-size: 11px; border-radius: 3px; color: white; background: #dc2626; }
+  </style>
+</head>
+<body>
+  <!-- Skip navigation -->
+  <a href="#main-content" class="sr-only">Skip to main content</a>
+
+  <!-- Top banner -->
+  <div style="background: #dc2626; color: white; text-align: center; padding: 8px; font-size: 13px;">
+    <span>🔥 Flash Sale! Up to 60% off on Electronics.</span>
+    <a href="/sale" style="color: #fbbf24; text-decoration: underline; margin-left: 8px;">Shop Now →</a>
+  </div>
+
+  <!-- Header -->
+  <header>
+    <div class="header-top">
+      <a href="/" class="logo">ShopMax</a>
+      <div class="search-bar">
+        <input type="text" placeholder="Search products, brands, categories..." aria-label="Search" />
+        <button type="submit">Search</button>
+      </div>
+      <div class="header-actions">
+        <a href="/account">👤 Account</a>
+        <a href="/wishlist">♡ Wishlist <span class="badge">3</span></a>
+        <a href="/cart">🛒 Cart <span class="badge">2</span></a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation -->
+  <nav aria-label="Main navigation">
+    <ul>
+      <li><a href="/electronics">Electronics</a></li>
+      <li><a href="/clothing">Clothing</a></li>
+      <li><a href="/home-garden">Home & Garden</a></li>
+      <li><a href="/sports">Sports</a></li>
+      <li><a href="/books">Books</a></li>
+      <li><a href="/toys">Toys & Games</a></li>
+      <li><a href="/deals">Today's Deals</a></li>
+    </ul>
+  </nav>
+
+  <!-- Breadcrumb -->
+  <div class="breadcrumb" aria-label="Breadcrumb">
+    <a href="/">Home</a> › <a href="/electronics">Electronics</a> › <a href="/electronics/laptops">Laptops</a> › <span>Gaming Laptops</span>
+  </div>
+
+  <!-- Main content -->
+  <div class="container" id="main-content">
+    <!-- Sidebar filters -->
+    <aside class="sidebar" role="complementary">
+      <h2 style="font-size: 16px; margin-bottom: 16px;">Filters</h2>
+
+      <div class="filter-group">
+        <h3>Brand</h3>
+        <label><input type="checkbox" name="brand" value="asus" /> ASUS <span style="color:#999">(42)</span></label>
+        <label><input type="checkbox" name="brand" value="dell" /> Dell <span style="color:#999">(38)</span></label>
+        <label><input type="checkbox" name="brand" value="hp" /> HP <span style="color:#999">(31)</span></label>
+        <label><input type="checkbox" name="brand" value="lenovo" /> Lenovo <span style="color:#999">(27)</span></label>
+        <label><input type="checkbox" name="brand" value="msi" /> MSI <span style="color:#999">(23)</span></label>
+        <label><input type="checkbox" name="brand" value="razer" /> Razer <span style="color:#999">(15)</span></label>
+        <label><input type="checkbox" name="brand" value="acer" /> Acer <span style="color:#999">(19)</span></label>
+      </div>
+
+      <div class="filter-group">
+        <h3>Price Range</h3>
+        <div class="price-range">
+          <input type="number" placeholder="Min" min="0" aria-label="Minimum price" />
+          <span>–</span>
+          <input type="number" placeholder="Max" min="0" aria-label="Maximum price" />
+        </div>
+        <label style="margin-top:8px"><input type="radio" name="price" value="0-500" /> Under $500</label>
+        <label><input type="radio" name="price" value="500-1000" /> $500 – $1,000</label>
+        <label><input type="radio" name="price" value="1000-1500" /> $1,000 – $1,500</label>
+        <label><input type="radio" name="price" value="1500+" /> $1,500+</label>
+      </div>
+
+      <div class="filter-group">
+        <h3>Screen Size</h3>
+        <label><input type="checkbox" name="screen" value="14" /> 14"</label>
+        <label><input type="checkbox" name="screen" value="15" /> 15.6"</label>
+        <label><input type="checkbox" name="screen" value="16" /> 16"</label>
+        <label><input type="checkbox" name="screen" value="17" /> 17.3"</label>
+      </div>
+
+      <div class="filter-group">
+        <h3>GPU</h3>
+        <label><input type="checkbox" name="gpu" value="4060" /> RTX 4060</label>
+        <label><input type="checkbox" name="gpu" value="4070" /> RTX 4070</label>
+        <label><input type="checkbox" name="gpu" value="4080" /> RTX 4080</label>
+        <label><input type="checkbox" name="gpu" value="4090" /> RTX 4090</label>
+      </div>
+
+      <div class="filter-group">
+        <h3>RAM</h3>
+        <label><input type="checkbox" name="ram" value="16" /> 16 GB</label>
+        <label><input type="checkbox" name="ram" value="32" /> 32 GB</label>
+        <label><input type="checkbox" name="ram" value="64" /> 64 GB</label>
+      </div>
+
+      <div class="filter-group">
+        <h3>Rating</h3>
+        <label><input type="radio" name="rating" value="4" /> ★★★★☆ & up</label>
+        <label><input type="radio" name="rating" value="3" /> ★★★☆☆ & up</label>
+        <label><input type="radio" name="rating" value="2" /> ★★☆☆☆ & up</label>
+      </div>
+
+      <button style="width:100%; padding:8px; background:#667eea; color:white; border:none; border-radius:4px; cursor:pointer;">Apply Filters</button>
+      <button style="width:100%; padding:8px; background:transparent; color:#667eea; border:1px solid #667eea; border-radius:4px; cursor:pointer; margin-top:8px;">Clear All</button>
+    </aside>
+
+    <!-- Product listing -->
+    <main>
+      <div class="sort-bar">
+        <span>Showing <strong>1–9</strong> of <strong>195</strong> results for <em>"Gaming Laptops"</em></span>
+        <div>
+          <label for="sort">Sort by:</label>
+          <select id="sort" name="sort">
+            <option value="relevance">Relevance</option>
+            <option value="price-asc">Price: Low to High</option>
+            <option value="price-desc">Price: High to Low</option>
+            <option value="rating">Customer Rating</option>
+            <option value="newest">Newest Arrivals</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="product-grid">
+        <!-- Product 1 -->
+        <div class="product-card" data-product-id="prod-001" data-category="gaming-laptops" data-tracking="impression">
+          <div style="position:relative">
+            <img src="/images/laptop-1.jpg" alt="ASUS ROG Strix G16 Gaming Laptop" loading="lazy" />
+            <span class="badge" style="position:absolute; top:8px; left:8px;">-25%</span>
+          </div>
+          <div class="product-info">
+            <div class="product-rating">★★★★★ (2,341)</div>
+            <h3 class="product-title"><a href="/product/asus-rog-strix-g16">ASUS ROG Strix G16 – RTX 4070, i7-13650HX, 16GB, 1TB SSD</a></h3>
+            <div class="product-price">$1,199.99 <span class="product-original-price">$1,599.99</span></div>
+            <p style="font-size:12px; color:#16a34a; margin-top:4px;">✓ Free shipping · In stock</p>
+            <button class="add-to-cart" data-product-id="prod-001" onclick="addToCart('prod-001')">Add to Cart</button>
+          </div>
+        </div>
+
+        <!-- Product 2 -->
+        <div class="product-card" data-product-id="prod-002" data-category="gaming-laptops" data-tracking="impression">
+          <div style="position:relative">
+            <img src="/images/laptop-2.jpg" alt="Dell G15 Gaming Laptop" loading="lazy" />
+          </div>
+          <div class="product-info">
+            <div class="product-rating">★★★★☆ (1,892)</div>
+            <h3 class="product-title"><a href="/product/dell-g15">Dell G15 – RTX 4060, i7-13620H, 16GB, 512GB SSD</a></h3>
+            <div class="product-price">$849.99</div>
+            <p style="font-size:12px; color:#16a34a; margin-top:4px;">✓ Free shipping · In stock</p>
+            <button class="add-to-cart" data-product-id="prod-002" onclick="addToCart('prod-002')">Add to Cart</button>
+          </div>
+        </div>
+
+        <!-- Product 3 -->
+        <div class="product-card" data-product-id="prod-003" data-category="gaming-laptops" data-tracking="impression">
+          <div style="position:relative">
+            <img src="/images/laptop-3.jpg" alt="MSI Raider GE78 HX" loading="lazy" />
+            <span class="badge" style="position:absolute; top:8px; left:8px;">Best Seller</span>
+          </div>
+          <div class="product-info">
+            <div class="product-rating">★★★★★ (987)</div>
+            <h3 class="product-title"><a href="/product/msi-raider-ge78">MSI Raider GE78 HX – RTX 4090, i9-13980HX, 32GB, 2TB SSD</a></h3>
+            <div class="product-price">$2,799.99 <span class="product-original-price">$3,099.99</span></div>
+            <p style="font-size:12px; color:#dc2626; margin-top:4px;">Only 3 left in stock!</p>
+            <button class="add-to-cart" data-product-id="prod-003" onclick="addToCart('prod-003')">Add to Cart</button>
+          </div>
+        </div>
+
+        <!-- Product 4 -->
+        <div class="product-card" data-product-id="prod-004" data-category="gaming-laptops" data-tracking="impression">
+          <img src="/images/laptop-4.jpg" alt="Lenovo Legion Pro 5" loading="lazy" />
+          <div class="product-info">
+            <div class="product-rating">★★★★☆ (1,456)</div>
+            <h3 class="product-title"><a href="/product/lenovo-legion-pro-5">Lenovo Legion Pro 5 – RTX 4070, R7-7745HX, 16GB, 1TB SSD</a></h3>
+            <div class="product-price">$1,349.99</div>
+            <p style="font-size:12px; color:#16a34a; margin-top:4px;">✓ Free shipping · In stock</p>
+            <button class="add-to-cart" data-product-id="prod-004" onclick="addToCart('prod-004')">Add to Cart</button>
+          </div>
+        </div>
+
+        <!-- Product 5 -->
+        <div class="product-card" data-product-id="prod-005" data-category="gaming-laptops" data-tracking="impression">
+          <img src="/images/laptop-5.jpg" alt="HP Omen 16" loading="lazy" />
+          <div class="product-info">
+            <div class="product-rating">★★★★☆ (743)</div>
+            <h3 class="product-title"><a href="/product/hp-omen-16">HP Omen 16 – RTX 4060, i7-13700H, 16GB, 512GB SSD</a></h3>
+            <div class="product-price">$979.99 <span class="product-original-price">$1,149.99</span></div>
+            <p style="font-size:12px; color:#16a34a; margin-top:4px;">✓ Free shipping · In stock</p>
+            <button class="add-to-cart" data-product-id="prod-005" onclick="addToCart('prod-005')">Add to Cart</button>
+          </div>
+        </div>
+
+        <!-- Product 6 -->
+        <div class="product-card" data-product-id="prod-006" data-category="gaming-laptops" data-tracking="impression">
+          <div style="position:relative">
+            <img src="/images/laptop-6.jpg" alt="Razer Blade 16" loading="lazy" />
+            <span class="badge" style="position:absolute; top:8px; left:8px;">New</span>
+          </div>
+          <div class="product-info">
+            <div class="product-rating">★★★★★ (512)</div>
+            <h3 class="product-title"><a href="/product/razer-blade-16">Razer Blade 16 – RTX 4080, i9-13950HX, 32GB, 1TB SSD</a></h3>
+            <div class="product-price">$2,499.99</div>
+            <p style="font-size:12px; color:#16a34a; margin-top:4px;">✓ Free shipping · In stock</p>
+            <button class="add-to-cart" data-product-id="prod-006" onclick="addToCart('prod-006')">Add to Cart</button>
+          </div>
+        </div>
+
+        <!-- Product 7 -->
+        <div class="product-card" data-product-id="prod-007" data-category="gaming-laptops" data-tracking="impression">
+          <img src="/images/laptop-7.jpg" alt="Acer Predator Helios Neo 16" loading="lazy" />
+          <div class="product-info">
+            <div class="product-rating">★★★★☆ (634)</div>
+            <h3 class="product-title"><a href="/product/acer-predator-helios">Acer Predator Helios Neo 16 – RTX 4060, i7-13700H, 16GB, 512GB</a></h3>
+            <div class="product-price">$1,099.99</div>
+            <p style="font-size:12px; color:#16a34a; margin-top:4px;">✓ Free shipping · In stock</p>
+            <button class="add-to-cart" data-product-id="prod-007" onclick="addToCart('prod-007')">Add to Cart</button>
+          </div>
+        </div>
+
+        <!-- Product 8 -->
+        <div class="product-card" data-product-id="prod-008" data-category="gaming-laptops" data-tracking="impression">
+          <div style="position:relative">
+            <img src="/images/laptop-8.jpg" alt="ASUS TUF Gaming A15" loading="lazy" />
+            <span class="badge" style="position:absolute; top:8px; left:8px;">-30%</span>
+          </div>
+          <div class="product-info">
+            <div class="product-rating">★★★★☆ (2,891)</div>
+            <h3 class="product-title"><a href="/product/asus-tuf-a15">ASUS TUF Gaming A15 – RTX 4060, R7-7735HS, 16GB, 512GB SSD</a></h3>
+            <div class="product-price">$699.99 <span class="product-original-price">$999.99</span></div>
+            <p style="font-size:12px; color:#16a34a; margin-top:4px;">✓ Free shipping · In stock</p>
+            <button class="add-to-cart" data-product-id="prod-008" onclick="addToCart('prod-008')">Add to Cart</button>
+          </div>
+        </div>
+
+        <!-- Product 9 -->
+        <div class="product-card" data-product-id="prod-009" data-category="gaming-laptops" data-tracking="impression">
+          <img src="/images/laptop-9.jpg" alt="MSI Cyborg 15" loading="lazy" />
+          <div class="product-info">
+            <div class="product-rating">★★★☆☆ (1,234)</div>
+            <h3 class="product-title"><a href="/product/msi-cyborg-15">MSI Cyborg 15 – RTX 4050, i5-12450H, 8GB, 512GB SSD</a></h3>
+            <div class="product-price">$599.99</div>
+            <p style="font-size:12px; color:#16a34a; margin-top:4px;">✓ Free shipping · In stock</p>
+            <button class="add-to-cart" data-product-id="prod-009" onclick="addToCart('prod-009')">Add to Cart</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pagination -->
+      <div class="pagination" aria-label="Pagination">
+        <span class="active">1</span>
+        <a href="?page=2">2</a>
+        <a href="?page=3">3</a>
+        <a href="?page=4">4</a>
+        <span>...</span>
+        <a href="?page=22">22</a>
+        <a href="?page=2">Next →</a>
+      </div>
+    </main>
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    <div class="footer-grid">
+      <div class="footer-col">
+        <h4>Shop</h4>
+        <a href="/electronics">Electronics</a>
+        <a href="/clothing">Clothing</a>
+        <a href="/home-garden">Home & Garden</a>
+        <a href="/sports">Sports & Outdoors</a>
+        <a href="/books">Books</a>
+        <a href="/toys">Toys & Games</a>
+        <a href="/deals">Today's Deals</a>
+        <a href="/gift-cards">Gift Cards</a>
+      </div>
+      <div class="footer-col">
+        <h4>Help</h4>
+        <a href="/help/orders">Track Your Order</a>
+        <a href="/help/returns">Returns & Refunds</a>
+        <a href="/help/shipping">Shipping Info</a>
+        <a href="/help/faq">FAQ</a>
+        <a href="/help/contact">Contact Us</a>
+        <a href="/help/size-guide">Size Guide</a>
+      </div>
+      <div class="footer-col">
+        <h4>About</h4>
+        <a href="/about">About ShopMax</a>
+        <a href="/careers">Careers</a>
+        <a href="/press">Press</a>
+        <a href="/sustainability">Sustainability</a>
+        <a href="/affiliate">Affiliate Program</a>
+      </div>
+      <div class="footer-col">
+        <h4>Stay Connected</h4>
+        <p style="font-size:13px; margin-bottom:8px;">Get the latest deals and updates</p>
+        <div class="newsletter">
+          <input type="email" placeholder="Enter your email" aria-label="Email for newsletter" />
+          <button type="submit">Subscribe</button>
+        </div>
+        <div style="margin-top:12px; display:flex; gap:12px;">
+          <a href="https://facebook.com/shopmax" aria-label="Facebook">FB</a>
+          <a href="https://twitter.com/shopmax" aria-label="Twitter">TW</a>
+          <a href="https://instagram.com/shopmax" aria-label="Instagram">IG</a>
+          <a href="https://youtube.com/shopmax" aria-label="YouTube">YT</a>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© 2026 ShopMax. All rights reserved.</span>
+      <div>
+        <a href="/privacy" style="color:#999; margin-right:16px;">Privacy Policy</a>
+        <a href="/terms" style="color:#999; margin-right:16px;">Terms of Service</a>
+        <a href="/accessibility" style="color:#999;">Accessibility</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    function addToCart(id) { console.log('Added', id); }
+    document.querySelectorAll('.product-card').forEach(card => {
+      card.addEventListener('mouseenter', () => card.style.transform = 'translateY(-2px)');
+      card.addEventListener('mouseleave', () => card.style.transform = '');
+    });
+    window.dataLayer = window.dataLayer || [];
+    window.dataLayer.push({ event: 'page_view', page: '/electronics/laptops/gaming' });
+  </script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+export { TideSurf } from "./tidesurf.js";
+export { getToolDefinitions } from "./tools/definitions.js";
+export { SurfingPage } from "./cdp/page.js";
+export { TabManager } from "./cdp/tab-manager.js";
+
+export {
+  TideSurfError,
+  CDPConnectionError,
+  CDPTimeoutError,
+  ChromeLaunchError,
+  ElementNotFoundError,
+  NavigationError,
+  ValidationError,
+} from "./errors.js";
+
+export {
+  validateUrl,
+  validateSelector,
+  validateExpression,
+  validateElementId,
+} from "./validation.js";
+
+export { withTimeout } from "./cdp/timeout.js";
+export { withRetry } from "./cdp/retry.js";
+export { estimateTokens, pruneToFit } from "./parser/token-budget.js";
+
+export type {
+  OSNode,
+  PageState,
+  TideSurfOptions,
+  GetStateOptions,
+  ToolDefinition,
+  ToolResult,
+  NodeMap,
+  CDPNode,
+  ClassifyAction,
+  ClassifyResult,
+} from "./types.js";
+
+export type { TabInfo } from "./cdp/tab-manager.js";
