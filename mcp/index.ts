@@ -98,86 +98,88 @@ server.registerTool(
   }
 );
 
-server.registerTool(
-  "navigate",
-  {
-    description: "Navigate the browser to a URL and return the new page state.",
-    inputSchema: {
-      url: z.string().describe("The URL to navigate to"),
+if (!readOnly) {
+  server.registerTool(
+    "navigate",
+    {
+      description: "Navigate the browser to a URL and return the new page state.",
+      inputSchema: {
+        url: z.string().describe("The URL to navigate to"),
+      },
     },
-  },
-  async ({ url }) => {
-    const s = await browser();
-    await s.navigate(url);
-    const state = await s.getState();
-    return text(state.xml);
-  }
-);
+    async ({ url }) => {
+      const s = await browser();
+      await s.navigate(url);
+      const state = await s.getState();
+      return text(state.xml);
+    }
+  );
 
-server.registerTool(
-  "click",
-  {
-    description:
-      "Click an interactive element by its ID (e.g. B1 for button, L3 for link). Call get_state first to see available IDs.",
-    inputSchema: {
-      id: z.string().describe("Element ID from get_state (e.g. B1, L3, I2)"),
+  server.registerTool(
+    "click",
+    {
+      description:
+        "Click an interactive element by its ID (e.g. B1 for button, L3 for link). Call get_state first to see available IDs.",
+      inputSchema: {
+        id: z.string().describe("Element ID from get_state (e.g. B1, L3, I2)"),
+      },
     },
-  },
-  async ({ id }) => {
-    const page = (await browser()).getPage();
-    await page.click(id);
-    return text(`Clicked ${id}`);
-  }
-);
+    async ({ id }) => {
+      const page = (await browser()).getPage();
+      await page.click(id);
+      return text(`Clicked ${id}`);
+    }
+  );
 
-server.registerTool(
-  "type",
-  {
-    description: "Type text into an input field by its ID.",
-    inputSchema: {
-      id: z.string().describe("Input element ID (e.g. I1)"),
-      text: z.string().describe("Text to type"),
-      clear: z.boolean().optional().describe("Clear the field first (default: false)"),
+  server.registerTool(
+    "type",
+    {
+      description: "Type text into an input field by its ID.",
+      inputSchema: {
+        id: z.string().describe("Input element ID (e.g. I1)"),
+        text: z.string().describe("Text to type"),
+        clear: z.boolean().optional().describe("Clear the field first (default: false)"),
+      },
     },
-  },
-  async ({ id, text: t, clear }) => {
-    const page = (await browser()).getPage();
-    await page.type(id, t, clear ?? false);
-    return text(`Typed into ${id}`);
-  }
-);
+    async ({ id, text: t, clear }) => {
+      const page = (await browser()).getPage();
+      await page.type(id, t, clear ?? false);
+      return text(`Typed into ${id}`);
+    }
+  );
 
-server.registerTool(
-  "select",
-  {
-    description: "Select an option in a dropdown by its ID and value.",
-    inputSchema: {
-      id: z.string().describe("Select element ID (e.g. S1)"),
-      value: z.string().describe("Option value to select"),
+  server.registerTool(
+    "select",
+    {
+      description: "Select an option in a dropdown by its ID and value.",
+      inputSchema: {
+        id: z.string().describe("Select element ID (e.g. S1)"),
+        value: z.string().describe("Option value to select"),
+      },
     },
-  },
-  async ({ id, value }) => {
-    const page = (await browser()).getPage();
-    await page.select(id, value);
-    return text(`Selected ${value} in ${id}`);
-  }
-);
+    async ({ id, value }) => {
+      const page = (await browser()).getPage();
+      await page.select(id, value);
+      return text(`Selected ${value} in ${id}`);
+    }
+  );
 
-server.registerTool(
-  "scroll",
-  {
-    description: "Scroll the page up or down.",
-    inputSchema: {
-      direction: z.enum(["up", "down"]).describe("Scroll direction"),
-      amount: z.number().optional().describe("Pixels to scroll (default: 500)"),
+  server.registerTool(
+    "scroll",
+    {
+      description: "Scroll the page up or down.",
+      inputSchema: {
+        direction: z.enum(["up", "down"]).describe("Scroll direction"),
+        amount: z.number().optional().describe("Pixels to scroll (default: 500)"),
+      },
     },
-  },
-  async ({ direction, amount }) => {
-    const page = (await browser()).getPage();
-    await page.scroll(direction, amount);
-    return text(`Scrolled ${direction}`);
-  }
-);
+    async ({ direction, amount }) => {
+      const page = (await browser()).getPage();
+      await page.scroll(direction, amount);
+      return text(`Scrolled ${direction}`);
+    }
+  );
+}
 
 server.registerTool(
   "extract",
@@ -223,19 +225,21 @@ server.registerTool(
   }
 );
 
-server.registerTool(
-  "new_tab",
-  {
-    description: "Open a new browser tab, optionally navigating to a URL.",
-    inputSchema: {
-      url: z.string().optional().describe("URL to open in new tab"),
+if (!readOnly) {
+  server.registerTool(
+    "new_tab",
+    {
+      description: "Open a new browser tab, optionally navigating to a URL.",
+      inputSchema: {
+        url: z.string().optional().describe("URL to open in new tab"),
+      },
     },
-  },
-  async ({ url }) => {
-    const tab = await (await browser()).newTab(url);
-    return text(JSON.stringify(tab));
-  }
-);
+    async ({ url }) => {
+      const tab = await (await browser()).newTab(url);
+      return text(JSON.stringify(tab));
+    }
+  );
+}
 
 server.registerTool(
   "switch_tab",
@@ -251,19 +255,21 @@ server.registerTool(
   }
 );
 
-server.registerTool(
-  "close_tab",
-  {
-    description: "Close a browser tab by its ID.",
-    inputSchema: {
-      tabId: z.string().describe("Tab ID from list_tabs"),
+if (!readOnly) {
+  server.registerTool(
+    "close_tab",
+    {
+      description: "Close a browser tab by its ID.",
+      inputSchema: {
+        tabId: z.string().describe("Tab ID from list_tabs"),
+      },
     },
-  },
-  async ({ tabId }) => {
-    await (await browser()).closeTab(tabId);
-    return text(`Closed tab ${tabId}`);
-  }
-);
+    async ({ tabId }) => {
+      await (await browser()).closeTab(tabId);
+      return text(`Closed tab ${tabId}`);
+    }
+  );
+}
 
 // --- Search / Screenshot / Clipboard read ---
 

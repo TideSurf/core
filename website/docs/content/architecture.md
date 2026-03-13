@@ -56,10 +56,11 @@ In auto-connect mode, the connector uses `discoverBrowser()` to probe `CDP.List(
 
 ### Tool layer
 
-Exposes TideSurf's capabilities as a set of 12 standardized tool definitions that follow common LLM function-calling conventions. These definitions include parameter schemas, descriptions, and type information that help the LLM understand what each tool does and when to use it. The tool executor validates incoming calls, dispatches them to the appropriate method, and returns structured results.
+Exposes TideSurf's capabilities as a set of 18 standardized tool definitions that follow common LLM function-calling conventions. These definitions include parameter schemas, descriptions, and type information that help the LLM understand what each tool does and when to use it. The tool executor validates incoming calls, dispatches them to the appropriate method, and returns structured results.
 
 ## Design principles
 
 - **Token efficiency over completeness** — the compressed output deliberately omits information that doesn't help an agent decide its next action. Visual styling, layout details, and decorative elements add tokens without adding utility.
 - **Stable, predictable IDs** — short prefixed IDs (`B1`, `L3`) are more reliable for LLMs than CSS selectors or XPaths, which can be brittle and verbose. The prefix tells the LLM the element type at a glance.
 - **Standard tools, any model** — by using a generic tool-calling interface, TideSurf works with Claude, GPT, Gemini, open-source models, or anything else that supports function calling. No vendor lock-in.
+- **Read-only mode** — when enabled, write tools are removed from both the executor and the definitions array. The LLM never sees tools it can't use.

@@ -62,6 +62,10 @@ Returns the compressed XML representation of the active tab's DOM. The returned 
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `maxTokens` | `number` | unlimited | Maximum token budget for the output |
+| `viewport` | `boolean` | `false` | Only include elements visible in the current viewport |
+| `mode` | `"full" \| "minimal" \| "interactive"` | `"full"` | Output filtering mode |
+
+Modes compose: `getState({ viewport: true, mode: "interactive", maxTokens: 200 })` filters to visible interactive elements, then prunes to 200 tokens.
 
 ### `getPage()`
 
@@ -85,7 +89,7 @@ Returns a function that executes TideSurf tools by name. Designed for use in LLM
 getToolDefinitions(): ToolDefinition[]
 ```
 
-Returns an array of 12 tool schemas formatted for LLM function calling. Pass these to your LLM's tool/function parameter so it knows which browser actions are available.
+Returns an array of 18 tool schemas formatted for LLM function calling. Pass these to your LLM's tool/function parameter so it knows which browser actions are available.
 
 ### Tab management
 
@@ -159,15 +163,63 @@ evaluate(expression: string): Promise<unknown>
 
 Executes arbitrary JavaScript in the page context and returns the result. Use with caution — this bypasses TideSurf's structured interaction model, but is useful for edge cases where the standard tools don't cover your needs.
 
+### `search(query, maxResults?)`
+
+```typescript
+search(query: string, maxResults?: number): Promise<SearchResult[]>
+```
+
+Finds text on the page (case-insensitive). Returns up to `maxResults` matches (default 10) with surrounding text context.
+
+### `screenshot(options?)`
+
+```typescript
+screenshot(options?: ScreenshotOptions): Promise<string>
+```
+
+Captures a PNG screenshot. Returns a base64-encoded string. Options: `elementId` to capture a specific element, `fullPage` to capture the entire scrollable page.
+
+### `upload(id, filePaths)`
+
+```typescript
+upload(id: string, filePaths: string[]): Promise<void>
+```
+
+Sets files on a `<input type="file">` element via CDP.
+
+### `clipboardRead()`
+
+```typescript
+clipboardRead(): Promise<string>
+```
+
+Reads the current clipboard text content.
+
+### `clipboardWrite(text)`
+
+```typescript
+clipboardWrite(text: string): Promise<void>
+```
+
+Writes text to the system clipboard.
+
+### `download(id, options?)`
+
+```typescript
+download(id: string, options?: { downloadDir?: string; timeout?: number }): Promise<DownloadResult>
+```
+
+Clicks a download link/button and waits for the file to download. Returns the file path, name, and size.
+
 ---
 
 ## Tool definitions
 
-These 12 tools are returned by `getToolDefinitions()` and can be used with any LLM that supports function calling. They map directly to the methods above:
+These 18 tools are returned by `getToolDefinitions()` and can be used with any LLM that supports function calling. They map directly to the methods above:
 
 | Tool | Parameters | Description |
 |---|---|---|
-| `get_state` | `maxTokens?` | Get the compressed page state as XML |
+| `get_state` | `maxTokens?`, `viewport?`, `mode?` | Get the compressed page state as XML |
 | `navigate` | `url` | Navigate to a URL |
 | `click` | `id` | Click an element by its TideSurf ID |
 | `type` | `id`, `text`, `clear?` | Type text into an input field |
@@ -179,3 +231,9 @@ These 12 tools are returned by `getToolDefinitions()` and can be used with any L
 | `new_tab` | `url?` | Open a new tab |
 | `switch_tab` | `tabId` | Switch to a different tab |
 | `close_tab` | `tabId` | Close a tab |
+| `search` | `query`, `maxResults?` | Find text on the page |
+| `screenshot` | `elementId?`, `fullPage?` | Capture a PNG screenshot |
+| `upload` | `id`, `filePaths` | Set files on a file input |
+| `clipboard_read` | — | Read clipboard text |
+| `clipboard_write` | `text` | Write text to clipboard |
+| `download` | `id`, `downloadDir?`, `timeout?` | Download a file |

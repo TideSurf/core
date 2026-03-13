@@ -95,6 +95,22 @@ tidesurf inspect https://example.com --auto-connect --port 9333
 tidesurf mcp --auto-connect
 ```
 
+## Read-only mode
+
+Launch or connect with `readOnly: true` to prevent the agent from modifying pages. Only observation tools (get_state, extract, evaluate, search, screenshot, clipboard_read) and tab switching remain available.
+
+```typescript
+const browser = await TideSurf.launch({ readOnly: true });
+// or
+const browser = await TideSurf.connect({ readOnly: true });
+```
+
+From the CLI:
+```bash
+tidesurf mcp --read-only
+tidesurf mcp --auto-connect --read-only
+```
+
 ## Integrating with an LLM agent
 
 TideSurf ships with standardized tool definitions that you can pass directly to any LLM that supports function calling. This makes it straightforward to build an autonomous browsing agent — your LLM receives the compressed page state as context, decides which tool to call, and TideSurf executes the action:
@@ -113,7 +129,7 @@ const result = await executor({
 });
 ```
 
-The `getToolDefinitions()` function returns an array of 12 tool schemas (navigate, click, type, scroll, extract, and more) formatted for LLM function calling. You can pass these directly to the Anthropic API, OpenAI API, or any other provider that supports tool use.
+The `getToolDefinitions()` function returns an array of 18 tool schemas (navigate, click, type, scroll, extract, and more) formatted for LLM function calling. You can pass these directly to the Anthropic API, OpenAI API, or any other provider that supports tool use.
 
 ## Using as an MCP server
 
@@ -143,7 +159,27 @@ To connect to your running Chrome instead of launching a headless instance, add 
 }
 ```
 
-Once configured, all 12 TideSurf tools become available as MCP tools that your AI assistant can invoke directly.
+Once configured, all 18 TideSurf tools become available as MCP tools that your AI assistant can invoke directly.
+
+## Output modes
+
+`getState` accepts a `mode` parameter for different levels of detail:
+
+```typescript
+// Full page (default)
+const full = await browser.getState();
+
+// Only interactive elements (buttons, links, inputs)
+const interactive = await browser.getState({ mode: "interactive" });
+
+// Landmarks and summaries only
+const minimal = await browser.getState({ mode: "minimal" });
+
+// Only what's visible in the viewport
+const viewport = await browser.getState({ viewport: true });
+```
+
+Modes compose with each other and `maxTokens`.
 
 ## What to read next
 

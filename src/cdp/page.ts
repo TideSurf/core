@@ -238,9 +238,20 @@ export class SurfingPage {
       });
     }
 
-    return cdp.captureScreenshot(this.conn, {
-      fullPage: options?.fullPage,
-    });
+    if (options?.fullPage) {
+      // Get full document dimensions for the clip region
+      const dims = (await cdp.evaluate(
+        this.conn,
+        "({ width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight })"
+      )) as { width: number; height: number };
+
+      return cdp.captureScreenshot(this.conn, {
+        clip: { x: 0, y: 0, width: dims.width, height: dims.height, scale: 1 },
+        fullPage: true,
+      });
+    }
+
+    return cdp.captureScreenshot(this.conn);
   }
 
   /**
