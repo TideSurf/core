@@ -84,6 +84,11 @@ export async function launchChrome(options: LaunchOptions = {}): Promise<LaunchR
     args.push("--headless=new");
   }
 
+  // CI environments (GitHub Actions, Docker) often run as root
+  if (process.env["CI"] || process.getuid?.() === 0) {
+    args.push("--no-sandbox", "--disable-setuid-sandbox");
+  }
+
   let proc: ChildProcess;
   try {
     proc = spawn(chromePath, args, {
@@ -119,7 +124,7 @@ function waitForDevTools(proc: ChildProcess): Promise<string> {
     const stderrStream = stderr;
     let accumulated = "";
     let settled = false;
-    const timeoutMs = 3000;
+    const timeoutMs = 15_000;
 
     function cleanup() {
       clearTimeout(timer);
