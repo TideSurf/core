@@ -155,6 +155,7 @@ body {
 
 .logo-mark {
   flex-shrink: 0;
+  transform: translateY(-1px);
 }
 
 .nav-links {
@@ -167,58 +168,10 @@ body {
   color: var(--text-hero-muted);
   text-decoration: none;
   font-weight: 500;
-  font-size: 0.9rem;
+  font-size: 1rem;
   transition: color var(--duration) var(--ease);
 }
 
-.nav-links a.github-star {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.3rem 0.7rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: 0.82rem;
-  font-weight: 600;
-  transition: border-color var(--duration) var(--ease), color var(--duration) var(--ease), background var(--duration) var(--ease);
-}
-
-.nav-links a.github-star:hover {
-  color: var(--text-primary);
-  border-color: var(--text-muted);
-  background: var(--accent-subtle);
-}
-
-.nav-links a.github-star .star-icon {
-  opacity: 0.5;
-  transition: opacity var(--duration) var(--ease);
-}
-
-.nav-links a.github-star:hover .star-icon {
-  opacity: 1;
-}
-
-.nav-links a.github-star .star-separator {
-  width: 1px;
-  height: 14px;
-  background: var(--border);
-  margin: 0 0.1rem;
-}
-
-.nav-links a.github-star .star-count {
-  font-weight: 700;
-  font-size: 0.78rem;
-  min-width: 1ch;
-}
-
-.nav-links a.github-star .star-count:empty {
-  display: none;
-}
-
-.nav-links a.github-star .star-count:empty ~ .star-separator,
-.nav-links a.github-star .star-separator:has(+ .star-count:empty) {
-  display: none;
-}
 
 .nav-controls {
   display: flex;
@@ -249,7 +202,7 @@ body {
 .lang-switcher {
   display: flex;
   gap: 2px;
-  background: var(--hero-glass);
+  background: var(--bg-elevated);
   border-radius: 10px;
   padding: 3px;
 }
@@ -257,7 +210,7 @@ body {
 .lang-btn {
   background: transparent;
   border: none;
-  color: var(--text-hero-muted);
+  color: var(--text-muted);
   padding: 0.5rem 0.75rem;
   border-radius: 7px;
   font-family: var(--font);
@@ -269,8 +222,52 @@ body {
 
 
 .lang-btn.active {
-  background: var(--accent);
-  color: #fff;
+  background: var(--text-primary);
+  color: var(--bg-primary);
+}
+
+/* ── GitHub Star ── */
+
+.github-star {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg-elevated);
+  border: none;
+  border-radius: 10px;
+  overflow: hidden;
+  text-decoration: none;
+  transition: opacity var(--duration) var(--ease);
+}
+
+.github-star:hover {
+  opacity: 0.8;
+}
+
+.github-star .gh-logo {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 0.55rem;
+  border-radius: 7px;
+  color: var(--text-primary);
+}
+
+.github-star .gh-stars {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.5rem 0.6rem;
+  background: var(--bg-secondary);
+  border-radius: 7px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.github-star .gh-stars:has(.star-count:empty) {
+  display: none;
 }
 
 /* ── Hero ── */
