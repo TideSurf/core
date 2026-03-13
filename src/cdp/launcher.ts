@@ -5,6 +5,8 @@ import { randomUUID } from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
 import CDP from "chrome-remote-interface";
 import { ChromeLaunchError, CDPConnectionError } from "../errors.js";
+import { withTimeout } from "./timeout.js";
+import { validatePort } from "../validation.js";
 
 const CHROME_PATHS: Record<string, string[]> = {
   darwin: [
@@ -66,6 +68,7 @@ export interface LaunchResult {
 export async function launchChrome(options: LaunchOptions = {}): Promise<LaunchResult> {
   const chromePath = findChrome(options.chromePath);
   const port = options.port ?? 9222;
+  validatePort(port);
   const ownsTempDir = !options.userDataDir;
   const userDataDir =
     options.userDataDir ?? join(tmpdir(), `tidesurf-${randomUUID()}`);
@@ -121,16 +124,21 @@ export async function launchChrome(options: LaunchOptions = {}): Promise<LaunchR
 export interface DiscoverOptions {
   port?: number;
   host?: string;
+  timeout?: number;
 }
 
 export interface DiscoverResult {
   port: number;
   host: string;
+  /** ID of the first page target found — use this to connect to a real tab */
+  targetId: string;
 }
 
 /**
  * Discover a running Chrome instance with remote debugging enabled.
  * Tries CDP.List on the given port (default 9222) to verify connectivity.
+ * Returns the first page-type target so the caller can connect to it directly
+ * (avoids accidentally attaching to a service worker or chrome:// page).
  *
  * If Chrome is running with --remote-debugging-port, or the user has enabled
  * remote debugging via chrome://inspect#remote-debugging (Chrome M144+),
@@ -140,11 +148,17 @@ export async function discoverBrowser(
   options: DiscoverOptions = {}
 ): Promise<DiscoverResult> {
   const port = options.port ?? 9222;
+  validatePort(port);
   const host = options.host ?? "localhost";
+  const timeout = options.timeout ?? 10_000;
 
   try {
-    const targets = await CDP.List({ port, host });
-    const pages = (targets as Array<{ type: string }>).filter(
+    const targets = await withTimeout(
+      CDP.List({ port, host }),
+      timeout,
+      "discoverBrowser"
+    );
+    const pages = (targets as Array<{ id: string; type: string }>).filter(
       (t) => t.type === "page"
     );
     if (pages.length === 0) {
@@ -153,7 +167,7 @@ export async function discoverBrowser(
         `Open a tab in Chrome and try again.`
       );
     }
-    return { port, host };
+    return { port, host, targetId: pages[0].id };
   } catch (err) {
     if (err instanceof CDPConnectionError) throw err;
     throw new CDPConnectionError(

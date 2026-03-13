@@ -19,6 +19,7 @@ export {
   validateSelector,
   validateExpression,
   validateElementId,
+  validatePort,
 } from "./validation.js";
 
 export { withTimeout } from "./cdp/timeout.js";

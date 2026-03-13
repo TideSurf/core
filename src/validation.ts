@@ -44,6 +44,17 @@ export function validateExpression(expression: string): void {
 }
 
 /**
+ * Validate a TCP port number
+ */
+export function validatePort(port: number): void {
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new ValidationError(
+      `Invalid port: ${port}. Must be an integer between 1 and 65535`
+    );
+  }
+}
+
+/**
  * Validate an element ID (e.g. "B1", "L3")
  */
 export function validateElementId(id: string): void {

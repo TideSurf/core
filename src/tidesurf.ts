@@ -98,13 +98,17 @@ export class TideSurf {
    * @throws {CDPConnectionError} if no Chrome instance is found
    */
   static async connect(options: TideSurfConnectOptions = {}): Promise<TideSurf> {
-    const { port, host } = await discoverBrowser({
-      port: options.port,
-      host: options.host,
-    });
+    const { port, host, targetId } = await withRetry(
+      () => discoverBrowser({
+        port: options.port,
+        host: options.host,
+        timeout: options.timeout,
+      }),
+      { maxAttempts: 3 }
+    );
 
     const conn = await withRetry(
-      () => connect({ port, host, timeout: options.timeout }),
+      () => connect({ port, host, tab: targetId, timeout: options.timeout }),
       { maxAttempts: 3 }
     );
     const page = new SurfingPage(conn);

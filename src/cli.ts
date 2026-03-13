@@ -64,6 +64,15 @@ async function inspect() {
     process.exit(1);
   }
 
+  if (portStr && (isNaN(port!) || !Number.isInteger(port!) || port! < 1 || port! > 65535)) {
+    console.error("Error: --port must be an integer between 1 and 65535");
+    process.exit(1);
+  }
+
+  if (autoConnect && headful) {
+    console.error("Warning: --headful is ignored with --auto-connect (connecting to existing browser)");
+  }
+
   const browser = autoConnect
     ? await TideSurf.connect({ port })
     : await TideSurf.launch({ headless: !headful, port });
@@ -81,6 +90,15 @@ async function mcp() {
   const autoConnect = hasFlag("--auto-connect");
   const portStr = parseFlag("--port");
   const port = portStr ? parseInt(portStr, 10) : undefined;
+
+  if (portStr && (isNaN(port!) || !Number.isInteger(port!) || port! < 1 || port! > 65535)) {
+    console.error("Error: --port must be an integer between 1 and 65535");
+    process.exit(1);
+  }
+
+  if (autoConnect && headful) {
+    console.error("Warning: --headful is ignored with --auto-connect (connecting to existing browser)");
+  }
 
   // Dynamic imports — these are optionalDependencies, so we give a friendly error if missing.
   // Use variable specifiers to prevent TypeScript from resolving these at compile time.

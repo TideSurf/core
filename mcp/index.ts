@@ -22,8 +22,27 @@ import { TideSurf } from "../src/index.js";
 
 const headful = process.argv.includes("--headful");
 const autoConnect = process.argv.includes("--auto-connect");
-const portIdx = process.argv.indexOf("--port");
-const port = portIdx !== -1 ? parseInt(process.argv[portIdx + 1], 10) : undefined;
+
+function parsePort(): number | undefined {
+  const idx = process.argv.indexOf("--port");
+  if (idx === -1) return undefined;
+  const raw = process.argv[idx + 1];
+  if (raw === undefined) {
+    console.error("[tidesurf-mcp] Error: --port requires a value");
+    process.exit(1);
+  }
+  const n = parseInt(raw, 10);
+  if (isNaN(n) || !Number.isInteger(n) || n < 1 || n > 65535) {
+    console.error("[tidesurf-mcp] Error: --port must be an integer between 1 and 65535");
+    process.exit(1);
+  }
+  return n;
+}
+const port = parsePort();
+
+if (autoConnect && headful) {
+  console.error("[tidesurf-mcp] Warning: --headful is ignored with --auto-connect (connecting to existing browser)");
+}
 
 // Lazy browser launch — only starts on first tool call
 let surfing: TideSurf | null = null;
