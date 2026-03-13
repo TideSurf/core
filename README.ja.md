@@ -54,15 +54,15 @@ await browser.close();
 
 ## ドキュメント
 
-詳しくは **[docs.tidesurf.org](https://docs.tidesurf.org)** をご覧ください。
+詳しくは **[tidesurf.org/docs](https://tidesurf.org/docs)** をご覧ください。
 
-- [はじめに](https://docs.tidesurf.org/#getting-started) — インストールからLLM連携までの手順をご案内します
-- [ページフォーマット](https://docs.tidesurf.org/#page-format) — DOMがどのように圧縮されるかをご説明します
-- [トークン予算](https://docs.tidesurf.org/#token-budget) — 出力サイズの調整方法について解説します
-- [マルチタブ](https://docs.tidesurf.org/#multi-tab) — 複数タブの管理方法をご紹介します
-- [エラー処理](https://docs.tidesurf.org/#error-handling) — 型付きエラーとリトライの仕組みをご説明します
-- [APIリファレンス](https://docs.tidesurf.org/#api-reference) — すべてのクラスとツールの詳細をまとめています
-- [アーキテクチャ](https://docs.tidesurf.org/#architecture) — TideSurfの全体構成をご紹介します
+- [はじめに](https://tidesurf.org/docs/#getting-started) — インストールからLLM連携までの手順をご案内します
+- [ページフォーマット](https://tidesurf.org/docs/#page-format) — DOMがどのように圧縮されるかをご説明します
+- [トークン予算](https://tidesurf.org/docs/#token-budget) — 出力サイズの調整方法について解説します
+- [マルチタブ](https://tidesurf.org/docs/#multi-tab) — 複数タブの管理方法をご紹介します
+- [エラー処理](https://tidesurf.org/docs/#error-handling) — 型付きエラーとリトライの仕組みをご説明します
+- [APIリファレンス](https://tidesurf.org/docs/#api-reference) — すべてのクラスとツールの詳細をまとめています
+- [アーキテクチャ](https://tidesurf.org/docs/#architecture) — TideSurfの全体構成をご紹介します
 
 ## ライセンス
 

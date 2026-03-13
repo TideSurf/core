@@ -54,15 +54,15 @@ await browser.close();
 
 ## 문서
 
-자세한 내용은 **[docs.tidesurf.org](https://docs.tidesurf.org)** 에서 확인하실 수 있습니다.
+자세한 내용은 **[tidesurf.org/docs](https://tidesurf.org/docs)** 에서 확인하실 수 있습니다.
 
-- [시작하기](https://docs.tidesurf.org/#getting-started) — 설치부터 LLM 연동까지의 과정을 안내합니다
-- [페이지 포맷](https://docs.tidesurf.org/#page-format) — DOM이 어떻게 압축되는지 설명합니다
-- [토큰 예산](https://docs.tidesurf.org/#token-budget) — 출력 크기를 조절하는 방법을 다룹니다
-- [멀티탭](https://docs.tidesurf.org/#multi-tab) — 여러 탭을 관리하는 방법을 소개합니다
-- [에러 처리](https://docs.tidesurf.org/#error-handling) — 타입 기반 에러와 재시도 구조를 설명합니다
-- [API 레퍼런스](https://docs.tidesurf.org/#api-reference) — 모든 클래스와 도구에 대한 상세 정보를 정리하였습니다
-- [아키텍처](https://docs.tidesurf.org/#architecture) — TideSurf의 전체 구조를 소개합니다
+- [시작하기](https://tidesurf.org/docs/#getting-started) — 설치부터 LLM 연동까지의 과정을 안내합니다
+- [페이지 포맷](https://tidesurf.org/docs/#page-format) — DOM이 어떻게 압축되는지 설명합니다
+- [토큰 예산](https://tidesurf.org/docs/#token-budget) — 출력 크기를 조절하는 방법을 다룹니다
+- [멀티탭](https://tidesurf.org/docs/#multi-tab) — 여러 탭을 관리하는 방법을 소개합니다
+- [에러 처리](https://tidesurf.org/docs/#error-handling) — 타입 기반 에러와 재시도 구조를 설명합니다
+- [API 레퍼런스](https://tidesurf.org/docs/#api-reference) — 모든 클래스와 도구에 대한 상세 정보를 정리하였습니다
+- [아키텍처](https://tidesurf.org/docs/#architecture) — TideSurf의 전체 구조를 소개합니다
 
 ## 라이선스
 

@@ -54,15 +54,15 @@ Real-world token compression measured against live sites:
 
 ## Documentation
 
-Full docs at **[docs.tidesurf.org](https://docs.tidesurf.org)**:
+Full docs at **[tidesurf.org/docs](https://tidesurf.org/docs)**:
 
-- [Getting started](https://docs.tidesurf.org/#getting-started) — installation, quick start, LLM integration
-- [Page format](https://docs.tidesurf.org/#page-format) — how DOM compression works
-- [Token budget](https://docs.tidesurf.org/#token-budget) — controlling output size
-- [Multi-tab](https://docs.tidesurf.org/#multi-tab) — managing browser tabs
-- [Error handling](https://docs.tidesurf.org/#error-handling) — typed errors and retry behavior
-- [API reference](https://docs.tidesurf.org/#api-reference) — full class and tool reference
-- [Architecture](https://docs.tidesurf.org/#architecture) — how TideSurf fits in
+- [Getting started](https://tidesurf.org/docs/#getting-started) — installation, quick start, LLM integration
+- [Page format](https://tidesurf.org/docs/#page-format) — how DOM compression works
+- [Token budget](https://tidesurf.org/docs/#token-budget) — controlling output size
+- [Multi-tab](https://tidesurf.org/docs/#multi-tab) — managing browser tabs
+- [Error handling](https://tidesurf.org/docs/#error-handling) — typed errors and retry behavior
+- [API reference](https://tidesurf.org/docs/#api-reference) — full class and tool reference
+- [Architecture](https://tidesurf.org/docs/#architecture) — how TideSurf fits in
 
 ## License
 
