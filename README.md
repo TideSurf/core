@@ -6,13 +6,22 @@
 
 <p align="center"><strong>English</strong> | <a href="README.ja.md">日本語</a> | <a href="README.ko.md">한국어</a></p>
 
-[![CI](https://github.com/TideSurf/tidesurf-core/actions/workflows/ci.yml/badge.svg)](https://github.com/TideSurf/tidesurf-core/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/@tidesurf/core)](https://www.npmjs.com/package/@tidesurf/core)
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+<p align="center">
+  <a href="https://github.com/TideSurf/tidesurf-core/actions/workflows/ci.yml"><img src="https://github.com/TideSurf/tidesurf-core/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://www.npmjs.com/package/@tidesurf/core"><img src="https://img.shields.io/npm/v/@tidesurf/core" alt="npm"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
+</p>
 
-**The connector between Chromium and LLM agents — no screenshots, no vision models, just the DOM compressed for machines.**
+<p align="center">
+  <strong>The connector between Chromium and LLM agents —<br>no screenshots, no vision models, just the DOM compressed for machines.</strong>
+</p>
 
-TideSurf translates the live DOM into a minimal, token-efficient XML that any LLM can consume (100–800 tokens vs 5,000–50,000+ for raw HTML), and translates agent actions back into browser commands via CDP.
+<p align="center">
+  TideSurf translates the live DOM into a minimal, token-efficient XML that any LLM can consume<br>
+  (100–800 tokens vs 5,000–50,000+ for raw HTML), and translates agent actions back into browser commands via CDP.
+</p>
+
+<br>
 
 ## Installation
 
@@ -40,7 +49,7 @@ await browser.close();
 
 ## Benchmarks
 
-Real-world token compression measured against live sites:
+<p align="center">Real-world token compression measured against live sites:</p>
 
 | Site | Raw HTML | TideSurf | Reduction | Ratio |
 |------|----------|----------|-----------|-------|
@@ -54,7 +63,9 @@ Real-world token compression measured against live sites:
 
 ## Documentation
 
-Full docs at **[tidesurf.org/docs](https://tidesurf.org/docs)**:
+<p align="center">
+  Full docs at <strong><a href="https://tidesurf.org/docs">tidesurf.org/docs</a></strong>
+</p>
 
 - [Getting started](https://tidesurf.org/docs/#getting-started) — installation, quick start, LLM integration
 - [Page format](https://tidesurf.org/docs/#page-format) — how DOM compression works
@@ -66,4 +77,4 @@ Full docs at **[tidesurf.org/docs](https://tidesurf.org/docs)**:
 
 ## License
 
-Apache 2.0
+<p align="center">Apache 2.0</p>

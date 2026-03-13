@@ -1,0 +1,67 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" fill="#09090b"/>
+
+  <!-- Subtle grid -->
+  <g opacity="0.04" stroke="white" stroke-width="0.5">
+    <line x1="0" y1="0" x2="0" y2="630"/><line x1="60" y1="0" x2="60" y2="630"/>
+    <line x1="120" y1="0" x2="120" y2="630"/><line x1="180" y1="0" x2="180" y2="630"/>
+    <line x1="240" y1="0" x2="240" y2="630"/><line x1="300" y1="0" x2="300" y2="630"/>
+    <line x1="360" y1="0" x2="360" y2="630"/><line x1="420" y1="0" x2="420" y2="630"/>
+    <line x1="480" y1="0" x2="480" y2="630"/><line x1="540" y1="0" x2="540" y2="630"/>
+    <line x1="600" y1="0" x2="600" y2="630"/><line x1="660" y1="0" x2="660" y2="630"/>
+    <line x1="720" y1="0" x2="720" y2="630"/><line x1="780" y1="0" x2="780" y2="630"/>
+    <line x1="840" y1="0" x2="840" y2="630"/><line x1="900" y1="0" x2="900" y2="630"/>
+    <line x1="960" y1="0" x2="960" y2="630"/><line x1="1020" y1="0" x2="1020" y2="630"/>
+    <line x1="1080" y1="0" x2="1080" y2="630"/><line x1="1140" y1="0" x2="1140" y2="630"/>
+    <line x1="0" y1="60" x2="1200" y2="60"/><line x1="0" y1="120" x2="1200" y2="120"/>
+    <line x1="0" y1="180" x2="1200" y2="180"/><line x1="0" y1="240" x2="1200" y2="240"/>
+    <line x1="0" y1="300" x2="1200" y2="300"/><line x1="0" y1="360" x2="1200" y2="360"/>
+    <line x1="0" y1="420" x2="1200" y2="420"/><line x1="0" y1="480" x2="1200" y2="480"/>
+    <line x1="0" y1="540" x2="1200" y2="540"/>
+  </g>
+
+  <!-- Large decorative waves -->
+  <g opacity="0.06">
+    <path d="M-100 350 C100 250, 300 250, 500 350 C700 450, 900 450, 1100 350 L1300 350" stroke="white" stroke-width="2" fill="none"/>
+    <path d="M-100 400 C100 300, 300 300, 500 400 C700 500, 900 500, 1100 400 L1300 400" stroke="white" stroke-width="2" fill="none"/>
+    <path d="M-100 450 C100 350, 300 350, 500 450 C700 550, 900 550, 1100 450 L1300 450" stroke="#2563eb" stroke-width="2.5" fill="none"/>
+  </g>
+
+  <!-- Logo -->
+  <g transform="translate(540, 140)">
+    <rect width="120" height="120" rx="26" fill="#111111" stroke="#222222" stroke-width="1"/>
+    <path d="M22 46 C35 33, 50 33, 60 46 C70 59, 85 59, 98 46" stroke="white" stroke-width="3" stroke-linecap="round" opacity="0.1"/>
+    <path d="M22 63 C35 50, 50 50, 60 63 C70 76, 85 76, 98 63" stroke="white" stroke-width="3.5" stroke-linecap="round" opacity="0.25"/>
+    <path d="M22 80 C35 67, 50 67, 60 80 C70 93, 85 93, 98 80" stroke="#2563eb" stroke-width="4.5" stroke-linecap="round"/>
+  </g>
+
+  <!-- Title -->
+  <text x="600" y="320" text-anchor="middle" fill="white" font-family="system-ui, -apple-system, sans-serif" font-weight="800" font-size="72" letter-spacing="-2">TideSurf</text>
+
+  <!-- Tagline -->
+  <text x="600" y="375" text-anchor="middle" fill="#888888" font-family="system-ui, -apple-system, sans-serif" font-weight="400" font-size="24">The web, compressed for AI agents</text>
+
+  <!-- Stats bar -->
+  <g transform="translate(260, 430)">
+    <text x="0" y="0" fill="#2563eb" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="36">7.7x</text>
+    <text x="0" y="28" fill="#666666" font-family="system-ui, -apple-system, sans-serif" font-weight="400" font-size="14">compression</text>
+
+    <line x1="150" y1="-20" x2="150" y2="30" stroke="#222222" stroke-width="1"/>
+
+    <text x="220" y="0" fill="white" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="36">87%</text>
+    <text x="220" y="28" fill="#666666" font-family="system-ui, -apple-system, sans-serif" font-weight="400" font-size="14">reduction</text>
+
+    <line x1="370" y1="-20" x2="370" y2="30" stroke="#222222" stroke-width="1"/>
+
+    <text x="440" y="0" fill="white" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="36">18ms</text>
+    <text x="440" y="28" fill="#666666" font-family="system-ui, -apple-system, sans-serif" font-weight="400" font-size="14">parse time</text>
+
+    <line x1="590" y1="-20" x2="590" y2="30" stroke="#222222" stroke-width="1"/>
+
+    <text x="660" y="0" fill="white" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="36">12</text>
+    <text x="660" y="28" fill="#666666" font-family="system-ui, -apple-system, sans-serif" font-weight="400" font-size="14">tools</text>
+  </g>
+
+  <!-- URL -->
+  <text x="600" y="560" text-anchor="middle" fill="#444444" font-family="system-ui, -apple-system, sans-serif" font-weight="500" font-size="18">tidesurf.org</text>
+</svg>

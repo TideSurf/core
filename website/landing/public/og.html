@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { width: 1200px; height: 630px; overflow: hidden; }
+body {
+  background: #09090b;
+  font-family: 'Outfit', system-ui, sans-serif;
+  color: white;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+/* Grid */
+.grid {
+  position: absolute; inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+}
+
+/* Waves */
+.waves {
+  position: absolute;
+  bottom: 80px;
+  left: 0; right: 0;
+  height: 300px;
+  overflow: hidden;
+}
+.wave {
+  position: absolute;
+  width: 1400px;
+  left: -100px;
+  height: 200px;
+  fill: none;
+  stroke-linecap: round;
+}
+.wave-1 { bottom: 100px; stroke: rgba(255,255,255,0.04); stroke-width: 2; }
+.wave-2 { bottom: 50px; stroke: rgba(255,255,255,0.06); stroke-width: 2.5; }
+.wave-3 { bottom: 0; stroke: rgba(37,99,235,0.15); stroke-width: 3; }
+
+/* Content */
+.content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+.logo {
+  width: 100px;
+  height: 100px;
+  margin-bottom: 28px;
+}
+
+.title {
+  font-size: 72px;
+  font-weight: 800;
+  letter-spacing: -3px;
+  line-height: 1;
+  margin-bottom: 12px;
+}
+
+.tagline {
+  font-size: 22px;
+  font-weight: 400;
+  color: #888;
+  margin-bottom: 48px;
+}
+
+.stats {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.stat {
+  text-align: center;
+  padding: 0 36px;
+}
+
+.stat-value {
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1;
+  color: white;
+}
+
+.stat-value.accent { color: #2563eb; }
+
+.stat-label {
+  font-size: 13px;
+  font-weight: 400;
+  color: #666;
+  margin-top: 8px;
+}
+
+.stat-divider {
+  width: 1px;
+  height: 48px;
+  background: #222;
+}
+
+.url {
+  position: absolute;
+  bottom: 36px;
+  font-size: 16px;
+  font-weight: 500;
+  color: #444;
+}
+</style>
+</head>
+<body>
+  <div class="grid"></div>
+
+  <svg class="waves" viewBox="0 0 1400 200" preserveAspectRatio="none">
+    <path class="wave wave-1" d="M0 100 C200 30, 400 30, 600 100 C800 170, 1000 170, 1200 100 L1400 100"/>
+    <path class="wave wave-2" d="M0 130 C200 60, 400 60, 600 130 C800 200, 1000 200, 1200 130 L1400 130"/>
+    <path class="wave wave-3" d="M0 160 C200 90, 400 90, 600 160 C800 230, 1000 230, 1200 160 L1400 160"/>
+  </svg>
+
+  <div class="content">
+    <svg class="logo" viewBox="0 0 128 128" fill="none">
+      <rect width="128" height="128" rx="28" fill="#111111" stroke="#222222" stroke-width="1"/>
+      <path d="M24 50 C38 36, 54 36, 64 50 C74 64, 90 64, 104 50" stroke="white" stroke-width="3.5" stroke-linecap="round" opacity="0.1"/>
+      <path d="M24 68 C38 54, 54 54, 64 68 C74 82, 90 82, 104 68" stroke="white" stroke-width="4.5" stroke-linecap="round" opacity="0.25"/>
+      <path d="M24 86 C38 72, 54 72, 64 86 C74 100, 90 100, 104 86" stroke="#2563eb" stroke-width="5.5" stroke-linecap="round"/>
+    </svg>
+    <div class="title">TideSurf</div>
+    <div class="tagline">The web, compressed for AI agents</div>
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-value accent">7.7x</div>
+        <div class="stat-label">compression</div>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat">
+        <div class="stat-value">87%</div>
+        <div class="stat-label">reduction</div>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat">
+        <div class="stat-value">18ms</div>
+        <div class="stat-label">parse time</div>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat">
+        <div class="stat-value">12</div>
+        <div class="stat-label">tools</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="url">tidesurf.org</div>
+</body>
+</html>
