@@ -1,6 +1,10 @@
-# TideSurf
+<p align="center">
+  <img src="assets/logo.svg" width="80" height="80" alt="TideSurf">
+</p>
 
-[English](README.md) | **日本語** | [한국어](README.ko.md)
+<h1 align="center">TideSurf</h1>
+
+<p align="center"><a href="README.md">English</a> | <strong>日本語</strong> | <a href="README.ko.md">한국어</a></p>
 
 [![CI](https://github.com/TideSurf/tidesurf-core/actions/workflows/ci.yml/badge.svg)](https://github.com/TideSurf/tidesurf-core/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/@tidesurf/core)](https://www.npmjs.com/package/@tidesurf/core)
