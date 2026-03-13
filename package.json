@@ -1,6 +1,6 @@
 {
   "name": "@tidesurf/core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Connect Chromium to LLM agents via token-efficient DOM compression",
   "type": "module",
   "main": "dist/index.js",
