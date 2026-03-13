@@ -30,7 +30,7 @@
     --duration: 0.25s;
     --duration-slow: 0.6s;
     --font: "Gothic A1", "Noto Sans JP", system-ui, -apple-system, sans-serif;
-    --font-mono: "SF Mono", "Fira Code", "JetBrains Mono", monospace;
+    --font-mono: "SF Mono", ui-monospace, monospace;
 
     --sidebar-w: 280px;
     --nav-h: 56px;
