@@ -1,6 +1,6 @@
 import type { ChildProcess } from "node:child_process";
-import type { TideSurfOptions, ToolResult, GetStateOptions, PageState } from "./types.js";
-import { launchChrome } from "./cdp/launcher.js";
+import type { TideSurfOptions, TideSurfConnectOptions, ToolResult, GetStateOptions, PageState } from "./types.js";
+import { launchChrome, discoverBrowser } from "./cdp/launcher.js";
 import { connect } from "./cdp/connection.js";
 import { SurfingPage } from "./cdp/page.js";
 import { TabManager, type TabInfo } from "./cdp/tab-manager.js";
@@ -14,7 +14,7 @@ import { rmSync } from "node:fs";
  * Launches Chrome, connects via CDP, and provides page interaction + tool execution.
  */
 export class TideSurf {
-  private chromeProcess: ChildProcess;
+  private chromeProcess: ChildProcess | null;
   private activePage: SurfingPage;
   private pages: Map<string, SurfingPage> = new Map();
   private tabManager: TabManager;
@@ -28,7 +28,7 @@ export class TideSurf {
   private exitHandler: (() => void) | null = null;
 
   private constructor(
-    chromeProcess: ChildProcess,
+    chromeProcess: ChildProcess | null,
     page: SurfingPage,
     tabManager: TabManager,
     userDataDir: string,
@@ -43,15 +43,17 @@ export class TideSurf {
     this.port = port;
     this.executor = createToolExecutor(this);
 
-    // Register exit handler to kill Chrome if parent dies
-    this.exitHandler = () => {
-      try {
-        this.chromeProcess.kill();
-      } catch {
-        // ignore
-      }
-    };
-    process.on("exit", this.exitHandler);
+    // Register exit handler to kill Chrome if parent dies (only if we own the process)
+    if (chromeProcess) {
+      this.exitHandler = () => {
+        try {
+          this.chromeProcess?.kill();
+        } catch {
+          // ignore
+        }
+      };
+      process.on("exit", this.exitHandler);
+    }
   }
 
   /**
@@ -81,6 +83,34 @@ export class TideSurf {
     const tabManager = new TabManager(port);
 
     return new TideSurf(proc, page, tabManager, userDataDir, ownsTempDir, port);
+  }
+
+  /**
+   * Connect to an already-running Chrome instance.
+   * Does not launch or manage the Chrome process lifecycle.
+   *
+   * Requires Chrome to have remote debugging enabled:
+   *   - Chrome 144+: enable via chrome://inspect#remote-debugging
+   *   - Any Chrome: launch with --remote-debugging-port=9222
+   *
+   * @param options - Connection configuration
+   * @returns Ready TideSurf instance
+   * @throws {CDPConnectionError} if no Chrome instance is found
+   */
+  static async connect(options: TideSurfConnectOptions = {}): Promise<TideSurf> {
+    const { port, host } = await discoverBrowser({
+      port: options.port,
+      host: options.host,
+    });
+
+    const conn = await withRetry(
+      () => connect({ port, host, timeout: options.timeout }),
+      { maxAttempts: 3 }
+    );
+    const page = new SurfingPage(conn);
+    const tabManager = new TabManager(port, host);
+
+    return new TideSurf(null, page, tabManager, "", false, port);
   }
 
   /**
@@ -219,9 +249,9 @@ export class TideSurf {
       }
     }
 
-    // Graceful shutdown: SIGTERM → wait → SIGKILL
+    // Graceful shutdown: SIGTERM → wait → SIGKILL (only if we own the process)
     const proc = this.chromeProcess;
-    if (proc.exitCode === null) {
+    if (proc && proc.exitCode === null) {
       proc.kill("SIGTERM");
 
       const exited = await Promise.race([

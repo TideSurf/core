@@ -6,10 +6,13 @@
  * Exposes all browser tools as native MCP tools over stdio.
  *
  * Usage:
- *   bun mcp/index.ts [--headful]
+ *   bun mcp/index.ts [--headful] [--auto-connect] [--port 9222]
  *
  * Configure in .mcp.json:
  *   { "mcpServers": { "tidesurf": { "command": "bun", "args": ["mcp/index.ts", "--headful"] } } }
+ *
+ * To connect to an already-running Chrome instance:
+ *   { "mcpServers": { "tidesurf": { "command": "bun", "args": ["mcp/index.ts", "--auto-connect"] } } }
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -18,15 +21,24 @@ import { z } from "zod";
 import { TideSurf } from "../src/index.js";
 
 const headful = process.argv.includes("--headful");
+const autoConnect = process.argv.includes("--auto-connect");
+const portIdx = process.argv.indexOf("--port");
+const port = portIdx !== -1 ? parseInt(process.argv[portIdx + 1], 10) : undefined;
 
 // Lazy browser launch — only starts on first tool call
 let surfing: TideSurf | null = null;
 
 async function browser(): Promise<TideSurf> {
   if (!surfing) {
-    console.error(`[tidesurf-mcp] Launching browser (${headful ? "headful" : "headless"})...`);
-    surfing = await TideSurf.launch({ headless: !headful });
-    console.error("[tidesurf-mcp] Browser ready.");
+    if (autoConnect) {
+      console.error(`[tidesurf-mcp] Connecting to running Chrome (port ${port ?? 9222})...`);
+      surfing = await TideSurf.connect({ port });
+      console.error("[tidesurf-mcp] Connected to existing browser.");
+    } else {
+      console.error(`[tidesurf-mcp] Launching browser (${headful ? "headful" : "headless"})...`);
+      surfing = await TideSurf.launch({ headless: !headful, port });
+      console.error("[tidesurf-mcp] Browser ready.");
+    }
   }
   return surfing;
 }

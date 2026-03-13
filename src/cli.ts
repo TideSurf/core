@@ -23,11 +23,18 @@ Usage:
 Options:
   --max-tokens <n>   Token budget for inspect output (default: unlimited)
   --headful          Launch Chrome with a visible window
+  --auto-connect     Connect to an already-running Chrome instance instead of
+                     launching a new one. Requires remote debugging enabled in
+                     Chrome (chrome://inspect#remote-debugging or --remote-debugging-port)
+  --port <n>         CDP port (default: 9222). Used with --auto-connect to specify
+                     which port to connect on, or with launch to set the debug port
 
 Examples:
   tidesurf inspect https://example.com
   tidesurf inspect https://example.com --max-tokens 500
-  tidesurf mcp --headful`);
+  tidesurf mcp --headful
+  tidesurf mcp --auto-connect
+  tidesurf mcp --auto-connect --port 9333`);
 }
 
 function parseFlag(flag: string): string | undefined {
@@ -46,15 +53,20 @@ async function inspect() {
   }
 
   const headful = hasFlag("--headful");
+  const autoConnect = hasFlag("--auto-connect");
   const maxTokensStr = parseFlag("--max-tokens");
   const maxTokens = maxTokensStr ? parseInt(maxTokensStr, 10) : undefined;
+  const portStr = parseFlag("--port");
+  const port = portStr ? parseInt(portStr, 10) : undefined;
 
   if (maxTokensStr && (isNaN(maxTokens!) || maxTokens! <= 0)) {
     console.error("Error: --max-tokens must be a positive integer");
     process.exit(1);
   }
 
-  const browser = await TideSurf.launch({ headless: !headful });
+  const browser = autoConnect
+    ? await TideSurf.connect({ port })
+    : await TideSurf.launch({ headless: !headful, port });
   try {
     await browser.navigate(url);
     const state = await browser.getState(maxTokens ? { maxTokens } : undefined);
@@ -66,6 +78,9 @@ async function inspect() {
 
 async function mcp() {
   const headful = hasFlag("--headful");
+  const autoConnect = hasFlag("--auto-connect");
+  const portStr = parseFlag("--port");
+  const port = portStr ? parseInt(portStr, 10) : undefined;
 
   // Dynamic imports — these are optionalDependencies, so we give a friendly error if missing.
   // Use variable specifiers to prevent TypeScript from resolving these at compile time.
@@ -98,9 +113,15 @@ async function mcp() {
 
   async function browser(): Promise<TideSurf> {
     if (!surfing) {
-      console.error(`[tidesurf] Launching browser (${headful ? "headful" : "headless"})...`);
-      surfing = await TideSurf.launch({ headless: !headful });
-      console.error("[tidesurf] Browser ready.");
+      if (autoConnect) {
+        console.error(`[tidesurf] Connecting to running Chrome (port ${port ?? 9222})...`);
+        surfing = await TideSurf.connect({ port });
+        console.error("[tidesurf] Connected to existing browser.");
+      } else {
+        console.error(`[tidesurf] Launching browser (${headful ? "headful" : "headless"})...`);
+        surfing = await TideSurf.launch({ headless: !headful, port });
+        console.error("[tidesurf] Browser ready.");
+      }
     }
     return surfing;
   }

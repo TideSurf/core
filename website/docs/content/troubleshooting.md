@@ -26,6 +26,42 @@ const browser = await TideSurf.launch({
 });
 ```
 
+## Auto-connect can't find Chrome
+
+When using `TideSurf.connect()` or `--auto-connect`, you'll see a `CDPConnectionError` if TideSurf can't reach Chrome on the target port. This means Chrome either isn't running, or doesn't have remote debugging enabled.
+
+**Fix:** Enable remote debugging in Chrome using one of these methods:
+
+1. **Chrome 144+:** Navigate to `chrome://inspect#remote-debugging` and enable it. Chrome will show a permission dialog each time TideSurf connects.
+
+2. **Any Chrome version:** Quit Chrome and relaunch it from the terminal with the remote debugging flag:
+
+```bash
+# macOS
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --remote-debugging-port=9222
+
+# Linux
+google-chrome --remote-debugging-port=9222
+```
+
+3. **Custom port:** If you're using a non-default port, make sure to pass it:
+
+```typescript
+const browser = await TideSurf.connect({ port: 9333 });
+```
+
+```bash
+tidesurf mcp --auto-connect --port 9333
+```
+
+**Note:** After connecting, you should see the "Chrome is being controlled by automated test software" banner in Chrome (Chrome 144+). This is expected and indicates the CDP session is active.
+
+## Auto-connect: no page targets
+
+If TideSurf finds Chrome but reports "no open page targets," it means Chrome is running with remote debugging but has no regular tabs open (e.g., only DevTools or extension pages).
+
+**Fix:** Open at least one regular tab in Chrome before connecting.
+
 ## Timeouts
 
 If operations like `navigate()` or `getState()` are timing out, the target page may be slow to load (heavy JavaScript, large media assets, or a slow server).

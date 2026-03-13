@@ -15,7 +15,12 @@ bun add @tidesurf/core
 ```typescript
 import { TideSurf } from "@tidesurf/core";
 
+// Launch a new browser
 const browser = await TideSurf.launch();
+
+// Or connect to an already-running Chrome (re-use logged-in sessions, debug live pages)
+// const browser = await TideSurf.connect({ port: 9222 });
+
 await browser.navigate("https://example.com");
 
 const state = await browser.getState();
@@ -56,11 +61,27 @@ await browser.close();
 }
 ```
 
+To connect to your running Chrome instead of launching a new one:
+
+```json
+{
+  "mcpServers": {
+    "tidesurf": {
+      "command": "bunx",
+      "args": ["tidesurf", "mcp", "--auto-connect"]
+    }
+  }
+}
+```
+
 ## CLI
 
 ```
-bunx tidesurf inspect <url>        # print compressed XML
-bunx tidesurf mcp                  # start MCP server
+bunx tidesurf inspect <url>                    # print compressed XML
+bunx tidesurf inspect <url> --auto-connect     # use running Chrome
+bunx tidesurf mcp                              # start MCP server
+bunx tidesurf mcp --auto-connect               # MCP with running Chrome
+bunx tidesurf mcp --auto-connect --port 9333   # custom CDP port
 ```
 
 ## Links

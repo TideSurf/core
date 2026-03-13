@@ -5,11 +5,20 @@ TideSurf sits between your LLM agent and a Chromium browser, acting as a bidirec
 ## System overview
 
 ```
-┌─────────┐     tool calls      ┌──────────────┐      CDP       ┌──────────┐
-│  Agent   │ ◄────────────────► │   TideSurf   │ ◄────────────► │ Chromium  │
-│ (any LLM)│   standard tools   │  (connector)  │   DevTools     │ (browser) │
-└─────────┘                     └──────────────┘   Protocol      └──────────┘
+                                                    ┌──────────────────┐
+                                              ┌───► │ Chrome (launched) │
+┌─────────┐     tool calls      ┌──────────┐ │     └──────────────────┘
+│  Agent   │ ◄────────────────► │ TideSurf │─┤ CDP
+│ (any LLM)│   standard tools   │          │ │     ┌──────────────────┐
+└─────────┘                     └──────────┘ └───► │ Chrome (running) │
+                                  launch()          └──────────────────┘
+                                  connect()   ▲ auto-connect
 ```
+
+TideSurf provides two connection modes:
+
+- **`TideSurf.launch()`** — spawns a new Chrome process, owns its lifecycle, cleans up on close
+- **`TideSurf.connect()`** — attaches to a Chrome instance that's already running (with remote debugging enabled). Does not manage the process — `close()` only disconnects CDP
 
 ## Data flow
 
@@ -42,6 +51,8 @@ An in-memory map that links each short ID (like `B1`, `L3`, `I2`) back to the ac
 ### CDP connector
 
 Manages the WebSocket connection to Chrome's DevTools Protocol. Handles connection lifecycle, automatic reconnection on transient failures, and multiplexing commands across multiple tabs. Each tab has its own CDP session, enabling independent state management.
+
+In auto-connect mode, the connector uses `discoverBrowser()` to probe `CDP.List()` on the target port, verifying that Chrome is reachable and has at least one open page tab before establishing a connection.
 
 ### Tool layer
 

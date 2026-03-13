@@ -73,6 +73,18 @@ export interface TideSurfOptions {
 }
 
 /**
+ * Options for connecting to an already-running Chrome instance
+ */
+export interface TideSurfConnectOptions {
+  /** CDP port to connect to (default: 9222) */
+  port?: number;
+  /** CDP host to connect to (default: localhost) */
+  host?: string;
+  /** Connect timeout in ms */
+  timeout?: number;
+}
+
+/**
  * Tool definition compatible with Claude/OpenAI function calling
  */
 export interface ToolDefinition {

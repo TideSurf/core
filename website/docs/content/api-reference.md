@@ -21,6 +21,26 @@ Launches a new Chrome instance and connects to it via CDP. Returns a `TideSurf` 
 | `cdpPort` | `number` | `9222` | Chrome DevTools Protocol port |
 | `timeout` | `number` | `30000` | Default timeout in milliseconds |
 
+### `TideSurf.connect(options?)`
+
+```typescript
+static connect(options?: TideSurfConnectOptions): Promise<TideSurf>
+```
+
+Connects to an already-running Chrome instance via CDP. Does not launch or manage the Chrome process — `close()` will only disconnect CDP, not kill the browser.
+
+Requires Chrome to have remote debugging enabled (Chrome 144+: `chrome://inspect#remote-debugging`, or launch with `--remote-debugging-port`).
+
+**Options:**
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `port` | `number` | `9222` | CDP port to connect to |
+| `host` | `string` | `"localhost"` | CDP host to connect to |
+| `timeout` | `number` | `10000` | Connection timeout in milliseconds |
+
+**Throws:** `CDPConnectionError` if no Chrome instance is found on the specified port, with an actionable error message explaining how to enable remote debugging.
+
 ### `navigate(url)`
 
 ```typescript

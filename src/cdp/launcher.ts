@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { spawn, type ChildProcess } from "node:child_process";
-import { ChromeLaunchError } from "../errors.js";
+import CDP from "chrome-remote-interface";
+import { ChromeLaunchError, CDPConnectionError } from "../errors.js";
 
 const CHROME_PATHS: Record<string, string[]> = {
   darwin: [
@@ -115,6 +116,54 @@ export async function launchChrome(options: LaunchOptions = {}): Promise<LaunchR
     userDataDir,
     ownsTempDir,
   };
+}
+
+export interface DiscoverOptions {
+  port?: number;
+  host?: string;
+}
+
+export interface DiscoverResult {
+  port: number;
+  host: string;
+}
+
+/**
+ * Discover a running Chrome instance with remote debugging enabled.
+ * Tries CDP.List on the given port (default 9222) to verify connectivity.
+ *
+ * If Chrome is running with --remote-debugging-port, or the user has enabled
+ * remote debugging via chrome://inspect#remote-debugging (Chrome M144+),
+ * this will find it.
+ */
+export async function discoverBrowser(
+  options: DiscoverOptions = {}
+): Promise<DiscoverResult> {
+  const port = options.port ?? 9222;
+  const host = options.host ?? "localhost";
+
+  try {
+    const targets = await CDP.List({ port, host });
+    const pages = (targets as Array<{ type: string }>).filter(
+      (t) => t.type === "page"
+    );
+    if (pages.length === 0) {
+      throw new CDPConnectionError(
+        `Found Chrome on ${host}:${port} but no open page targets. ` +
+        `Open a tab in Chrome and try again.`
+      );
+    }
+    return { port, host };
+  } catch (err) {
+    if (err instanceof CDPConnectionError) throw err;
+    throw new CDPConnectionError(
+      `No Chrome instance found on ${host}:${port}. ` +
+      `Make sure Chrome is running with remote debugging enabled:\n` +
+      `  1. Open chrome://inspect#remote-debugging and enable it (Chrome 144+), or\n` +
+      `  2. Launch Chrome with: --remote-debugging-port=${port}`,
+      { cause: err instanceof Error ? err : undefined }
+    );
+  }
 }
 
 function waitForDevTools(proc: ChildProcess): Promise<string> {

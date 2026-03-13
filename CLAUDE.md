@@ -15,7 +15,7 @@ src/
 ├── errors.ts            # Typed error hierarchy (TideSurfError → CDPConnectionError, etc.)
 ├── validation.ts        # Input validators (URL, selector, expression, element ID)
 ├── cdp/
-│   ├── launcher.ts      # Chrome process spawning + DevTools discovery
+│   ├── launcher.ts      # Chrome process spawning + DevTools discovery + auto-connect
 │   ├── connection.ts    # CDP WebSocket connection
 │   ├── page.ts          # SurfingPage — per-tab page interaction
 │   ├── tab-manager.ts   # Multi-tab lifecycle (create, switch, close)
@@ -59,4 +59,5 @@ bun run test:all         # All tests
 - **Lazy browser launch** — Chrome starts on first tool call, not on import.
 - **ID scheme** — Interactive elements get prefix-based IDs: `L` (links), `B` (buttons), `I` (inputs), `S` (selects). These are stable within a single getState() call.
 - **Token budgeting** — `getState({ maxTokens })` prunes low-priority elements to fit a budget. Priority: interactive > visible text > structural.
+- **Auto-connect** — `TideSurf.connect()` attaches to an already-running Chrome instead of spawning one. Uses `discoverBrowser()` to probe CDP on a given port. When auto-connected, `close()` only disconnects CDP — it never kills the external process.
 - **MCP as optional** — `@modelcontextprotocol/sdk` and `zod` are `optionalDependencies`. The CLI `mcp` subcommand dynamically imports them.

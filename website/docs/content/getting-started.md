@@ -50,6 +50,51 @@ await browser.close();
 
 The `state.xml` output is a clean XML document that strips away all CSS classes, wrapper divs, scripts, and styles — keeping only interactive elements (buttons, links, inputs), semantic structure (nav, form, headings), and visible text content, each tagged with a short ID like `B1`, `L3`, or `I2` that your agent can reference when performing actions.
 
+## Connecting to an existing browser
+
+Instead of launching a new Chrome instance, you can connect to one that's already running. This is useful when you want to:
+
+- **Re-use a logged-in session** — your agent can access pages behind authentication without re-entering credentials
+- **Debug a live page** — spot a bug while browsing, then hand off to your agent to investigate
+- **Keep your browsing state** — extensions, cookies, and local storage carry over
+
+```typescript
+import { TideSurf } from "@tidesurf/core";
+
+// Connect to Chrome running with remote debugging on port 9222
+const browser = await TideSurf.connect();
+
+// Everything works the same from here
+const state = await browser.getState();
+const page = browser.getPage();
+await page.click("B1");
+
+// close() only disconnects CDP — it won't kill your Chrome
+await browser.close();
+```
+
+**Prerequisites:** Chrome must have remote debugging enabled. Either:
+
+1. **Chrome 144+:** Open `chrome://inspect#remote-debugging` and enable it — Chrome will show a permission dialog when TideSurf connects
+2. **Any Chrome:** Launch with `--remote-debugging-port=9222`
+
+You can specify a custom port and host:
+
+```typescript
+const browser = await TideSurf.connect({
+  port: 9333,
+  host: "localhost",
+  timeout: 15000,
+});
+```
+
+Or from the CLI:
+
+```bash
+tidesurf inspect https://example.com --auto-connect --port 9333
+tidesurf mcp --auto-connect
+```
+
 ## Integrating with an LLM agent
 
 TideSurf ships with standardized tool definitions that you can pass directly to any LLM that supports function calling. This makes it straightforward to build an autonomous browsing agent — your LLM receives the compressed page state as context, decides which tool to call, and TideSurf executes the action:
@@ -85,10 +130,23 @@ If you're working with Claude Code or another MCP-compatible client, TideSurf ca
 }
 ```
 
+To connect to your running Chrome instead of launching a headless instance, add `--auto-connect`:
+
+```json
+{
+  "mcpServers": {
+    "tidesurf": {
+      "command": "bunx",
+      "args": ["tidesurf", "mcp", "--auto-connect"]
+    }
+  }
+}
+```
+
 Once configured, all 12 TideSurf tools become available as MCP tools that your AI assistant can invoke directly.
 
 ## What to read next
 
 - **[Page format](#page-format)** — understand the XML schema TideSurf produces and how element IDs work
 - **[Token budget](#token-budget)** — control output size with `maxTokens` and learn how TideSurf prioritizes content
-- **[API reference](#api-reference)** — full method signatures and tool definitions
+- **[API reference](#api-reference)** — full method signatures and tool definitions (including `TideSurf.connect()`)

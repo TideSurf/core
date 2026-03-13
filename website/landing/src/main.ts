@@ -173,6 +173,16 @@ const translations: Translations = {
     ja: "完全な型定義とエラークラスが内蔵されています。Bun用に構築され、Nodeでも動作",
     ko: "완전한 Type 정의와 클래스가 포함되었습니다. Bun 채택으로 속도와 호환성을 만족합니다.",
   },
+  "feature.autoconnect.title": {
+    en: "Auto Connect",
+    ja: "オートコネクト",
+    ko: "자동 연결",
+  },
+  "feature.autoconnect.desc": {
+    en: "Connect to an already-running Chrome instead of launching a new one. Re-use logged-in sessions, debug live pages, seamlessly hand off between manual browsing and agent control",
+    ja: "新しいChromeを起動する代わりに、既に実行中のChromeに接続。ログイン済みセッションの再利用、ライブページのデバッグ、手動ブラウジングとエージェント制御のシームレスな切り替え",
+    ko: "새 Chrome을 실행하는 대신 이미 실행 중인 Chrome에 연결합니다. 로그인된 세션 재사용, 라이브 페이지 디버깅, 수동 브라우징과 에이전트 제어 간의 원활한 전환",
+  },
   "quickstart.label": {
     en: "Quick Start",
     ja: "クイックスタート",
