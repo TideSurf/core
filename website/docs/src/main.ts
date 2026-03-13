@@ -100,6 +100,11 @@ const translations: Translations = {
     ja: 'アーキテクチャ',
     ko: '아키텍처'
   },
+  'sidebar.changelog': {
+    en: 'Changelog',
+    ja: '変更履歴',
+    ko: '변경 이력'
+  },
   'sidebar.feedback': {
     en: 'Feedback',
     ja: 'フィードバック',
