@@ -8,14 +8,10 @@
 
 <p align="center"><a href="README.md">English</a> | <strong>日本語</strong> | <a href="README.ko.md">한국어</a></p>
 
-<br>
-
 <h2 align="center">
   <strong><a href="https://tidesurf.org">About</a></strong> |
   <strong><a href="https://tidesurf.org/docs">Documentations</a></strong>
 </h2>
-
-<br>
 
 <h3 align="center">
   スクリーンショットもビジョンモデルも不要です。<br>

@@ -8,14 +8,10 @@
 
 <p align="center"><a href="README.md">English</a> | <a href="README.ja.md">日本語</a> | <strong>한국어</strong></p>
 
-<br>
-
 <h2 align="center">
   <strong><a href="https://tidesurf.org">About</a></strong> |
   <strong><a href="https://tidesurf.org/docs">Documentations</a></strong>
 </h2>
-
-<br>
 
 <h3 align="center">
   사실, 웹 탐색에는 옴니모달도 비전 모델도 필요하지 않습니다.<br>

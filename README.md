@@ -8,15 +8,11 @@
 
 <p align="center"><strong>English</strong> | <a href="README.ja.md">日本語</a> | <a href="README.ko.md">한국어</a></p>
 
-<br>
-
 <h2 align="center">
-  <strong><a href="https://tidesurf.org">About</a></strong> | 
+  <strong><a href="https://tidesurf.org">About</a></strong>
   <strong><a href="https://tidesurf.org/docs">Documentations</a></strong>
 </h2>
 
-<br>
-    
 <h3 align="center">
   Web browsing does, indeed, NOT require omnimodal vision models.<br>
   TideSurf converts the live DOM into a compressed structured representation optimized for LLMs.
