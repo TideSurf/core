@@ -1,20 +1,24 @@
 # Changelog
 
-## 0.2.0 (2026-03-14)
+## 0.1.2 (2026-03-14)
 
-Auto Connect — connect to an already-running Chrome instance.
+### Auto Connect
+
+Connect to an already-running Chrome instance instead of launching a new one.
 
 - `TideSurf.connect(options?)` — attach to existing Chrome via CDP
 - `TideSurfConnectOptions` type (`port`, `host`, `timeout`)
-- `discoverBrowser()` utility for Chrome instance discovery
+- `discoverBrowser()` utility for Chrome instance discovery with timeout
 - `--auto-connect` and `--port` CLI/MCP flags
 - `close()` skips process cleanup when auto-connected
+- Port validation (`validatePort()`) across all entry points
+- Targets first page tab explicitly to avoid service worker / chrome:// attachment
 
-## 0.1.2 (2026-03-14)
+### Demo
 
-- Add TideTravel interactive demo site
-- Add `bun run demo` server script
-- Add demo prompt for end-to-end booking flow
+- TideTravel interactive demo site
+- `bun run demo` server script
+- Demo prompt for end-to-end booking flow
 
 ## 0.1.0 (2026-03-13)
 
