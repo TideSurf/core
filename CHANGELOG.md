@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2 (2026-03-14)
+
+- Add TideTravel interactive demo site for showcasing browser automation
+- Add `bun run demo` server script (localhost:3456)
+- Add demo prompt for end-to-end booking flow
+
 ## 0.1.0 (2026-03-13)
 
 Initial release.

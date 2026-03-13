@@ -1,6 +1,6 @@
 {
   "name": "@tidesurf/core",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Connect Chromium to LLM agents via token-efficient DOM compression",
   "type": "module",
   "main": "dist/index.js",
@@ -26,6 +26,7 @@
     "test:integration": "bun vitest run test/integration",
     "test:bench": "bun vitest run test/bench --reporter=verbose",
     "test:all": "bun vitest run",
+    "demo": "bun run demo/serve.ts",
     "prepublishOnly": "bun run typecheck && bun run test && bun run build"
   },
   "repository": {

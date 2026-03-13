@@ -1,0 +1,1372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TideTravel — Book Your Next Adventure</title>
+    <meta name="description" content="Find and book flights at the best prices.">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='24' font-size='24'>✈</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Albert+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+/* ─── Variables ─── */
+:root {
+    --navy: #0b1d2e;
+    --navy-light: #132d44;
+    --ocean: #1a6fa0;
+    --ocean-hover: #15608c;
+    --ocean-light: #e8f2fa;
+    --sky: #4ca3d9;
+    --coral: #e87040;
+    --coral-hover: #d45e30;
+    --coral-light: #fef0eb;
+    --sand: #f5e6d3;
+    --bg: #f5f7fa;
+    --card: #ffffff;
+    --text: #1a2332;
+    --text-2: #4e5d78;
+    --text-3: #94a3b8;
+    --border: #e2e8f0;
+    --border-focus: #a3c4e0;
+    --success: #22c55e;
+    --success-bg: #f0fdf4;
+    --shadow-sm: 0 1px 3px rgba(11,29,46,0.06);
+    --shadow: 0 4px 16px rgba(11,29,46,0.08);
+    --shadow-lg: 0 12px 40px rgba(11,29,46,0.12);
+    --radius: 16px;
+    --radius-sm: 10px;
+    --radius-xs: 6px;
+    --font-display: 'Fraunces', 'Georgia', serif;
+    --font-body: 'Albert Sans', system-ui, sans-serif;
+    --ease: cubic-bezier(0.4, 0, 0.2, 1);
+    --dur: 0.3s;
+}
+
+/* ─── Reset ─── */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html { font-size: 16px; scroll-behavior: smooth; }
+body {
+    font-family: var(--font-body);
+    color: var(--text);
+    background: var(--bg);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+}
+::selection { background: var(--ocean); color: #fff; }
+a { color: inherit; text-decoration: none; }
+button { font-family: inherit; cursor: pointer; border: none; background: none; }
+input, select, textarea { font-family: inherit; }
+img { display: block; max-width: 100%; }
+
+/* ─── Typography ─── */
+h1, h2, h3 { font-family: var(--font-display); font-weight: 500; line-height: 1.2; }
+h1 { font-size: 2.5rem; letter-spacing: -0.02em; }
+h2 { font-size: 1.75rem; letter-spacing: -0.01em; }
+h3 { font-size: 1.15rem; }
+
+/* ─── Navigation ─── */
+.tt-nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    background: var(--navy);
+    height: 64px;
+    display: flex; align-items: center;
+    box-shadow: 0 2px 20px rgba(0,0,0,0.15);
+}
+.tt-nav-inner {
+    width: 100%; max-width: 1240px; margin: 0 auto; padding: 0 32px;
+    display: flex; align-items: center; justify-content: space-between;
+}
+.tt-logo {
+    display: flex; align-items: center; gap: 10px;
+    color: #fff; font-family: var(--font-display); font-size: 1.35rem; font-weight: 600;
+}
+.tt-logo svg { flex-shrink: 0; }
+.tt-nav-links { display: flex; align-items: center; gap: 8px; }
+.tt-nav-link {
+    color: rgba(255,255,255,0.65); font-size: 0.9rem; font-weight: 500;
+    padding: 8px 16px; border-radius: 8px; transition: all var(--dur) var(--ease);
+    position: relative;
+}
+.tt-nav-link:hover { color: #fff; background: rgba(255,255,255,0.08); }
+.tt-nav-link.active { color: #fff; }
+.tt-nav-link .badge {
+    font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.05em;
+    background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.5);
+    padding: 2px 6px; border-radius: 4px; margin-left: 6px; font-weight: 600;
+}
+.tt-nav-signin {
+    color: #fff; font-size: 0.9rem; font-weight: 500;
+    padding: 8px 20px; border-radius: 8px;
+    background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.15);
+    transition: all var(--dur) var(--ease);
+}
+.tt-nav-signin:hover { background: rgba(255,255,255,0.18); }
+
+/* ─── Step Indicator ─── */
+.tt-steps-bar {
+    position: fixed; top: 64px; left: 0; right: 0; z-index: 90;
+    background: var(--card); border-bottom: 1px solid var(--border);
+    height: 60px; display: flex; align-items: center;
+    transition: opacity var(--dur) var(--ease), transform var(--dur) var(--ease);
+}
+.tt-steps-bar.hidden { opacity: 0; pointer-events: none; transform: translateY(-8px); }
+.tt-steps-inner {
+    width: 100%; max-width: 800px; margin: 0 auto; padding: 0 32px;
+    display: flex; align-items: center; justify-content: center; gap: 0;
+}
+.tt-step-pill {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 16px; border-radius: 20px; font-size: 0.85rem; font-weight: 500;
+    color: var(--text-3); transition: all var(--dur) var(--ease); white-space: nowrap;
+}
+.tt-step-pill .num {
+    width: 26px; height: 26px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.75rem; font-weight: 700;
+    background: var(--border); color: var(--text-3);
+    transition: all var(--dur) var(--ease);
+}
+.tt-step-pill.active { color: var(--ocean); }
+.tt-step-pill.active .num { background: var(--ocean); color: #fff; }
+.tt-step-pill.completed .num {
+    background: var(--success); color: #fff;
+    font-size: 0; /* hide number */
+}
+.tt-step-pill.completed .num::after {
+    content: '✓'; font-size: 0.75rem;
+}
+.tt-step-pill.completed { color: var(--success); }
+.tt-step-connector {
+    width: 40px; height: 2px; background: var(--border); margin: 0 4px;
+    border-radius: 1px; transition: background var(--dur) var(--ease);
+}
+.tt-step-connector.done { background: var(--success); }
+
+/* ─── Main Layout ─── */
+.tt-main {
+    padding-top: 156px; /* nav 64 + steps 60 + gap 32 */
+    min-height: 100vh; padding-bottom: 80px;
+}
+
+/* ─── Step Transitions ─── */
+.tt-step { display: none; animation: fadeIn 0.4s var(--ease); }
+.tt-step.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+/* ─── Search Page ─── */
+.tt-search {
+    max-width: 760px; margin: 0 auto; padding: 0 24px; text-align: center;
+}
+.tt-search h1 {
+    margin-bottom: 8px;
+    background: linear-gradient(135deg, var(--navy) 0%, var(--ocean) 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+.tt-search .subtitle {
+    color: var(--text-2); font-size: 1.05rem; margin-bottom: 36px; font-weight: 400;
+}
+.tt-search-card {
+    background: var(--card); border-radius: var(--radius); padding: 36px;
+    box-shadow: var(--shadow); border: 1px solid var(--border);
+    text-align: left;
+}
+.tt-form-row {
+    display: grid; gap: 16px; margin-bottom: 20px;
+}
+.tt-form-row.cols-2 { grid-template-columns: 1fr 1fr; }
+.tt-form-row.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+.tt-field { display: flex; flex-direction: column; gap: 6px; }
+.tt-field label {
+    font-size: 0.8rem; font-weight: 600; color: var(--text-2);
+    text-transform: uppercase; letter-spacing: 0.04em;
+}
+.tt-field select,
+.tt-field input[type="date"],
+.tt-field input[type="text"],
+.tt-field input[type="email"],
+.tt-field input[type="tel"],
+.tt-field input[type="number"] {
+    height: 48px; padding: 0 14px;
+    border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+    font-size: 0.95rem; color: var(--text); background: var(--card);
+    transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease);
+    outline: none; width: 100%;
+}
+.tt-field select:focus,
+.tt-field input:focus {
+    border-color: var(--ocean);
+    box-shadow: 0 0 0 3px rgba(26,111,160,0.12);
+}
+.tt-field select { cursor: pointer; appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none'%3E%3Cpath d='M1 1.5l5 5 5-5' stroke='%234e5d78' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 14px center;
+    padding-right: 36px;
+}
+/* Passenger stepper */
+.tt-stepper {
+    display: flex; align-items: center; gap: 0;
+    border: 1.5px solid var(--border); border-radius: var(--radius-sm);
+    height: 48px; overflow: hidden;
+}
+.tt-stepper button {
+    width: 48px; height: 100%; display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem; color: var(--text-2); background: var(--bg);
+    transition: all var(--dur) var(--ease); border: none;
+}
+.tt-stepper button:hover { background: var(--border); color: var(--text); }
+.tt-stepper button:disabled { opacity: 0.3; cursor: not-allowed; }
+.tt-stepper .tt-stepper-val {
+    flex: 1; text-align: center; font-size: 1rem; font-weight: 600;
+    color: var(--text); min-width: 48px;
+    display: flex; align-items: center; justify-content: center;
+}
+/* Cabin class radios */
+.tt-radio-group {
+    display: flex; gap: 8px; flex-wrap: wrap;
+}
+.tt-radio {
+    position: relative;
+}
+.tt-radio input { position: absolute; opacity: 0; width: 0; height: 0; }
+.tt-radio span {
+    display: inline-block; padding: 10px 18px; border-radius: 8px;
+    font-size: 0.88rem; font-weight: 500; color: var(--text-2);
+    border: 1.5px solid var(--border); cursor: pointer;
+    transition: all var(--dur) var(--ease);
+}
+.tt-radio input:checked + span {
+    border-color: var(--ocean); color: var(--ocean); background: var(--ocean-light);
+}
+.tt-radio span:hover { border-color: var(--text-3); }
+/* Search button */
+.tt-btn-primary {
+    width: 100%; height: 54px; border-radius: 12px;
+    background: var(--coral); color: #fff;
+    font-size: 1.05rem; font-weight: 600; letter-spacing: 0.01em;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: all var(--dur) var(--ease);
+    box-shadow: 0 4px 14px rgba(232,112,64,0.3);
+    margin-top: 8px;
+}
+.tt-btn-primary:hover {
+    background: var(--coral-hover);
+    box-shadow: 0 6px 20px rgba(232,112,64,0.4);
+    transform: translateY(-1px);
+}
+.tt-btn-primary:active { transform: translateY(0); }
+
+/* ─── Results Page ─── */
+.tt-results {
+    max-width: 1100px; margin: 0 auto; padding: 0 24px;
+}
+.tt-results-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 20px;
+}
+.tt-results-header h2 { font-size: 1.5rem; }
+.tt-results-header .tt-route {
+    font-size: 0.95rem; color: var(--text-2); margin-top: 4px; font-weight: 400;
+    font-family: var(--font-body);
+}
+.tt-sort-wrap {
+    display: flex; align-items: center; gap: 8px;
+}
+.tt-sort-wrap label { font-size: 0.85rem; color: var(--text-3); white-space: nowrap; }
+.tt-sort-wrap select {
+    height: 40px; padding: 0 32px 0 12px; border: 1.5px solid var(--border);
+    border-radius: 8px; font-size: 0.88rem; color: var(--text);
+    background: var(--card); cursor: pointer; outline: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none'%3E%3Cpath d='M1 1.5l5 5 5-5' stroke='%234e5d78' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 12px center;
+}
+.tt-results-layout {
+    display: grid; grid-template-columns: 260px 1fr; gap: 24px;
+}
+/* Filters sidebar */
+.tt-filters {
+    background: var(--card); border-radius: var(--radius); padding: 24px;
+    box-shadow: var(--shadow-sm); border: 1px solid var(--border);
+    height: fit-content; position: sticky; top: 140px;
+}
+.tt-filters h3 {
+    font-family: var(--font-body); font-weight: 700; font-size: 0.95rem;
+    color: var(--text); margin-bottom: 20px; text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.tt-filter-group { margin-bottom: 24px; }
+.tt-filter-group:last-child { margin-bottom: 0; }
+.tt-filter-label {
+    font-size: 0.8rem; font-weight: 600; color: var(--text-2);
+    text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 12px;
+    display: block;
+}
+/* Range slider */
+.tt-range-wrap { padding: 0 2px; }
+.tt-range-wrap input[type="range"] {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 6px;
+    background: var(--border); border-radius: 3px; outline: none;
+    margin: 8px 0;
+}
+.tt-range-wrap input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 22px; height: 22px; background: var(--ocean);
+    border-radius: 50%; cursor: pointer;
+    border: 3px solid #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+.tt-range-val {
+    display: flex; justify-content: space-between; font-size: 0.85rem;
+    color: var(--text-2); margin-top: 4px;
+}
+/* Checkboxes */
+.tt-check {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 10px; cursor: pointer; font-size: 0.9rem; color: var(--text);
+}
+.tt-check:last-child { margin-bottom: 0; }
+.tt-check input[type="checkbox"] {
+    width: 18px; height: 18px; border-radius: 4px;
+    border: 1.5px solid var(--border); appearance: none; -webkit-appearance: none;
+    cursor: pointer; position: relative; flex-shrink: 0;
+    transition: all var(--dur) var(--ease); background: var(--card);
+}
+.tt-check input[type="checkbox"]:checked {
+    background: var(--ocean); border-color: var(--ocean);
+}
+.tt-check input[type="checkbox"]:checked::after {
+    content: ''; position: absolute; left: 5px; top: 2px;
+    width: 5px; height: 9px;
+    border: solid #fff; border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+/* Flight cards */
+.tt-flights-list { display: flex; flex-direction: column; gap: 12px; }
+.tt-flight-card {
+    background: var(--card); border-radius: var(--radius); padding: 24px 28px;
+    box-shadow: var(--shadow-sm); border: 1px solid var(--border);
+    display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center;
+    transition: all var(--dur) var(--ease);
+}
+.tt-flight-card:hover {
+    box-shadow: var(--shadow); border-color: var(--border-focus);
+}
+.tt-flight-top {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 14px;
+}
+.tt-airline-badge {
+    width: 38px; height: 38px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.75rem; font-weight: 700; color: #fff; flex-shrink: 0;
+    letter-spacing: 0.02em;
+}
+.tt-airline-info {
+    display: flex; flex-direction: column;
+}
+.tt-airline-name { font-weight: 600; font-size: 0.95rem; }
+.tt-aircraft { font-size: 0.8rem; color: var(--text-3); }
+.tt-flight-times {
+    display: flex; align-items: center; gap: 16px;
+}
+.tt-time {
+    text-align: center; min-width: 60px;
+}
+.tt-time-val { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.01em; }
+.tt-time-code { font-size: 0.75rem; color: var(--text-3); font-weight: 500; }
+.tt-flight-line {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
+    position: relative; min-width: 100px;
+}
+.tt-flight-line .line {
+    width: 100%; height: 2px; background: var(--border); border-radius: 1px;
+    position: relative;
+}
+.tt-flight-line .line::before {
+    content: '✈'; position: absolute; right: -4px; top: -9px;
+    font-size: 0.9rem; color: var(--ocean);
+}
+.tt-flight-line .duration { font-size: 0.78rem; color: var(--text-3); font-weight: 500; }
+.tt-flight-line .stops-text { font-size: 0.78rem; color: var(--ocean); font-weight: 500; }
+.tt-flight-right {
+    display: flex; flex-direction: column; align-items: flex-end; gap: 10px;
+    min-width: 120px;
+}
+.tt-price {
+    font-size: 1.6rem; font-weight: 700; color: var(--text);
+    font-family: var(--font-display);
+}
+.tt-price span { font-size: 0.85rem; font-weight: 400; color: var(--text-3); }
+.tt-btn-select {
+    padding: 10px 28px; border-radius: 10px;
+    background: var(--ocean); color: #fff;
+    font-size: 0.88rem; font-weight: 600;
+    transition: all var(--dur) var(--ease);
+}
+.tt-btn-select:hover { background: var(--ocean-hover); transform: translateY(-1px); }
+.tt-no-results {
+    text-align: center; padding: 60px 20px; color: var(--text-3);
+    font-size: 1.05rem;
+}
+
+/* ─── Seat Selection ─── */
+.tt-seats {
+    max-width: 800px; margin: 0 auto; padding: 0 24px;
+}
+.tt-seats > h2 { text-align: center; margin-bottom: 8px; }
+.tt-seats > .subtitle { text-align: center; color: var(--text-2); margin-bottom: 28px; font-size: 0.95rem; }
+.tt-seat-card {
+    background: var(--card); border-radius: var(--radius); padding: 32px;
+    box-shadow: var(--shadow); border: 1px solid var(--border);
+}
+.tt-seat-legend {
+    display: flex; gap: 24px; justify-content: center; margin-bottom: 28px;
+    flex-wrap: wrap;
+}
+.tt-seat-legend-item {
+    display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--text-2);
+}
+.tt-seat-legend-item .swatch {
+    width: 24px; height: 24px; border-radius: 6px;
+}
+.swatch-available { background: var(--ocean-light); border: 1.5px solid var(--sky); }
+.swatch-selected { background: var(--coral); }
+.swatch-taken { background: #dde3ea; }
+.tt-aircraft-frame {
+    max-width: 380px; margin: 0 auto;
+    background: linear-gradient(180deg, #f0f4f8 0%, #f8fafc 100%);
+    border-radius: 60px 60px 20px 20px;
+    padding: 32px 24px 24px;
+    border: 2px solid var(--border);
+    position: relative;
+}
+.tt-aircraft-frame::before {
+    content: ''; position: absolute; top: -2px; left: 50%; transform: translateX(-50%);
+    width: 60px; height: 24px;
+    background: var(--bg); border-radius: 0 0 30px 30px;
+    border: 2px solid var(--border); border-top: none;
+}
+.tt-seat-header {
+    display: grid; grid-template-columns: 28px repeat(3, 40px) 20px repeat(3, 40px);
+    gap: 6px; justify-content: center; margin-bottom: 8px;
+}
+.tt-seat-header span {
+    text-align: center; font-size: 0.72rem; font-weight: 700;
+    color: var(--text-3); text-transform: uppercase;
+    display: flex; align-items: center; justify-content: center;
+}
+.tt-seat-rows { display: flex; flex-direction: column; gap: 6px; }
+.tt-seat-row {
+    display: grid; grid-template-columns: 28px repeat(3, 40px) 20px repeat(3, 40px);
+    gap: 6px; justify-content: center;
+}
+.tt-row-num {
+    font-size: 0.72rem; font-weight: 600; color: var(--text-3);
+    display: flex; align-items: center; justify-content: center;
+}
+.tt-seat {
+    width: 40px; height: 36px; border-radius: 8px 8px 6px 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.7rem; font-weight: 600;
+    transition: all 0.2s var(--ease); border: none; padding: 0;
+}
+.tt-seat.available {
+    background: var(--ocean-light); color: var(--ocean);
+    cursor: pointer; border: 1.5px solid transparent;
+}
+.tt-seat.available:hover {
+    background: var(--sky); color: #fff;
+    border-color: var(--ocean); transform: scale(1.08);
+}
+.tt-seat.taken {
+    background: #e4e8ee; color: #b0b8c4; cursor: not-allowed;
+}
+.tt-seat.selected {
+    background: var(--coral); color: #fff;
+    border: 1.5px solid var(--coral-hover);
+    box-shadow: 0 2px 8px rgba(232,112,64,0.35);
+    transform: scale(1.08);
+}
+.tt-seat-aisle { width: 20px; }
+.tt-exit-row {
+    position: relative;
+}
+.tt-exit-row::before {
+    content: 'EXIT'; position: absolute; left: -52px; top: 50%; transform: translateY(-50%);
+    font-size: 0.55rem; font-weight: 700; color: var(--success);
+    letter-spacing: 0.06em; background: var(--success-bg);
+    padding: 2px 6px; border-radius: 3px;
+}
+.tt-seat-selection-info {
+    text-align: center; margin-top: 24px; padding-top: 20px;
+    border-top: 1px solid var(--border);
+}
+.tt-selected-seat-display {
+    font-size: 1.1rem; color: var(--text-2); margin-bottom: 16px; min-height: 28px;
+}
+.tt-selected-seat-display strong {
+    color: var(--coral); font-weight: 700; font-size: 1.25rem;
+}
+.tt-btn-confirm {
+    padding: 14px 48px; border-radius: 12px;
+    background: var(--coral); color: #fff;
+    font-size: 1rem; font-weight: 600;
+    transition: all var(--dur) var(--ease);
+    box-shadow: 0 4px 14px rgba(232,112,64,0.3);
+    opacity: 0.4; pointer-events: none;
+}
+.tt-btn-confirm.enabled {
+    opacity: 1; pointer-events: auto;
+}
+.tt-btn-confirm.enabled:hover {
+    background: var(--coral-hover); transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(232,112,64,0.4);
+}
+
+/* ─── Checkout ─── */
+.tt-checkout {
+    max-width: 1000px; margin: 0 auto; padding: 0 24px;
+}
+.tt-checkout-layout {
+    display: grid; grid-template-columns: 1fr 360px; gap: 28px;
+    align-items: start;
+}
+.tt-checkout-form {
+    background: var(--card); border-radius: var(--radius); padding: 36px;
+    box-shadow: var(--shadow-sm); border: 1px solid var(--border);
+}
+.tt-checkout-form h2 { margin-bottom: 24px; font-size: 1.35rem; }
+.tt-checkout-form h3 {
+    font-family: var(--font-body); font-weight: 700; font-size: 0.95rem;
+    color: var(--text); margin-bottom: 20px; margin-top: 32px;
+    padding-top: 24px; border-top: 1px solid var(--border);
+    text-transform: uppercase; letter-spacing: 0.04em;
+}
+.tt-checkout-form h3:first-of-type { margin-top: 0; padding-top: 0; border-top: none; }
+.tt-checkout-form .tt-form-row { margin-bottom: 16px; }
+.tt-checkout-form .tt-form-row:last-of-type { margin-bottom: 0; }
+.tt-btn-book {
+    width: 100%; height: 56px; border-radius: 12px;
+    background: var(--coral); color: #fff;
+    font-size: 1.1rem; font-weight: 600;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: all var(--dur) var(--ease);
+    box-shadow: 0 4px 14px rgba(232,112,64,0.3);
+    margin-top: 28px;
+}
+.tt-btn-book:hover {
+    background: var(--coral-hover); transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(232,112,64,0.4);
+}
+/* Booking summary sidebar */
+.tt-summary {
+    background: var(--card); border-radius: var(--radius); padding: 28px;
+    box-shadow: var(--shadow); border: 1px solid var(--border);
+    position: sticky; top: 140px;
+}
+.tt-summary h3 {
+    font-family: var(--font-body); font-weight: 700; font-size: 0.95rem;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    margin-bottom: 20px; color: var(--text);
+}
+.tt-summary-flight {
+    display: flex; align-items: center; gap: 12px;
+    padding-bottom: 16px; margin-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+}
+.tt-summary-flight .tt-airline-badge { width: 32px; height: 32px; font-size: 0.65rem; border-radius: 8px; }
+.tt-summary-route {
+    font-weight: 600; font-size: 0.95rem;
+}
+.tt-summary-detail { font-size: 0.82rem; color: var(--text-3); }
+.tt-summary-row {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 0.9rem; margin-bottom: 10px;
+}
+.tt-summary-row.muted { color: var(--text-3); }
+.tt-summary-divider {
+    height: 1px; background: var(--border); margin: 16px 0;
+}
+.tt-summary-total {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 1.15rem; font-weight: 700;
+}
+.tt-summary-total .amount {
+    font-family: var(--font-display); font-size: 1.4rem; color: var(--coral);
+}
+
+/* ─── Confirmation ─── */
+.tt-confirmation {
+    display: none; position: fixed; inset: 0; z-index: 200;
+    background: rgba(11,29,46,0.6); backdrop-filter: blur(8px);
+    align-items: center; justify-content: center;
+}
+.tt-confirmation.active { display: flex; }
+.tt-conf-card {
+    background: var(--card); border-radius: 24px; padding: 48px 56px;
+    text-align: center; max-width: 500px; width: 90%;
+    box-shadow: var(--shadow-lg);
+    animation: confSlideUp 0.5s var(--ease);
+}
+@keyframes confSlideUp {
+    from { opacity: 0; transform: translateY(40px) scale(0.96); }
+    to { opacity: 1; transform: none; }
+}
+.tt-conf-check {
+    width: 72px; height: 72px; border-radius: 50%;
+    background: var(--success-bg); border: 3px solid var(--success);
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 24px;
+}
+.tt-conf-check svg { animation: checkDraw 0.5s 0.3s var(--ease) both; }
+@keyframes checkDraw { from { stroke-dashoffset: 30; opacity: 0; } to { stroke-dashoffset: 0; opacity: 1; } }
+.tt-conf-card h2 {
+    font-size: 1.75rem; margin-bottom: 8px; color: var(--text);
+}
+.tt-conf-card .subtitle { color: var(--text-2); margin-bottom: 24px; font-size: 0.95rem; }
+.tt-conf-ref {
+    display: inline-block; background: var(--bg); border-radius: 10px;
+    padding: 12px 28px; font-family: var(--font-body);
+    font-size: 1.4rem; font-weight: 700; color: var(--ocean);
+    letter-spacing: 0.06em; margin-bottom: 24px;
+    border: 1.5px solid var(--border);
+}
+.tt-conf-details {
+    text-align: left; background: var(--bg); border-radius: 12px;
+    padding: 20px; margin-bottom: 28px; font-size: 0.9rem;
+}
+.tt-conf-details .row {
+    display: flex; justify-content: space-between; margin-bottom: 8px;
+    color: var(--text-2);
+}
+.tt-conf-details .row:last-child { margin-bottom: 0; }
+.tt-conf-details .row strong { color: var(--text); }
+.tt-btn-done {
+    padding: 14px 40px; border-radius: 12px;
+    background: var(--ocean); color: #fff;
+    font-size: 1rem; font-weight: 600;
+    transition: all var(--dur) var(--ease);
+}
+.tt-btn-done:hover { background: var(--ocean-hover); }
+
+/* ─── Footer ─── */
+.tt-footer {
+    text-align: center; padding: 32px 24px;
+    font-size: 0.82rem; color: var(--text-3);
+}
+.tt-footer a { color: var(--ocean); font-weight: 500; }
+.tt-footer a:hover { text-decoration: underline; }
+
+/* ─── Responsive ─── */
+@media (max-width: 900px) {
+    .tt-results-layout { grid-template-columns: 1fr; }
+    .tt-filters { position: static; }
+    .tt-checkout-layout { grid-template-columns: 1fr; }
+    .tt-summary { position: static; }
+}
+@media (max-width: 600px) {
+    .tt-form-row.cols-2, .tt-form-row.cols-3 { grid-template-columns: 1fr; }
+    .tt-nav-links { display: none; }
+    h1 { font-size: 1.8rem; }
+    .tt-search-card { padding: 24px; }
+    .tt-flight-card { grid-template-columns: 1fr; }
+    .tt-flight-right { align-items: flex-start; flex-direction: row; justify-content: space-between; width: 100%; }
+}
+    </style>
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="tt-nav">
+    <div class="tt-nav-inner">
+        <a href="#" class="tt-logo">
+            <svg width="28" height="20" viewBox="0 0 28 20" fill="none">
+                <path d="M1 7C5 3 9 3 14 7C19 11 23 11 27 7" stroke="#4ca3d9" stroke-width="2" stroke-linecap="round"/>
+                <path d="M1 13C5 9 9 9 14 13C19 17 23 17 27 13" stroke="#e87040" stroke-width="2" stroke-linecap="round" opacity="0.6"/>
+            </svg>
+            TideTravel
+        </a>
+        <div class="tt-nav-links">
+            <a href="#" class="tt-nav-link active">Flights</a>
+            <a href="#" class="tt-nav-link">Hotels <span class="badge">Soon</span></a>
+            <a href="#" class="tt-nav-link">Deals <span class="badge">Soon</span></a>
+        </div>
+        <button class="tt-nav-signin">Sign In</button>
+    </div>
+</nav>
+
+<!-- Step Indicator -->
+<div class="tt-steps-bar" id="stepsBar">
+    <div class="tt-steps-inner">
+        <div class="tt-step-pill active" data-step="0"><span class="num">1</span> Search</div>
+        <div class="tt-step-connector"></div>
+        <div class="tt-step-pill" data-step="1"><span class="num">2</span> Flights</div>
+        <div class="tt-step-connector"></div>
+        <div class="tt-step-pill" data-step="2"><span class="num">3</span> Seats</div>
+        <div class="tt-step-connector"></div>
+        <div class="tt-step-pill" data-step="3"><span class="num">4</span> Payment</div>
+    </div>
+</div>
+
+<main class="tt-main">
+
+    <!-- STEP 1: Search -->
+    <section class="tt-step active" id="step-search">
+        <div class="tt-search">
+            <h1>Where to next?</h1>
+            <p class="subtitle">Search thousands of flights and find the best deal.</p>
+            <div class="tt-search-card">
+                <div class="tt-form-row cols-2">
+                    <div class="tt-field">
+                        <label for="origin">From</label>
+                        <select id="origin" name="origin">
+                            <option value="">Select departure city</option>
+                            <option value="SFO">San Francisco (SFO)</option>
+                            <option value="JFK">New York (JFK)</option>
+                            <option value="LAX">Los Angeles (LAX)</option>
+                            <option value="ORD">Chicago (ORD)</option>
+                            <option value="SEA">Seattle (SEA)</option>
+                            <option value="ICN">Seoul (ICN)</option>
+                            <option value="LHR">London (LHR)</option>
+                        </select>
+                    </div>
+                    <div class="tt-field">
+                        <label for="destination">To</label>
+                        <select id="destination" name="destination">
+                            <option value="">Select arrival city</option>
+                            <option value="NRT">Tokyo (NRT)</option>
+                            <option value="ICN">Seoul (ICN)</option>
+                            <option value="LHR">London (LHR)</option>
+                            <option value="CDG">Paris (CDG)</option>
+                            <option value="SYD">Sydney (SYD)</option>
+                            <option value="SFO">San Francisco (SFO)</option>
+                            <option value="JFK">New York (JFK)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="tt-form-row cols-2">
+                    <div class="tt-field">
+                        <label for="depart-date">Departure</label>
+                        <input type="date" id="depart-date" name="depart-date">
+                    </div>
+                    <div class="tt-field">
+                        <label for="return-date">Return</label>
+                        <input type="date" id="return-date" name="return-date">
+                    </div>
+                </div>
+                <div class="tt-form-row cols-2">
+                    <div class="tt-field">
+                        <label>Passengers</label>
+                        <div class="tt-stepper">
+                            <button type="button" id="pax-minus" aria-label="Decrease passengers">−</button>
+                            <span class="tt-stepper-val" id="pax-count">1</span>
+                            <button type="button" id="pax-plus" aria-label="Increase passengers">+</button>
+                        </div>
+                    </div>
+                    <div class="tt-field">
+                        <label>Cabin Class</label>
+                        <div class="tt-radio-group">
+                            <label class="tt-radio">
+                                <input type="radio" name="cabin" value="economy" checked>
+                                <span>Economy</span>
+                            </label>
+                            <label class="tt-radio">
+                                <input type="radio" name="cabin" value="business">
+                                <span>Business</span>
+                            </label>
+                            <label class="tt-radio">
+                                <input type="radio" name="cabin" value="first">
+                                <span>First</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <button class="tt-btn-primary" id="btn-search" type="button">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    Search Flights
+                </button>
+            </div>
+        </div>
+    </section>
+
+    <!-- STEP 2: Results -->
+    <section class="tt-step" id="step-results">
+        <div class="tt-results">
+            <div class="tt-results-header">
+                <div>
+                    <h2 id="results-title">6 flights found</h2>
+                    <p class="tt-route" id="results-route">San Francisco → Tokyo · Mar 20 – Mar 27</p>
+                </div>
+                <div class="tt-sort-wrap">
+                    <label for="sort-by">Sort by</label>
+                    <select id="sort-by" name="sort-by">
+                        <option value="price-asc">Price: Low → High</option>
+                        <option value="price-desc">Price: High → Low</option>
+                        <option value="duration">Duration: Shortest</option>
+                        <option value="departure">Departure: Earliest</option>
+                    </select>
+                </div>
+            </div>
+            <div class="tt-results-layout">
+                <aside class="tt-filters">
+                    <h3>Filters</h3>
+                    <div class="tt-filter-group">
+                        <span class="tt-filter-label">Max Price</span>
+                        <div class="tt-range-wrap">
+                            <input type="range" id="price-range" min="400" max="1000" value="1000" step="10">
+                            <div class="tt-range-val">
+                                <span>$400</span>
+                                <span id="price-range-val">$1,000</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="tt-filter-group">
+                        <span class="tt-filter-label">Stops</span>
+                        <label class="tt-check"><input type="checkbox" id="filter-nonstop" checked> Nonstop</label>
+                        <label class="tt-check"><input type="checkbox" id="filter-1stop" checked> 1 Stop</label>
+                        <label class="tt-check"><input type="checkbox" id="filter-2stop" checked> 2+ Stops</label>
+                    </div>
+                    <div class="tt-filter-group">
+                        <span class="tt-filter-label">Airlines</span>
+                        <label class="tt-check"><input type="checkbox" id="filter-pa" checked> Pacific Airways</label>
+                        <label class="tt-check"><input type="checkbox" id="filter-ha" checked> Horizon Airlines</label>
+                        <label class="tt-check"><input type="checkbox" id="filter-ca" checked> Coral Airlines</label>
+                        <label class="tt-check"><input type="checkbox" id="filter-bo" checked> Blue Ocean Jets</label>
+                        <label class="tt-check"><input type="checkbox" id="filter-te" checked> TideLine Express</label>
+                    </div>
+                </aside>
+                <div class="tt-flights-list" id="flights-list">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- STEP 3: Seat Selection -->
+    <section class="tt-step" id="step-seats">
+        <div class="tt-seats">
+            <h2>Choose Your Seat</h2>
+            <p class="subtitle">Select a seat for your flight.</p>
+            <div class="tt-seat-card">
+                <div class="tt-seat-legend">
+                    <div class="tt-seat-legend-item"><div class="swatch swatch-available"></div> Available</div>
+                    <div class="tt-seat-legend-item"><div class="swatch swatch-selected"></div> Selected</div>
+                    <div class="tt-seat-legend-item"><div class="swatch swatch-taken"></div> Taken</div>
+                </div>
+                <div class="tt-aircraft-frame">
+                    <div class="tt-seat-header">
+                        <span></span>
+                        <span>A</span><span>B</span><span>C</span>
+                        <span></span>
+                        <span>D</span><span>E</span><span>F</span>
+                    </div>
+                    <div class="tt-seat-rows" id="seat-map">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+                <div class="tt-seat-selection-info">
+                    <p class="tt-selected-seat-display" id="seat-display">Click a seat to select it</p>
+                    <button class="tt-btn-confirm" id="btn-confirm-seat" type="button">Confirm Seat</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- STEP 4: Checkout -->
+    <section class="tt-step" id="step-checkout">
+        <div class="tt-checkout">
+            <div class="tt-checkout-layout">
+                <div class="tt-checkout-form">
+                    <h2>Complete Your Booking</h2>
+                    <h3>Passenger Details</h3>
+                    <div class="tt-form-row cols-2">
+                        <div class="tt-field">
+                            <label for="first-name">First Name</label>
+                            <input type="text" id="first-name" name="first-name" placeholder="John">
+                        </div>
+                        <div class="tt-field">
+                            <label for="last-name">Last Name</label>
+                            <input type="text" id="last-name" name="last-name" placeholder="Smith">
+                        </div>
+                    </div>
+                    <div class="tt-form-row cols-2">
+                        <div class="tt-field">
+                            <label for="email">Email</label>
+                            <input type="email" id="email" name="email" placeholder="john@example.com">
+                        </div>
+                        <div class="tt-field">
+                            <label for="phone">Phone</label>
+                            <input type="tel" id="phone" name="phone" placeholder="+1 (555) 000-0000">
+                        </div>
+                    </div>
+                    <h3>Payment Information</h3>
+                    <div class="tt-form-row">
+                        <div class="tt-field">
+                            <label for="card-number">Card Number</label>
+                            <input type="text" id="card-number" name="card-number" placeholder="4242 4242 4242 4242" maxlength="19">
+                        </div>
+                    </div>
+                    <div class="tt-form-row cols-2">
+                        <div class="tt-field">
+                            <label for="card-expiry">Expiry Date</label>
+                            <input type="text" id="card-expiry" name="card-expiry" placeholder="MM / YY" maxlength="7">
+                        </div>
+                        <div class="tt-field">
+                            <label for="card-cvv">CVV</label>
+                            <input type="text" id="card-cvv" name="card-cvv" placeholder="123" maxlength="4">
+                        </div>
+                    </div>
+                    <button class="tt-btn-book" id="btn-book" type="button">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                        Complete Booking
+                    </button>
+                </div>
+                <aside class="tt-summary" id="booking-summary">
+                    <h3>Booking Summary</h3>
+                    <div id="summary-content">
+                        <!-- Populated by JS -->
+                    </div>
+                </aside>
+            </div>
+        </div>
+    </section>
+
+</main>
+
+<!-- Confirmation Overlay -->
+<div class="tt-confirmation" id="confirmation">
+    <div class="tt-conf-card">
+        <div class="tt-conf-check">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="stroke-dasharray:30; stroke-dashoffset:30;">
+                <polyline points="20 6 9 17 4 12"/>
+            </svg>
+        </div>
+        <h2>Booking Confirmed!</h2>
+        <p class="subtitle">Your flight has been booked successfully.</p>
+        <div class="tt-conf-ref" id="conf-ref">TT-A8K2M4</div>
+        <div class="tt-conf-details" id="conf-details">
+            <!-- Populated by JS -->
+        </div>
+        <button class="tt-btn-done" id="btn-start-over" type="button">Book Another Flight</button>
+    </div>
+</div>
+
+<footer class="tt-footer">
+    &copy; 2026 TideTravel &middot; Demo site for <a href="https://tidesurf.org" target="_blank">TideSurf</a>
+</footer>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   DATA
+   ═══════════════════════════════════════════════════════════════ */
+const FLIGHTS = [
+    { id: 1, airline: 'Pacific Airways', code: 'PA', color: '#1a6fa0', departure: '08:25', arrival: '15:40+1', duration: '11h 15m', durationMin: 675, stops: 0, stopsText: 'Nonstop', price: 847, aircraft: 'Boeing 787 Dreamliner' },
+    { id: 2, airline: 'Horizon Airlines', code: 'HA', color: '#2d8659', departure: '10:50', arrival: '19:20+1', duration: '12h 30m', durationMin: 750, stops: 1, stopsText: '1 stop · ICN', price: 623, aircraft: 'Airbus A350-900' },
+    { id: 3, airline: 'Coral Airlines', code: 'CA', color: '#c4563a', departure: '13:15', arrival: '21:45+1', duration: '12h 30m', durationMin: 750, stops: 1, stopsText: '1 stop · HNL', price: 592, aircraft: 'Boeing 777-300ER' },
+    { id: 4, airline: 'Blue Ocean Jets', code: 'BO', color: '#0b1d2e', departure: '16:40', arrival: '06:10+2', duration: '15h 30m', durationMin: 930, stops: 2, stopsText: '2 stops · LAX, HNL', price: 489, aircraft: 'Airbus A380' },
+    { id: 5, airline: 'TideLine Express', code: 'TE', color: '#2a7a8c', departure: '22:00', arrival: '05:15+2', duration: '11h 15m', durationMin: 675, stops: 0, stopsText: 'Nonstop', price: 924, aircraft: 'Boeing 787 Dreamliner' },
+    { id: 6, airline: 'Pacific Airways', code: 'PA', color: '#1a6fa0', departure: '06:00', arrival: '17:45+1', duration: '13h 45m', durationMin: 825, stops: 1, stopsText: '1 stop · SEA', price: 715, aircraft: 'Boeing 777-200LR' },
+];
+
+const TAKEN_SEATS = new Set([
+    '1A','1B','1C','1D','1E','1F',
+    '2A','2B','2D',
+    '3C','3D','3E',
+    '5A','5F',
+    '7B','7C','7D','7E',
+    '8A','8F',
+    '10A','10B','10C','10D','10E','10F',
+    '12A','12D','12E',
+    '14B','14C',
+    '16F',
+    '18A','18B','18E','18F',
+    '20C','20D',
+]);
+
+const COLS = ['A','B','C','','D','E','F'];
+const ROWS = 22;
+const EXIT_ROWS = [12, 13];
+
+const CITIES = {
+    SFO: 'San Francisco', JFK: 'New York', LAX: 'Los Angeles', ORD: 'Chicago',
+    SEA: 'Seattle', NRT: 'Tokyo', ICN: 'Seoul', LHR: 'London',
+    CDG: 'Paris', SYD: 'Sydney'
+};
+
+/* ═══════════════════════════════════════════════════════════════
+   STATE
+   ═══════════════════════════════════════════════════════════════ */
+let currentStep = 0;
+let selectedFlight = null;
+let selectedSeat = null;
+let passengers = 1;
+
+/* ═══════════════════════════════════════════════════════════════
+   STEP NAVIGATION
+   ═══════════════════════════════════════════════════════════════ */
+const steps = document.querySelectorAll('.tt-step');
+const pills = document.querySelectorAll('.tt-step-pill');
+const connectors = document.querySelectorAll('.tt-step-connector');
+
+function goToStep(n) {
+    steps[currentStep].classList.remove('active');
+    steps[n].classList.add('active');
+    // Update pills
+    pills.forEach((p, i) => {
+        p.classList.remove('active', 'completed');
+        if (i < n) p.classList.add('completed');
+        else if (i === n) p.classList.add('active');
+    });
+    // Update connectors
+    connectors.forEach((c, i) => {
+        c.classList.toggle('done', i < n);
+    });
+    currentStep = n;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   STEP 1: SEARCH
+   ═══════════════════════════════════════════════════════════════ */
+// Set min date to today
+const today = new Date();
+const todayStr = today.toISOString().split('T')[0];
+document.getElementById('depart-date').min = todayStr;
+document.getElementById('return-date').min = todayStr;
+
+// Passenger stepper
+const paxCount = document.getElementById('pax-count');
+const paxMinus = document.getElementById('pax-minus');
+const paxPlus = document.getElementById('pax-plus');
+paxMinus.disabled = true;
+
+paxMinus.addEventListener('click', () => {
+    passengers = Math.max(1, passengers - 1);
+    paxCount.textContent = passengers;
+    paxMinus.disabled = passengers <= 1;
+    paxPlus.disabled = passengers >= 9;
+});
+paxPlus.addEventListener('click', () => {
+    passengers = Math.min(9, passengers + 1);
+    paxCount.textContent = passengers;
+    paxMinus.disabled = passengers <= 1;
+    paxPlus.disabled = passengers >= 9;
+});
+
+// Search button
+document.getElementById('btn-search').addEventListener('click', () => {
+    const origin = document.getElementById('origin').value;
+    const dest = document.getElementById('destination').value;
+    const depart = document.getElementById('depart-date').value;
+    const ret = document.getElementById('return-date').value;
+
+    // Update results header
+    const originName = CITIES[origin] || origin;
+    const destName = CITIES[dest] || dest;
+    const formatDate = (d) => {
+        if (!d) return '';
+        const dt = new Date(d + 'T00:00:00');
+        if (isNaN(dt.getTime())) return '';
+        return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    };
+    let routeText = `${originName} → ${destName}`;
+    const departStr = formatDate(depart);
+    const retStr = formatDate(ret);
+    if (departStr && retStr) routeText += ` · ${departStr} – ${retStr}`;
+    else if (departStr) routeText += ` · ${departStr}`;
+    document.getElementById('results-route').textContent = routeText;
+
+    renderFlights();
+    goToStep(1);
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   STEP 2: RESULTS
+   ═══════════════════════════════════════════════════════════════ */
+function getFilteredFlights() {
+    const maxPrice = parseInt(document.getElementById('price-range').value);
+    const showNonstop = document.getElementById('filter-nonstop').checked;
+    const show1Stop = document.getElementById('filter-1stop').checked;
+    const show2Stop = document.getElementById('filter-2stop').checked;
+    const airlines = {
+        PA: document.getElementById('filter-pa').checked,
+        HA: document.getElementById('filter-ha').checked,
+        CA: document.getElementById('filter-ca').checked,
+        BO: document.getElementById('filter-bo').checked,
+        TE: document.getElementById('filter-te').checked,
+    };
+    const sortBy = document.getElementById('sort-by').value;
+
+    let filtered = FLIGHTS.filter(f => {
+        if (f.price > maxPrice) return false;
+        if (f.stops === 0 && !showNonstop) return false;
+        if (f.stops === 1 && !show1Stop) return false;
+        if (f.stops >= 2 && !show2Stop) return false;
+        if (!airlines[f.code]) return false;
+        return true;
+    });
+
+    filtered.sort((a, b) => {
+        switch (sortBy) {
+            case 'price-asc': return a.price - b.price;
+            case 'price-desc': return b.price - a.price;
+            case 'duration': return a.durationMin - b.durationMin;
+            case 'departure': return a.departure.localeCompare(b.departure);
+            default: return 0;
+        }
+    });
+
+    return filtered;
+}
+
+function renderFlights() {
+    const list = document.getElementById('flights-list');
+    const filtered = getFilteredFlights();
+    document.getElementById('results-title').textContent = `${filtered.length} flight${filtered.length !== 1 ? 's' : ''} found`;
+
+    if (filtered.length === 0) {
+        list.innerHTML = '<div class="tt-no-results">No flights match your filters. Try adjusting your criteria.</div>';
+        return;
+    }
+
+    const origin = document.getElementById('origin').value || 'SFO';
+    const dest = document.getElementById('destination').value || 'NRT';
+
+    list.innerHTML = filtered.map(f => `
+        <div class="tt-flight-card" data-flight-id="${f.id}">
+            <div>
+                <div class="tt-flight-top">
+                    <div class="tt-airline-badge" style="background:${f.color}">${f.code}</div>
+                    <div class="tt-airline-info">
+                        <span class="tt-airline-name">${f.airline}</span>
+                        <span class="tt-aircraft">${f.aircraft}</span>
+                    </div>
+                </div>
+                <div class="tt-flight-times">
+                    <div class="tt-time">
+                        <div class="tt-time-val">${f.departure}</div>
+                        <div class="tt-time-code">${origin}</div>
+                    </div>
+                    <div class="tt-flight-line">
+                        <span class="duration">${f.duration}</span>
+                        <div class="line"></div>
+                        <span class="stops-text">${f.stopsText}</span>
+                    </div>
+                    <div class="tt-time">
+                        <div class="tt-time-val">${f.arrival}</div>
+                        <div class="tt-time-code">${dest}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="tt-flight-right">
+                <div class="tt-price">$${f.price} <span>/person</span></div>
+                <button class="tt-btn-select" data-id="${f.id}">Select</button>
+            </div>
+        </div>
+    `).join('');
+
+    // Bind select buttons
+    list.querySelectorAll('.tt-btn-select').forEach(btn => {
+        btn.addEventListener('click', () => {
+            selectedFlight = FLIGHTS.find(f => f.id === parseInt(btn.dataset.id));
+            renderSeatMap();
+            goToStep(2);
+        });
+    });
+}
+
+// Filter & sort listeners
+['price-range', 'filter-nonstop', 'filter-1stop', 'filter-2stop',
+ 'filter-pa', 'filter-ha', 'filter-ca', 'filter-bo', 'filter-te', 'sort-by'
+].forEach(id => {
+    document.getElementById(id).addEventListener('change', renderFlights);
+    document.getElementById(id).addEventListener('input', (e) => {
+        if (e.target.type === 'range') {
+            document.getElementById('price-range-val').textContent = `$${parseInt(e.target.value).toLocaleString()}`;
+            renderFlights();
+        }
+    });
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   STEP 3: SEAT MAP
+   ═══════════════════════════════════════════════════════════════ */
+function renderSeatMap() {
+    const map = document.getElementById('seat-map');
+    selectedSeat = null;
+    updateSeatDisplay();
+
+    let html = '';
+    for (let r = 1; r <= ROWS; r++) {
+        const isExit = EXIT_ROWS.includes(r);
+        html += `<div class="tt-seat-row${isExit ? ' tt-exit-row' : ''}">`;
+        html += `<span class="tt-row-num">${r}</span>`;
+        COLS.forEach(col => {
+            if (col === '') {
+                html += '<span class="tt-seat-aisle"></span>';
+            } else {
+                const seatId = `${r}${col}`;
+                const taken = TAKEN_SEATS.has(seatId);
+                html += `<button class="tt-seat ${taken ? 'taken' : 'available'}" data-seat="${seatId}" ${taken ? 'disabled aria-label="Seat ' + seatId + ' taken"' : 'aria-label="Select seat ' + seatId + '"'}>${col}</button>`;
+            }
+        });
+        html += '</div>';
+    }
+    map.innerHTML = html;
+
+    // Bind seat clicks
+    map.querySelectorAll('.tt-seat.available').forEach(btn => {
+        btn.addEventListener('click', () => {
+            // Deselect previous
+            map.querySelectorAll('.tt-seat.selected').forEach(s => {
+                s.classList.remove('selected');
+                s.classList.add('available');
+            });
+            btn.classList.remove('available');
+            btn.classList.add('selected');
+            selectedSeat = btn.dataset.seat;
+            updateSeatDisplay();
+        });
+    });
+}
+
+function updateSeatDisplay() {
+    const display = document.getElementById('seat-display');
+    const btn = document.getElementById('btn-confirm-seat');
+    if (selectedSeat) {
+        const seatType = selectedSeat.endsWith('A') || selectedSeat.endsWith('F') ? 'Window' :
+                         selectedSeat.endsWith('B') || selectedSeat.endsWith('E') ? 'Middle' : 'Aisle';
+        display.innerHTML = `Seat <strong>${selectedSeat}</strong> — ${seatType}`;
+        btn.classList.add('enabled');
+    } else {
+        display.textContent = 'Click a seat to select it';
+        btn.classList.remove('enabled');
+    }
+}
+
+document.getElementById('btn-confirm-seat').addEventListener('click', () => {
+    if (!selectedSeat) return;
+    renderSummary();
+    goToStep(3);
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   STEP 4: CHECKOUT
+   ═══════════════════════════════════════════════════════════════ */
+function renderSummary() {
+    if (!selectedFlight) return;
+    const origin = document.getElementById('origin').value || 'SFO';
+    const dest = document.getElementById('destination').value || 'NRT';
+    const originName = CITIES[origin] || origin;
+    const destName = CITIES[dest] || dest;
+    const basePrice = selectedFlight.price * passengers;
+    const taxes = Math.round(basePrice * 0.12);
+    const seatFee = selectedSeat && (selectedSeat.endsWith('A') || selectedSeat.endsWith('F')) ? 35 : 0;
+    const total = basePrice + taxes + seatFee;
+
+    document.getElementById('summary-content').innerHTML = `
+        <div class="tt-summary-flight">
+            <div class="tt-airline-badge" style="background:${selectedFlight.color}">${selectedFlight.code}</div>
+            <div>
+                <div class="tt-summary-route">${originName} → ${destName}</div>
+                <div class="tt-summary-detail">${selectedFlight.airline} · ${selectedFlight.duration}</div>
+            </div>
+        </div>
+        <div class="tt-summary-row"><span>Departure</span><strong>${selectedFlight.departure}</strong></div>
+        <div class="tt-summary-row"><span>Arrival</span><strong>${selectedFlight.arrival}</strong></div>
+        <div class="tt-summary-row"><span>Seat</span><strong>${selectedSeat || '—'}</strong></div>
+        <div class="tt-summary-row"><span>Passengers</span><strong>${passengers}</strong></div>
+        <div class="tt-summary-divider"></div>
+        <div class="tt-summary-row muted"><span>Base fare (×${passengers})</span><span>$${basePrice.toLocaleString()}</span></div>
+        <div class="tt-summary-row muted"><span>Taxes & fees</span><span>$${taxes.toLocaleString()}</span></div>
+        ${seatFee > 0 ? `<div class="tt-summary-row muted"><span>Window seat</span><span>$${seatFee}</span></div>` : ''}
+        <div class="tt-summary-divider"></div>
+        <div class="tt-summary-total"><span>Total</span><span class="amount">$${total.toLocaleString()}</span></div>
+    `;
+}
+
+// Card number formatting
+document.getElementById('card-number').addEventListener('input', (e) => {
+    let v = e.target.value.replace(/\D/g, '').substring(0, 16);
+    e.target.value = v.replace(/(\d{4})(?=\d)/g, '$1 ');
+});
+
+// Expiry formatting
+document.getElementById('card-expiry').addEventListener('input', (e) => {
+    let v = e.target.value.replace(/\D/g, '').substring(0, 4);
+    if (v.length >= 2) v = v.substring(0, 2) + ' / ' + v.substring(2);
+    e.target.value = v;
+});
+
+// Book button
+document.getElementById('btn-book').addEventListener('click', () => {
+    showConfirmation();
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   CONFIRMATION
+   ═══════════════════════════════════════════════════════════════ */
+function showConfirmation() {
+    const ref = 'TT-' + Array.from({ length: 6 }, () => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'[Math.floor(Math.random() * 36)]).join('');
+    document.getElementById('conf-ref').textContent = ref;
+
+    const origin = document.getElementById('origin').value || 'SFO';
+    const dest = document.getElementById('destination').value || 'NRT';
+    const originName = CITIES[origin] || origin;
+    const destName = CITIES[dest] || dest;
+    const name = `${document.getElementById('first-name').value || 'John'} ${document.getElementById('last-name').value || 'Smith'}`;
+    const basePrice = selectedFlight.price * passengers;
+    const taxes = Math.round(basePrice * 0.12);
+    const seatFee = selectedSeat && (selectedSeat.endsWith('A') || selectedSeat.endsWith('F')) ? 35 : 0;
+    const total = basePrice + taxes + seatFee;
+
+    document.getElementById('conf-details').innerHTML = `
+        <div class="row"><span>Passenger</span><strong>${name}</strong></div>
+        <div class="row"><span>Route</span><strong>${originName} → ${destName}</strong></div>
+        <div class="row"><span>Flight</span><strong>${selectedFlight.airline}</strong></div>
+        <div class="row"><span>Departure</span><strong>${selectedFlight.departure}</strong></div>
+        <div class="row"><span>Seat</span><strong>${selectedSeat || '—'}</strong></div>
+        <div class="row"><span>Total Paid</span><strong>$${total.toLocaleString()}</strong></div>
+    `;
+
+    const overlay = document.getElementById('confirmation');
+    overlay.classList.add('active');
+
+    // Animate checkmark
+    const svg = overlay.querySelector('svg');
+    svg.style.strokeDashoffset = '0';
+}
+
+document.getElementById('btn-start-over').addEventListener('click', () => {
+    document.getElementById('confirmation').classList.remove('active');
+    // Reset form
+    document.getElementById('origin').value = '';
+    document.getElementById('destination').value = '';
+    document.getElementById('depart-date').value = '';
+    document.getElementById('return-date').value = '';
+    passengers = 1;
+    paxCount.textContent = '1';
+    paxMinus.disabled = true;
+    document.querySelector('input[name="cabin"][value="economy"]').checked = true;
+    document.getElementById('first-name').value = '';
+    document.getElementById('last-name').value = '';
+    document.getElementById('email').value = '';
+    document.getElementById('phone').value = '';
+    document.getElementById('card-number').value = '';
+    document.getElementById('card-expiry').value = '';
+    document.getElementById('card-cvv').value = '';
+    selectedFlight = null;
+    selectedSeat = null;
+    // Reset filters
+    document.getElementById('price-range').value = 1000;
+    document.getElementById('price-range-val').textContent = '$1,000';
+    document.querySelectorAll('.tt-filters input[type="checkbox"]').forEach(c => c.checked = true);
+    document.getElementById('sort-by').value = 'price-asc';
+    goToStep(0);
+});
+</script>
+
+</body>
+</html>
