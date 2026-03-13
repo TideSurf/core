@@ -7,7 +7,7 @@
 <p align="center"><a href="README.md">English</a> | <strong>日本語</strong> | <a href="README.ko.md">한국어</a></p>
 
 <p align="center">
-  <a href="https://github.com/TideSurf/tidesurf-core/actions/workflows/ci.yml"><img src="https://github.com/TideSurf/tidesurf-core/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/TideSurf/core/actions/workflows/ci.yml"><img src="https://github.com/TideSurf/core/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://www.npmjs.com/package/@tidesurf/core"><img src="https://img.shields.io/npm/v/@tidesurf/core" alt="npm"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
 </p>

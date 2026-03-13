@@ -30,9 +30,9 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/TideSurf/tidesurf-core"
+    "url": "https://github.com/TideSurf/core"
   },
-  "homepage": "https://TideSurf.github.io/tidesurf-core",
+  "homepage": "https://tidesurf.org",
   "publishConfig": {
     "access": "public"
   },
