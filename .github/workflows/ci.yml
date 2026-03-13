@@ -29,7 +29,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
       - uses: browser-actions/setup-chrome@v1
+        id: setup-chrome
         with:
           chrome-version: stable
       - run: bun install
       - run: bun run test:integration
+        env:
+          CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}

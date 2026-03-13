@@ -31,7 +31,7 @@ describe("Browser integration", () => {
     serverPort = typeof addr === "object" && addr ? addr.port : 0;
 
     surfing = await TideSurf.launch({ headless: true, port: 9333 });
-  }, 30000);
+  }, 60000);
 
   afterAll(async () => {
     await surfing?.close();
