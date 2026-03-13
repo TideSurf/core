@@ -1,120 +1,51 @@
-# Auto Connect Demos
+# Auto Connect
 
-These demos use `--auto-connect` to attach to your running Chrome — the agent sees your logged-in sessions, cookies, and extensions. No re-authentication needed.
+Your agent, your browser, your sessions. No re-authentication.
 
-## Setup
-
-1. **Enable remote debugging in Chrome:**
-   - Navigate to `chrome://inspect#remote-debugging` and enable it (Chrome 144+), or
-   - Relaunch Chrome with `--remote-debugging-port=9222`
-
-2. **Configure TideSurf MCP with auto-connect:**
-   ```json
-   {
-     "mcpServers": {
-       "tidesurf": {
-         "command": "bunx",
-         "args": ["tidesurf", "mcp", "--auto-connect"]
-       }
-     }
-   }
-   ```
-
-3. **Log into the sites you want the agent to access** in your Chrome, then use any prompt below.
+> Setup: [Getting started — Connecting to an existing browser](https://tidesurf.org/docs#getting-started)
 
 ---
 
-## GitHub
-
-### Triage my notifications
+### Triage GitHub notifications
 
 ```
-Check my GitHub notifications. Summarize any that need my attention —
-group them by repo, and tell me which ones I can dismiss.
+Check my GitHub notifications. Group by repo, summarize each,
+and tell me which ones I can dismiss.
 ```
 
-### Review a pull request
+### Review the latest PR
 
 ```
-Go to https://github.com/<owner>/<repo>/pulls and find the most
-recent open PR. Read through the changes and give me a review summary:
-what it does, whether it looks correct, and anything I should watch out for.
+Go to github.com/<owner>/<repo>/pulls — open the most recent PR,
+read through the diff, and give me a short review: what changed,
+is it correct, anything to watch out for.
 ```
 
-### Check my repos
+### Catch up on email
 
 ```
-Go to https://github.com and list my pinned repositories with their
-descriptions and star counts. Then check which ones have open issues.
+Open mail.google.com. Summarize my 5 most recent emails:
+sender, subject, needs reply or not.
 ```
 
----
-
-## Google
-
-### Summarize recent emails
+### What's on my calendar
 
 ```
-Go to https://mail.google.com and read my 5 most recent emails.
-Give me a one-line summary of each — sender, subject, and whether
-it needs a reply.
+Open calendar.google.com and tell me what I have today and tomorrow.
+Flag any conflicts or back-to-back meetings.
 ```
 
-### Check my calendar
+### Audit the page I'm looking at
 
 ```
-Go to https://calendar.google.com and tell me what's on my schedule
-for today and tomorrow. Flag any conflicts.
+Look at whatever page I have open right now. Find accessibility
+issues — missing alt text, unlabeled inputs, broken links.
+List them with element IDs.
 ```
 
----
-
-## Linear / Jira / Project management
-
-### My assigned tickets
+### Extract dashboard metrics
 
 ```
-Go to https://linear.app and find all issues assigned to me.
-Group them by status (in progress, todo, backlog) and list the
-title and priority of each.
+I have a dashboard open. Pull out the key numbers and format
+them as a markdown table.
 ```
-
----
-
-## General
-
-### Debug a page you're looking at
-
-```
-Look at the page I currently have open. Find any accessibility
-issues — missing alt text, low contrast, unlabeled form fields.
-List them with the element IDs so I can fix them.
-```
-
-### Extract data from a dashboard
-
-```
-I have a dashboard open at <URL>. Extract the key metrics visible
-on the page and format them as a markdown table.
-```
-
-### Fill out a form with my info
-
-```
-I have a form open. Fill it out with the following info:
-- Name: ...
-- Email: ...
-- Company: ...
-Submit it when done.
-```
-
----
-
-## Why auto-connect?
-
-| Without auto-connect | With auto-connect |
-|---|---|
-| Fresh browser, no cookies | Your logged-in sessions |
-| Can't access auth-gated pages | Full access to everything you can see |
-| Agent manages Chrome lifecycle | Your Chrome, your extensions, your state |
-| Good for public pages | Good for real work |
