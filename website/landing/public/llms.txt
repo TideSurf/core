@@ -66,5 +66,5 @@ bunx tidesurf mcp                  # start MCP server
 ## Links
 
 - Docs: https://tidesurf.org/docs
-- GitHub: https://github.com/TideSurf/tidesurf-core
+- GitHub: https://github.com/TideSurf/core
 - npm: https://www.npmjs.com/package/@tidesurf/core
