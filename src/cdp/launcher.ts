@@ -118,6 +118,7 @@ function waitForDevTools(proc: ChildProcess): Promise<string> {
     // Capture in a const so TypeScript knows it's non-null inside closures
     const stderrStream = stderr;
     let accumulated = "";
+    let settled = false;
     const timeoutMs = 3000;
 
     function cleanup() {
@@ -128,16 +129,22 @@ function waitForDevTools(proc: ChildProcess): Promise<string> {
     }
 
     const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
       cleanup();
       reject(new ChromeLaunchError("Timed out waiting for Chrome DevTools"));
     }, timeoutMs);
 
     const onError = (err: Error) => {
+      if (settled) return;
+      settled = true;
       cleanup();
       reject(new ChromeLaunchError(`Chrome process error: ${err.message}`, { cause: err }));
     };
 
     const onExit = (code: number | null) => {
+      if (settled) return;
+      settled = true;
       cleanup();
       reject(new ChromeLaunchError(`Chrome exited with code ${code} before DevTools was ready`));
     };
@@ -147,6 +154,8 @@ function waitForDevTools(proc: ChildProcess): Promise<string> {
       accumulated += chunk;
       const match = accumulated.match(/DevTools listening on (ws:\/\/[^\s]+)/);
       if (match) {
+        if (settled) return;
+        settled = true;
         cleanup();
         resolve(match[1]);
       }

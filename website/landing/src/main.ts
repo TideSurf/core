@@ -257,15 +257,16 @@ function initFloatingTags(): void {
     }
 
     const x = Math.random() * 96 + 2;
+    const y = Math.random() * 90 + 5;
     const delay = -(Math.random() * duration);
-    const sway = (Math.random() - 0.5) * 70;
+    const sway = (Math.random() - 0.5) * 40;
     const rotation = (Math.random() - 0.5) * 12;
 
     const hue = 0;
     const sat = 0;
     const lit = 32 + Math.random() * 28;
 
-    el.style.cssText = `--x:${x}%;--s:${size}rem;--o:${opacity};--d:${duration}s;--delay:${delay}s;--sway:${sway}px;--r:${rotation}deg;--blur:${blur}px;color:hsl(${hue},${sat}%,${lit}%)`;
+    el.style.cssText = `--x:${x}%;--y:${y}%;--s:${size}rem;--o:${opacity};--d:${duration}s;--delay:${delay}s;--sway:${sway}px;--r:${rotation}deg;--blur:${blur}px;color:hsl(${hue},${sat}%,${lit}%)`;
 
     container.appendChild(el);
   }
@@ -572,11 +573,10 @@ function initCopyButtons(): void {
 
 function initScrollMorph(): void {
   const hero = document.querySelector('.hero') as HTMLElement;
-  const heroContent = document.querySelector('.hero-content') as HTMLElement;
   const floatingTags = document.getElementById('floating-tags');
   const scrollHint = document.querySelector('.scroll-hint') as HTMLElement;
 
-  if (!hero || !heroContent) return;
+  if (!hero) return;
 
   let scrollHintReady = false;
   if (scrollHint) {
@@ -595,10 +595,6 @@ function initScrollMorph(): void {
         const heroH = hero.offsetHeight;
         const scrolled = window.scrollY;
         const progress = Math.min(1, Math.max(0, scrolled / heroH));
-
-        // Hero content: parallax up + scale down + fade
-        heroContent.style.transform = `translateY(${progress * -100}px) scale(${1 - progress * 0.1})`;
-        heroContent.style.opacity = `${Math.max(0, 1 - progress * 1.5)}`;
 
         // Floating tags: scroll parallax via CSS custom property
         if (floatingTags) {

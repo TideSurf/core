@@ -54,6 +54,7 @@
     "zod": "^4.3.0"
   },
   "devDependencies": {
+    "@anthropic-ai/sdk": "^0.52.0",
     "@types/bun": "^1.3.10",
     "@types/node": "^22.0.0",
     "elysia": "^1.4.27",

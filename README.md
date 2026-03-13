@@ -1,5 +1,7 @@
 # TideSurf
 
+**English** | [日本語](README.ja.md) | [한국어](README.ko.md)
+
 [![CI](https://github.com/tidesurf/tidesurf-core/actions/workflows/ci.yml/badge.svg)](https://github.com/tidesurf/tidesurf-core/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/tidesurf-core)](https://www.npmjs.com/package/tidesurf-core)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
