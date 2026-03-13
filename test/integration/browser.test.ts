@@ -117,7 +117,7 @@ describe("Browser integration", () => {
 
   it("returns tool definitions", () => {
     const defs = surfing.getToolDefinitions();
-    expect(defs).toHaveLength(12);
+    expect(defs).toHaveLength(18);
     expect(defs.map((d) => d.name)).toEqual(
       expect.arrayContaining([
         "get_state",
@@ -132,6 +132,12 @@ describe("Browser integration", () => {
         "new_tab",
         "switch_tab",
         "close_tab",
+        "search",
+        "screenshot",
+        "upload",
+        "clipboard_read",
+        "clipboard_write",
+        "download",
       ])
     );
   });
