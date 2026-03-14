@@ -430,29 +430,6 @@ body {
 
 /* ── Hero Title ── */
 
-.hero-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  padding: 0.45rem 0.8rem;
-  margin-bottom: 1.25rem;
-  border: 1px solid var(--hero-glass-border);
-  border-radius: 999px;
-  background:
-    linear-gradient(135deg, rgba(37, 99, 235, 0.08), rgba(14, 165, 233, 0.04)),
-    var(--hero-glass);
-  backdrop-filter: blur(10px);
-  color: var(--text-hero);
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  opacity: 0;
-  transform: translateY(10px);
-  animation: fade-up 0.6s var(--ease) 0.05s forwards;
-}
-
 .hero-title {
   line-height: 0.92;
   margin-bottom: 3rem;

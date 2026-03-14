@@ -14,11 +14,6 @@ const translations: Translations = {
   "hero.title.line1": { en: "Surf", ja: "波に", ko: "파도를" },
   "hero.title.line2": { en: "the", ja: "", ko: "" },
   "hero.title.line3": { en: "Tide", ja: "乗れ", ko: "타라" },
-  "hero.badge": {
-    en: "v0.2.3 · safer read-only · 18 tools",
-    ja: "v0.2.3 ・ より安全な読み取り専用 ・ 18ツール",
-    ko: "v0.2.3 · 더 안전한 읽기 전용 · 18개 도구",
-  },
   "hero.tagline1": {
     en: "Your AI doesn't need eyes to browse.",
     ja: "AIにスクリーンショットは要らない。",
