@@ -25,6 +25,11 @@ const translations: Translations = {
     ko: "웹 페이지를 핵심만 남겨 압축합니다.",
   },
   "hero.scroll": { en: "Scroll", ja: "スクロール", ko: "아래로" },
+  "hero.tagline": { 
+    en: "DOM compression for LLMs. Navigate, interact, extract — without the bloat.",
+    ja: "LLM向けDOM圧縮。不要な要素を除去し、ナビゲート、操作、抽出を実現。",
+    ko: "LLM을 위한 DOM 압축. 불필요한 요소를 제거하고 탐색, 상호작용, 추출을 수행합니다.",
+  },
   "compare.label": { en: "How it works", ja: "仕組み", ko: "동작 원리" },
   "compare.headline": {
     en: "XML is all you need.",
@@ -603,6 +608,222 @@ function initScrollReveal(): void {
   document.querySelectorAll(".reveal").forEach((el) => observer.observe(el));
 }
 
+// ── Code Wall ──
+
+interface CodeLine {
+  tag: string;
+  attrs: string[];
+  content?: string;
+  isSemantic: boolean;
+  indent: number;
+}
+
+const codeTemplates: CodeLine[] = [
+  { tag: "!DOCTYPE", attrs: ['html'], isSemantic: false, indent: 0 },
+  { tag: "html", attrs: ['lang="en"', 'class="scroll-smooth"'], isSemantic: false, indent: 0 },
+  { tag: "head", attrs: [], isSemantic: false, indent: 1 },
+  { tag: "meta", attrs: ['charset="UTF-8"'], isSemantic: false, indent: 2 },
+  { tag: "title", attrs: [], isSemantic: true, indent: 2, content: "My Website" },
+  { tag: "/title", attrs: [], isSemantic: true, indent: 2 },
+  { tag: "link", attrs: ['rel="stylesheet"', 'href="/styles.css"'], isSemantic: false, indent: 2 },
+  { tag: "/head", attrs: [], isSemantic: false, indent: 1 },
+  { tag: "body", attrs: ['class="antialiased"'], isSemantic: false, indent: 1 },
+  { tag: "header", attrs: ['class="fixed top-0"'], isSemantic: true, indent: 2 },
+  { tag: "nav", attrs: ['class="container mx-auto"'], isSemantic: true, indent: 3 },
+  { tag: "a", attrs: ['href="/"', 'class="text-xl font-bold"'], isSemantic: true, indent: 4, content: "Logo" },
+  { tag: "ul", attrs: ['class="flex gap-8"'], isSemantic: true, indent: 4 },
+  { tag: "li", attrs: [], isSemantic: true, indent: 5 },
+  { tag: "a", attrs: ['href="/features"'], isSemantic: true, indent: 6, content: "Features" },
+  { tag: "/li", attrs: [], isSemantic: true, indent: 5 },
+  { tag: "li", attrs: [], isSemantic: true, indent: 5 },
+  { tag: "a", attrs: ['href="/pricing"'], isSemantic: true, indent: 6, content: "Pricing" },
+  { tag: "/li", attrs: [], isSemantic: true, indent: 5 },
+  { tag: "/ul", attrs: [], isSemantic: true, indent: 4 },
+  { tag: "button", attrs: ['type="button"', 'class="md:hidden"'], isSemantic: true, indent: 4 },
+  { tag: "/button", attrs: [], isSemantic: true, indent: 4 },
+  { tag: "/nav", attrs: [], isSemantic: true, indent: 3 },
+  { tag: "/header", attrs: [], isSemantic: true, indent: 2 },
+  { tag: "main", attrs: [], isSemantic: true, indent: 2 },
+  { tag: "section", attrs: ['class="py-20"'], isSemantic: true, indent: 3 },
+  { tag: "div", attrs: ['class="container"'], isSemantic: false, indent: 4 },
+  { tag: "h1", attrs: ['class="text-4xl font-bold"'], isSemantic: true, indent: 5, content: "Welcome" },
+  { tag: "/h1", attrs: [], isSemantic: true, indent: 5 },
+  { tag: "p", attrs: ['class="text-lg text-gray-600"'], isSemantic: true, indent: 5, content: "Build faster" },
+  { tag: "/p", attrs: [], isSemantic: true, indent: 5 },
+  { tag: "div", attrs: ['class="flex gap-4"'], isSemantic: false, indent: 5 },
+  { tag: "a", attrs: ['href="/signup"', 'class="btn btn-primary"'], isSemantic: true, indent: 6, content: "Get Started" },
+  { tag: "/a", attrs: [], isSemantic: true, indent: 6 },
+  { tag: "a", attrs: ['href="/demo"', 'class="btn btn-secondary"'], isSemantic: true, indent: 6, content: "View Demo" },
+  { tag: "/a", attrs: [], isSemantic: true, indent: 6 },
+  { tag: "/div", attrs: [], isSemantic: false, indent: 5 },
+  { tag: "/div", attrs: [], isSemantic: false, indent: 4 },
+  { tag: "/section", attrs: [], isSemantic: true, indent: 3 },
+  { tag: "section", attrs: ['class="py-20 bg-gray-50"'], isSemantic: true, indent: 3 },
+  { tag: "div", attrs: ['class="container"'], isSemantic: false, indent: 4 },
+  { tag: "h2", attrs: ['class="text-3xl font-bold"'], isSemantic: true, indent: 5, content: "Features" },
+  { tag: "/h2", attrs: [], isSemantic: true, indent: 5 },
+  { tag: "div", attrs: ['class="grid md:grid-cols-3 gap-8"'], isSemantic: false, indent: 5 },
+  { tag: "article", attrs: ['class="p-6 rounded-xl border"'], isSemantic: true, indent: 6 },
+  { tag: "h3", attrs: ['class="text-xl font-semibold"'], isSemantic: true, indent: 7, content: "Fast" },
+  { tag: "/h3", attrs: [], isSemantic: true, indent: 7 },
+  { tag: "p", attrs: ['class="text-gray-600"'], isSemantic: true, indent: 7, content: "Optimized" },
+  { tag: "/p", attrs: [], isSemantic: true, indent: 7 },
+  { tag: "/article", attrs: [], isSemantic: true, indent: 6 },
+  { tag: "/div", attrs: [], isSemantic: false, indent: 5 },
+  { tag: "/div", attrs: [], isSemantic: false, indent: 4 },
+  { tag: "/section", attrs: [], isSemantic: true, indent: 3 },
+  { tag: "section", attrs: ['class="py-20"'], isSemantic: true, indent: 3 },
+  { tag: "div", attrs: ['class="container max-w-md"'], isSemantic: false, indent: 4 },
+  { tag: "form", attrs: ['action="/subscribe"', 'method="POST"'], isSemantic: true, indent: 5 },
+  { tag: "label", attrs: ['for="email"'], isSemantic: true, indent: 6, content: "Email" },
+  { tag: "/label", attrs: [], isSemantic: true, indent: 6 },
+  { tag: "input", attrs: ['type="email"', 'id="email"', 'placeholder="you@example.com"'], isSemantic: true, indent: 6 },
+  { tag: "button", attrs: ['type="submit"'], isSemantic: true, indent: 6, content: "Subscribe" },
+  { tag: "/button", attrs: [], isSemantic: true, indent: 6 },
+  { tag: "/form", attrs: [], isSemantic: true, indent: 5 },
+  { tag: "/div", attrs: [], isSemantic: false, indent: 4 },
+  { tag: "/section", attrs: [], isSemantic: true, indent: 3 },
+  { tag: "section", attrs: ['class="py-20"'], isSemantic: true, indent: 3 },
+  { tag: "div", attrs: ['class="container"'], isSemantic: false, indent: 4 },
+  { tag: "table", attrs: ['class="w-full"'], isSemantic: true, indent: 5 },
+  { tag: "thead", attrs: [], isSemantic: true, indent: 6 },
+  { tag: "tr", attrs: [], isSemantic: true, indent: 7 },
+  { tag: "th", attrs: [], isSemantic: true, indent: 8, content: "Name" },
+  { tag: "/th", attrs: [], isSemantic: true, indent: 8 },
+  { tag: "th", attrs: [], isSemantic: true, indent: 8, content: "Status" },
+  { tag: "/th", attrs: [], isSemantic: true, indent: 8 },
+  { tag: "/tr", attrs: [], isSemantic: true, indent: 7 },
+  { tag: "/thead", attrs: [], isSemantic: true, indent: 6 },
+  { tag: "tbody", attrs: [], isSemantic: true, indent: 6 },
+  { tag: "tr", attrs: [], isSemantic: true, indent: 7 },
+  { tag: "td", attrs: [], isSemantic: true, indent: 8, content: "Alice" },
+  { tag: "/td", attrs: [], isSemantic: true, indent: 8 },
+  { tag: "td", attrs: [], isSemantic: true, indent: 8, content: "Active" },
+  { tag: "/td", attrs: [], isSemantic: true, indent: 8 },
+  { tag: "/tr", attrs: [], isSemantic: true, indent: 7 },
+  { tag: "/tbody", attrs: [], isSemantic: true, indent: 6 },
+  { tag: "/table", attrs: [], isSemantic: true, indent: 5 },
+  { tag: "/div", attrs: [], isSemantic: false, indent: 4 },
+  { tag: "/section", attrs: [], isSemantic: true, indent: 3 },
+  { tag: "footer", attrs: ['class="bg-gray-900 text-white py-12"'], isSemantic: true, indent: 2 },
+  { tag: "div", attrs: ['class="container"'], isSemantic: false, indent: 3 },
+  { tag: "p", attrs: ['class="text-center"'], isSemantic: true, indent: 4, content: "© 2025" },
+  { tag: "/p", attrs: [], isSemantic: true, indent: 4 },
+  { tag: "/div", attrs: [], isSemantic: false, indent: 3 },
+  { tag: "/footer", attrs: [], isSemantic: true, indent: 2 },
+  { tag: "/body", attrs: [], isSemantic: false, indent: 1 },
+  { tag: "/html", attrs: [], isSemantic: false, indent: 0 },
+];
+
+const interactiveTags = new Set(["a", "button", "input", "form", "select", "textarea", "label"]);
+
+function generateHTMLSnippet(startIndex: number, length: number): string {
+  let html = "";
+  for (let i = 0; i < length; i++) {
+    const template = codeTemplates[(startIndex + i) % codeTemplates.length];
+    const indent = "  ".repeat(Math.min(template.indent, 4));
+    const isClosing = template.tag.startsWith("/");
+    const isSelfClosing = ["input", "img", "br", "hr", "meta", "link", "path"].includes(template.tag);
+    
+    html += indent;
+    html += `&lt;`;
+    if (isClosing) {
+      html += `/${template.tag.slice(1)}`;
+    } else {
+      html += `${template.tag}`;
+    }
+    
+    const visibleAttrs = template.attrs.slice(0, 1 + (i % 2));
+    visibleAttrs.forEach(attr => {
+      const eqIndex = attr.indexOf("=");
+      if (eqIndex > 0) {
+        const name = attr.slice(0, eqIndex);
+        const value = attr.slice(eqIndex + 1);
+        const highlightedValue = value.replace(/"/g, '<span class="cw-string">"</span>');
+        html += ` <span class="cw-attr">${name}</span>=<span class="cw-value">${highlightedValue}</span>`;
+      } else {
+        html += ` <span class="cw-attr">${attr}</span>`;
+      }
+    });
+    
+    if (template.attrs.length > visibleAttrs.length) {
+      html += `<span class="cw-attr">...</span>`;
+    }
+    
+    html += `${isSelfClosing ? " /" : ""}&gt;`;
+    
+    if (template.content && !isClosing) {
+      html += `<span class="cw-content">${escapeHtml(template.content)}</span>`;
+      if (!isSelfClosing) {
+        html += `&lt;/${template.tag}&gt;`;
+      }
+    }
+    
+    html += "  ";
+  }
+  return html;
+}
+
+function initCodeWall(): void {
+  const container = document.getElementById("code-wall");
+  if (!container) return;
+
+  const stripCount = 10;
+  const snippetLength = 25;
+  
+  for (let i = 0; i < stripCount; i++) {
+    const strip = document.createElement("div");
+    strip.className = "code-wall-strip";
+    
+    const startOffset = Math.floor(Math.random() * codeTemplates.length);
+    
+    const hasSemantic = codeTemplates.slice(startOffset, startOffset + 5).some(t => t.isSemantic);
+    const hasInteractive = codeTemplates.slice(startOffset, startOffset + 5).some(t => interactiveTags.has(t.tag));
+    
+    if (hasSemantic) {
+      strip.classList.add("is-semantic");
+    }
+    if (hasInteractive) {
+      strip.classList.add("is-interactive");
+    }
+    
+    const content = document.createElement("div");
+    content.className = "code-wall-content";
+    
+    const snippet = generateHTMLSnippet(startOffset, snippetLength);
+    content.innerHTML = snippet;
+    content.setAttribute("data-content", snippet);
+    
+    const y = i * 10;
+    
+    let baseOpacity = 0.2;
+    if (hasInteractive) baseOpacity = 0.4;
+    else if (hasSemantic) baseOpacity = 0.3;
+    
+    const opacity = baseOpacity + Math.random() * 0.1;
+    
+    const duration = 600 + Math.random() * 400;
+    const startOffsetPx = Math.random() * -2000;
+    
+    strip.style.cssText = `
+      --y: ${y}vh;
+      --o: ${opacity};
+      --o-highlight: ${opacity + 0.15};
+      top: var(--y);
+    `;
+    
+    content.style.cssText = `
+      --duration: ${duration}s;
+      --start-offset: ${startOffsetPx}px;
+      --play-state: running;
+      padding-left: var(--start-offset);
+    `;
+    
+    strip.appendChild(content);
+    container.appendChild(strip);
+  }
+}
+
 // ── Init ──
 
 function highlightAllCodeBlocks(): void {
@@ -642,6 +863,7 @@ async function initGitHubStars(): Promise<void> {
 }
 
 async function init(): Promise<void> {
+  initCodeWall();
   initScrollMorph();
   initShowcase();
   initQuickstart();

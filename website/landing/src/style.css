@@ -39,7 +39,7 @@
   --ease-out: cubic-bezier(0, 0, 0.2, 1);
   --duration: 0.15s;
   --duration-slow: 0.2s;
-  --font: "Inter", "Noto Sans JP", system-ui, -apple-system, sans-serif;
+  --font: "Geist", "Noto Sans JP", system-ui, -apple-system, sans-serif;
   --font-mono: "SF Mono", ui-monospace, monospace;
 }
 
@@ -1441,4 +1441,207 @@ footer {
   .floating-tag:nth-child(n+40) {
     display: none;
   }
+}
+
+/* ── Code Wall Background ── */
+
+.code-wall {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 1;
+  font-family: var(--font-mono);
+}
+
+.code-wall-strip {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 10vh;
+  top: var(--y, 0);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  opacity: var(--o, 0.15);
+  white-space: nowrap;
+  filter: blur(1px);
+}
+
+.code-wall-content {
+  display: inline-block;
+  padding-left: var(--start-offset, 0);
+  animation: scroll-code var(--duration, 600s) linear infinite;
+  animation-play-state: var(--play-state, running);
+  font-size: clamp(50px, 7.5vw, 80px);
+}
+
+/* Duplicate content for seamless loop */
+.code-wall-content::after {
+  content: attr(data-content);
+  display: inline-block;
+  padding-left: 4rem;
+}
+
+@keyframes scroll-code {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+/* Syntax highlighting for code wall */
+.code-wall-strip .cw-bracket {
+  color: var(--text-muted);
+  opacity: 0.25;
+}
+
+.code-wall-strip .cw-tag {
+  color: var(--text-muted);
+  opacity: 0.4;
+  font-weight: 400;
+}
+
+.code-wall-strip .cw-attr {
+  color: var(--text-muted);
+  opacity: 0.15;
+}
+
+.code-wall-strip .cw-value {
+  color: var(--text-muted);
+  opacity: 0.1;
+}
+
+.code-wall-strip .cw-string {
+  color: var(--accent);
+  opacity: 0.7;
+}
+
+.code-wall-strip .cw-content {
+  color: var(--text-muted);
+  opacity: 0.35;
+}
+
+/* Highlighted strips */
+.code-wall-strip.is-semantic {
+  opacity: var(--o-highlight, 0.25);
+}
+
+.code-wall-strip.is-semantic .cw-tag {
+  color: var(--text-secondary);
+  opacity: 0.5;
+  font-weight: 500;
+}
+
+.code-wall-strip.is-interactive .cw-tag {
+  color: var(--accent);
+  opacity: 0.6;
+}
+
+/* ── Hero Updates ── */
+
+.hero {
+  position: relative;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: var(--bg-hero);
+  overflow: hidden;
+}
+
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    var(--bg-hero) 0%,
+    transparent 15%,
+    transparent 85%,
+    var(--bg-hero) 100%
+  );
+  z-index: 2;
+  pointer-events: none;
+}
+
+.hero-content {
+  position: relative;
+  z-index: 10;
+  max-width: 1100px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 6rem 2.5rem 5rem;
+  text-align: left;
+}
+
+.hero-title {
+  line-height: 0.9;
+  margin-bottom: 2rem;
+  font-family: var(--font);
+}
+
+.hero-word {
+  display: block;
+  color: var(--text-hero);
+  opacity: 0;
+  transform: translateY(40px);
+  animation: hero-reveal 0.9s var(--ease-out) forwards;
+}
+
+.hero-word-top {
+  font-size: clamp(4rem, 12vw, 9rem);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  color: var(--text-hero);
+  animation-delay: 0.2s;
+}
+
+.hero-word-bottom {
+  font-size: clamp(6rem, 18vw, 14rem);
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-sky) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-top: -0.1em;
+  animation-delay: 0.45s;
+}
+
+@keyframes hero-reveal {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hero-tagline {
+  font-size: clamp(1.1rem, 2vw, 1.35rem);
+  font-weight: 400;
+  color: var(--text-hero-muted);
+  line-height: 1.5;
+  max-width: 520px;
+  margin: 0 0 2.5rem 0;
+  opacity: 0;
+  animation: fade-up 0.6s var(--ease-out) 0.8s forwards;
+}
+
+@keyframes fade-up {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.hero-cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 1rem;
+  opacity: 0;
+  animation: fade-up 0.6s var(--ease-out) 1s forwards;
 }
