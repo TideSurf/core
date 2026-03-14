@@ -657,8 +657,45 @@ async function init(): Promise<void> {
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => {
+  initSlotMachine();
     void init();
   });
 } else {
   void init();
+}
+
+function initSlotMachine() {
+  const track = document.getElementById("install-slot-track");
+  const copyBtn = document.getElementById("install-copy-btn");
+  if (!track || !copyBtn) return;
+
+  const commands = [
+    "bun add @tidesurf/core",
+    "npm i @tidesurf/core",
+    "yarn add @tidesurf/core",
+    "pnpm add @tidesurf/core",
+  ];
+  
+  let currentIndex = 0;
+  const itemHeight = track.firstElementChild?.clientHeight || track.getBoundingClientRect().height / 5 || 24;
+
+  setInterval(() => {
+    currentIndex++;
+    track.style.transition = "transform 0.45s cubic-bezier(0.23, 1, 0.32, 1)";
+    track.style.transform = `translateY(-${currentIndex * itemHeight}px)`;
+
+    const cmdIndex = currentIndex % commands.length;
+    copyBtn.setAttribute("data-copy", commands[cmdIndex]);
+    
+    // Check if the current visible text has changed in translations if applicable, otherwise keep it English
+    // Or we leave text as is since we just shift the div. The copy button holds the actual data to strip.
+
+    if (currentIndex === commands.length) {
+      setTimeout(() => {
+        track.style.transition = "none";
+        track.style.transform = "translateY(0)";
+        currentIndex = 0;
+      }, 500);
+    }
+  }, 3000);
 }
