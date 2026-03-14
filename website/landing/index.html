@@ -32,9 +32,7 @@
         <link rel="stylesheet" href="/src/style.css" />
     </head>
     <body>
-        <canvas id="tide-canvas" class="tide-canvas"></canvas>
-
-        <nav class="nav">
+                <nav class="nav">
             <div class="nav-left">
                 <a href="/" class="nav-logo" aria-label="TideSurf home">
                     <svg class="logo-mark" width="28" height="20" viewBox="0 0 28 20" fill="none">
@@ -124,20 +122,7 @@
         </nav>
 
         <header class="hero">
-            <div class="hero-watermark" aria-hidden="true">
-                <span class="wm-layer">Tide</span>
-                <span class="wm-layer">Tide</span>
-                <span class="wm-layer">Tide</span>
-                <span class="wm-layer">Tide</span>
-                <span class="wm-layer">Tide</span>
-                <span class="wm-layer">Tide</span>
-                <span class="wm-layer">Tide</span>
-                <span class="wm-layer">Tide</span>
-                <span class="wm-layer">Tide</span>
-                <span class="wm-layer">Tide</span>
-            </div>
-            <div class="floating-tags" id="floating-tags"></div>
-            <div class="hero-content">
+                                    <div class="hero-content">
                 <h1 class="hero-title">
                     <span
                         class="hero-word hero-word-1"
@@ -166,14 +151,10 @@
                 </div>
                 <div class="hero-cta">
                     <div class="install-box">
-                        <div class="slot-machine">
-                            <div class="slot-track" id="slot-track">
-                                <code>bun add @tidesurf/core</code>
-                                <code>npm install @tidesurf/core</code>
-                                <code>yarn add @tidesurf/core</code>
-                                <code>pnpm add @tidesurf/core</code>
-                                <code>bun add @tidesurf/core</code>
-                            </div>
+                        <div class="terminal-block">
+                            <span class="prompt" style="color: var(--accent); user-select: none;">$</span>
+                            <code>bun add @tidesurf/core</code>
+                        </div>
                         </div>
                         <button
                             class="copy-btn"
