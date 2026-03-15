@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Live-site token benchmark — compares raw HTML vs TideSurf XML
+ * Live-site token benchmark — compares raw HTML vs TideSurf compressed output
  * on real-world pages to demonstrate compression ratios.
  *
  * Usage: bun scripts/benchmark-live.ts
@@ -50,9 +50,9 @@ async function main() {
       const start = performance.now();
       const state = await surf.getState();
       const ms = performance.now() - start;
-      const tideSurfTokens = estimateTokens(state.xml);
+      const tideSurfTokens = estimateTokens(state.content);
 
-      const interactive = (state.xml.match(/id="[A-Z]\d+"/g) || []).length;
+      const interactive = (state.content.match(/\b[LBISTFD]\d+\b/g) || []).length;
       const ratio = rawTokens / tideSurfTokens;
       const reduction = (1 - tideSurfTokens / rawTokens) * 100;
 

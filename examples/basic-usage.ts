@@ -20,8 +20,8 @@ async function main() {
     // Get compressed page state
     const state = await surfing.getState();
     console.log(`\nPage: ${state.title} (${state.url})`);
-    console.log(`\nCompressed XML (${state.xml.length} chars):`);
-    console.log(state.xml);
+    console.log(`\nCompressed DOM (${state.content.length} chars):`);
+    console.log(state.content);
     console.log(`\nNode map entries: ${state.nodeMap.size}`);
 
     // Use the tool executor (simulating what an LLM agent would do)

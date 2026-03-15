@@ -1,6 +1,6 @@
 # Architecture
 
-TideSurf sits between your LLM agent and a Chromium browser, acting as a bidirectional translator: it compresses the live DOM into token-efficient XML for the agent, and converts the agent's tool calls into browser commands via the Chrome DevTools Protocol (CDP).
+TideSurf sits between your LLM agent and a Chromium browser, acting as a bidirectional translator: it compresses the live DOM into token-efficient text for the agent, and converts the agent's tool calls into browser commands via the Chrome DevTools Protocol (CDP).
 
 ## System overview
 
@@ -24,10 +24,10 @@ TideSurf provides two connection modes:
 
 The information flows through TideSurf in two directions, each with a distinct transformation step:
 
-**Reading (browser → agent):** When the agent requests the page state, TideSurf fetches the live DOM via CDP, walks the tree to strip presentational attributes, collapses redundant nesting, assigns short IDs to interactive elements, and emits a compact XML document. The raw DOM might contain tens of thousands of tokens; the compressed output typically lands between 100 and 800.
+**Reading (browser → agent):** When the agent requests the page state, TideSurf fetches the live DOM via CDP, walks the tree to strip presentational attributes, collapses redundant nesting, assigns short IDs to interactive elements, and emits compact text. The raw DOM might contain tens of thousands of tokens; the compressed output typically lands between 100 and 800.
 
 ```
-Raw web page → Chromium renders → Live DOM → TideSurf compresses → Agent-ready XML
+Raw web page → Chromium renders → Live DOM → TideSurf compresses → Agent-ready text
 ```
 
 **Writing (agent → browser):** When the agent calls a tool like `click("B1")` or `type("I1", "hello")`, TideSurf resolves the short ID to a real DOM node using its internal node map, then executes the corresponding CDP command (dispatching click events, injecting keystrokes, triggering form submissions, etc.).

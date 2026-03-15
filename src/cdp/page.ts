@@ -11,11 +11,12 @@ import type {
 } from "../types.js";
 import * as cdp from "./connection.js";
 import { walkDOM } from "../parser/dom-walker.js";
-import { serializeToXml, wrapPage } from "../parser/xml-serializer.js";
+import { serialize, wrapPage } from "../parser/serializer.js";
 import { markVisibleElements, getScrollPosition } from "./viewport.js";
 import { pruneToFit } from "../parser/token-budget.js";
 import { filterViewportOnly } from "../parser/viewport-filter.js";
 import { filterInteractive, filterMinimal } from "../parser/mode-filter.js";
+import { deduplicateSiblings } from "../parser/dedup.js";
 import { ElementNotFoundError, ValidationError } from "../errors.js";
 import {
   validateUrl,
@@ -69,7 +70,7 @@ export class SurfingPage {
   }
 
   /**
-   * Get compressed page state as XML + nodeMap.
+   * Get compressed page state + nodeMap.
    * @param options - Optional settings (maxTokens for token budgeting)
    * @returns PageState with url, title, xml, and nodeMap
    */
@@ -84,44 +85,63 @@ export class SurfingPage {
       "document.querySelectorAll('[data-os-visible]').forEach(el => el.removeAttribute('data-os-visible'))"
     );
 
-    // 2. Mark visible elements if viewport mode or maxTokens is set
-    if (options?.viewport || options?.maxTokens) {
+    // 2. Viewport defaults to true
+    const useViewport = options?.viewport !== false;
+
+    // 3. Mark visible elements if viewport mode or maxTokens is set
+    if (useViewport || options?.maxTokens) {
       await markVisibleElements(this.conn);
     }
 
-    // 3. Get full DOM
-    const root = await cdp.getFullDOM(this.conn);
+    // 4. Get URL and scroll position before DOM fetch (needed for serialization)
+    const url = await this.getUrl();
+    const title = await this.getTitle();
 
-    // 4. Walk DOM
-    let { nodes, nodeMap } = walkDOM(root);
-
-    // 5. If viewport mode, filter to visible subtrees only
-    if (options?.viewport) {
-      nodes = filterViewportOnly(nodes);
+    let scrollPosition: ScrollPosition | undefined;
+    if (useViewport) {
+      scrollPosition = await getScrollPosition(this.conn);
     }
 
-    // 6. Apply mode filters
+    // 5. Get full DOM
+    const root = await cdp.getFullDOM(this.conn);
+
+    // 6. Walk DOM
+    let { nodes, nodeMap } = walkDOM(root);
+
+    // 6b. Deduplicate repeating sibling patterns
+    nodes = deduplicateSiblings(nodes);
+
+    // 7. If viewport mode, filter to visible subtrees only
+    let aboveSummary: OSNode | undefined;
+    let belowSummary: OSNode | undefined;
+    if (useViewport) {
+      const filtered = filterViewportOnly(nodes);
+      nodes = filtered.nodes;
+      aboveSummary = filtered.aboveSummary;
+      belowSummary = filtered.belowSummary;
+    }
+
+    // 8. Apply mode filters
     if (options?.mode === "interactive") {
       nodes = filterInteractive(nodes);
     } else if (options?.mode === "minimal") {
       nodes = filterMinimal(nodes);
     }
 
-    // 7. If maxTokens, prune to fit budget
+    // 9. Prepend/append off-screen summaries (only in full mode)
+    if (!options?.mode || options.mode === "full") {
+      if (aboveSummary) nodes.unshift(aboveSummary);
+      if (belowSummary) nodes.push(belowSummary);
+    }
+
+    // 10. If maxTokens, prune to fit budget (after summaries so they count)
     if (options?.maxTokens) {
       nodes = pruneToFit(nodes, { maxTokens: options.maxTokens });
     }
 
-    // 8. Serialize
-    const xml = serializeToXml(nodes, 1);
-    const url = await this.getUrl();
-    const title = await this.getTitle();
-
-    // 9. If viewport mode, get scroll position for page wrapper
-    let scrollPosition: ScrollPosition | undefined;
-    if (options?.viewport) {
-      scrollPosition = await getScrollPosition(this.conn);
-    }
+    // 11. Serialize
+    const body = serialize(nodes, 0, url);
+    const content = wrapPage(body, url, title, scrollPosition);
 
     const visibleIds = collectVisibleIds(nodes);
     const filteredNodeMap: NodeMap = new Map();
@@ -138,7 +158,8 @@ export class SurfingPage {
     return {
       url,
       title,
-      xml: wrapPage(xml, url, title, scrollPosition),
+      content,
+      xml: content,
       nodeMap: filteredNodeMap,
     };
   }
@@ -244,7 +265,7 @@ export class SurfingPage {
     validateSearchQuery(query);
     validatePositiveInteger(maxResults, "maxResults");
     const needle = query.trim().toLowerCase();
-    const { nodes, nodeMap } = walkDOM(await cdp.getFullDOM(this.conn));
+    const { nodes, nodeMap } = walkDOM(await cdp.getFullDOM(this.conn), { truncate: false });
     const results: SearchResult[] = [];
 
     const walk = (node: OSNode, parentTag?: string, nearestId?: string): void => {

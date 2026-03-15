@@ -2,164 +2,184 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<link href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { width: 1200px; height: 630px; overflow: hidden; }
 body {
-  background: #09090b;
-  font-family: 'Gothic A1', system-ui, sans-serif;
-  color: white;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  background: #F5F5F5;
+  font-family: 'Inter', system-ui, sans-serif;
+  color: #111;
   position: relative;
 }
 
-/* Grid */
-.grid {
-  position: absolute; inset: 0;
-  background-image:
-    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
-  background-size: 60px 60px;
-}
-
-/* Waves */
-.waves {
+/* ── Code wall background ── */
+.code-wall {
   position: absolute;
-  bottom: 80px;
-  left: 0; right: 0;
-  height: 300px;
+  inset: 0;
   overflow: hidden;
+  font-family: ui-monospace, 'SF Mono', monospace;
+  pointer-events: none;
 }
-.wave {
+.cw-line {
   position: absolute;
-  width: 1400px;
-  left: -100px;
-  height: 200px;
-  fill: none;
-  stroke-linecap: round;
+  left: 0;
+  white-space: nowrap;
+  font-size: 60px;
+  font-weight: 400;
+  color: #000;
 }
-.wave-1 { bottom: 100px; stroke: rgba(255,255,255,0.04); stroke-width: 2; }
-.wave-2 { bottom: 50px; stroke: rgba(255,255,255,0.06); stroke-width: 2.5; }
-.wave-3 { bottom: 0; stroke: rgba(37,99,235,0.15); stroke-width: 3; }
 
-/* Content */
-.content {
+/* ── Vignette (matches hero::before) ── */
+.vignette {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(to bottom, rgba(245,245,245,0.9) 0%, rgba(245,245,245,0.25) 18%, rgba(245,245,245,0.25) 82%, rgba(245,245,245,0.9) 100%),
+    radial-gradient(ellipse 55% 42% at 22% 48%, rgba(245,245,245,0.6) 0%, transparent 70%);
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* ── Content ── */
+.wrap {
   position: relative;
-  z-index: 1;
+  z-index: 3;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 48px 64px;
+  height: 100%;
   display: flex;
   flex-direction: column;
+}
+
+/* Top */
+.top {
+  display: flex;
   align-items: center;
-  gap: 0;
+  gap: 10px;
+}
+.top-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #737373;
 }
 
-.logo {
-  width: 100px;
-  height: 100px;
-  margin-bottom: 28px;
-}
-
+/* Hero */
 .title {
-  font-size: 72px;
-  font-weight: 800;
-  letter-spacing: -3px;
-  line-height: 1;
-  margin-bottom: 12px;
+  font-size: 112px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 0.92;
+  color: #333;
+  margin-top: auto;
 }
 
 .tagline {
-  font-size: 22px;
+  font-size: 21px;
   font-weight: 400;
-  color: #888;
-  margin-bottom: 48px;
+  color: #737373;
+  margin-top: 24px;
 }
 
-.stats {
-  display: flex;
+/* Install */
+.install {
+  margin-top: 28px;
+  display: inline-flex;
   align-items: center;
-  gap: 0;
+  gap: 10px;
+  background: #F5F5F5;
+  border: 1px solid #E5E5E5;
+  border-radius: 8px;
+  padding: 12px 20px;
+  font-family: ui-monospace, 'SF Mono', monospace;
+  font-size: 15px;
+  color: #737373;
+  width: fit-content;
 }
+.install .dollar { color: #0055FF; }
+.install .cmd { color: #111; }
 
+/* Bottom stats */
+.bottom {
+  margin-top: auto;
+  display: flex;
+  align-items: baseline;
+  gap: 44px;
+}
 .stat {
-  text-align: center;
-  padding: 0 36px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
 }
-
-.stat-value {
-  font-size: 36px;
+.stat-val {
+  font-size: 30px;
   font-weight: 700;
-  line-height: 1;
-  color: white;
+  color: #111;
 }
-
-.stat-value.accent { color: #2563eb; }
-
+.stat-val.accent { color: #0055FF; }
 .stat-label {
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 400;
-  color: #666;
-  margin-top: 8px;
+  color: #737373;
 }
-
-.stat-divider {
-  width: 1px;
-  height: 48px;
-  background: #222;
+.stat-dot {
+  width: 3px; height: 3px;
+  border-radius: 50%;
+  background: #ddd;
+  align-self: center;
 }
-
-.url {
-  position: absolute;
-  bottom: 36px;
+.bottom-url {
+  margin-left: auto;
   font-size: 16px;
   font-weight: 500;
-  color: #444;
+  color: #ccc;
 }
 </style>
 </head>
 <body>
-  <div class="grid"></div>
-
-  <svg class="waves" viewBox="0 0 1400 200" preserveAspectRatio="none">
-    <path class="wave wave-1" d="M0 100 C200 30, 400 30, 600 100 C800 170, 1000 170, 1200 100 L1400 100"/>
-    <path class="wave wave-2" d="M0 130 C200 60, 400 60, 600 130 C800 200, 1000 200, 1200 130 L1400 130"/>
-    <path class="wave wave-3" d="M0 160 C200 90, 400 90, 600 160 C800 230, 1000 230, 1200 160 L1400 160"/>
-  </svg>
-
-  <div class="content">
-    <svg class="logo" viewBox="0 0 128 128" fill="none">
-      <rect width="128" height="128" rx="28" fill="#111111" stroke="#222222" stroke-width="1"/>
-      <path d="M24 50 C38 36, 54 36, 64 50 C74 64, 90 64, 104 50" stroke="white" stroke-width="3.5" stroke-linecap="round" opacity="0.1"/>
-      <path d="M24 68 C38 54, 54 54, 64 68 C74 82, 90 82, 104 68" stroke="white" stroke-width="4.5" stroke-linecap="round" opacity="0.25"/>
-      <path d="M24 86 C38 72, 54 72, 64 86 C74 100, 90 100, 104 86" stroke="#2563eb" stroke-width="5.5" stroke-linecap="round"/>
-    </svg>
-    <div class="title">TideSurf</div>
-    <div class="tagline">The web, compressed for AI agents</div>
-    <div class="stats">
-      <div class="stat">
-        <div class="stat-value accent">7.7x</div>
-        <div class="stat-label">compression</div>
-      </div>
-      <div class="stat-divider"></div>
-      <div class="stat">
-        <div class="stat-value">87%</div>
-        <div class="stat-label">reduction</div>
-      </div>
-      <div class="stat-divider"></div>
-      <div class="stat">
-        <div class="stat-value">18ms</div>
-        <div class="stat-label">parse time</div>
-      </div>
-      <div class="stat-divider"></div>
-      <div class="stat">
-        <div class="stat-value">12</div>
-        <div class="stat-label">tools</div>
-      </div>
-    </div>
+  <!-- Code wall background -->
+  <div class="code-wall">
+    <div class="cw-line" style="top: -10px; opacity: 0.07; transform: translateX(-120px);">&lt;div class="header sticky top-0 z-50"&gt; &lt;nav class="mx-auto flex"&gt; &lt;div class="flex lg:flex-1"&gt; &lt;a href="/"&gt;</div>
+    <div class="cw-line" style="top: 55px; opacity: 0.10; transform: translateX(-400px);">&lt;ul class="nav-list"&gt; &lt;li class="nav-item"&gt; &lt;a href="/" class="nav-link active"&gt; Home &lt;/a&gt; &lt;/li&gt;</div>
+    <div class="cw-line" style="top: 120px; opacity: 0.06; transform: translateX(-200px);">&lt;div class="hidden lg:flex lg:gap-x-12"&gt; &lt;a href="/features" class="text-sm"&gt; Features &lt;/a&gt;</div>
+    <div class="cw-line" style="top: 185px; opacity: 0.12; color: #0055FF; transform: translateX(-60px);">&lt;button type="submit" class="btn btn-primary"&gt; Search &lt;/button&gt; &lt;input type="text" placeholder="Search..."&gt;</div>
+    <div class="cw-line" style="top: 250px; opacity: 0.07; transform: translateX(-340px);">&lt;main class="isolate"&gt; &lt;div class="relative px-6 lg:px-8"&gt; &lt;div class="mx-auto max-w-2xl"&gt;</div>
+    <div class="cw-line" style="top: 315px; opacity: 0.09; transform: translateX(-180px);">&lt;h1 class="text-4xl font-bold tracking-tight"&gt; Welcome &lt;/h1&gt; &lt;p class="mt-6 text-lg"&gt;</div>
+    <div class="cw-line" style="top: 380px; opacity: 0.06; transform: translateX(-500px);">&lt;section class="py-20 bg-gray-50"&gt; &lt;div class="container"&gt; &lt;h2 class="text-3xl font-bold"&gt; Features</div>
+    <div class="cw-line" style="top: 445px; opacity: 0.10; color: #0055FF; transform: translateX(-100px);">&lt;form action="/subscribe" method="POST"&gt; &lt;label for="email"&gt; Email &lt;/label&gt; &lt;input type="email"&gt;</div>
+    <div class="cw-line" style="top: 510px; opacity: 0.07; transform: translateX(-280px);">&lt;footer class="bg-gray-900 text-white py-12"&gt; &lt;div class="container"&gt; &lt;p class="text-center"&gt;</div>
+    <div class="cw-line" style="top: 575px; opacity: 0.05; transform: translateX(-420px);">&lt;/div&gt; &lt;/main&gt; &lt;/body&gt; &lt;/html&gt; &lt;div class="flex gap-4"&gt; &lt;a href="/signup"&gt;</div>
   </div>
 
-  <div class="url">tidesurf.org</div>
+  <div class="vignette"></div>
+
+  <div class="wrap">
+    <div class="top">
+      <svg width="24" height="17" viewBox="0 0 28 20" fill="none">
+        <path d="M2 5 C7 1, 11 1, 14 5 C17 9, 21 9, 26 5" stroke="#111" stroke-width="1.4" stroke-linecap="round" opacity="0.1"/>
+        <path d="M2 10 C7 6, 11 6, 14 10 C17 14, 21 14, 26 10" stroke="#111" stroke-width="1.8" stroke-linecap="round" opacity="0.25"/>
+        <path d="M2 15 C7 11, 11 11, 14 15 C17 19, 21 19, 26 15" stroke="#0055FF" stroke-width="2.4" stroke-linecap="round"/>
+      </svg>
+      <span class="top-name">TideSurf</span>
+    </div>
+
+    <div class="title">Surf the Tide</div>
+    <div class="tagline">Your agent does not need eyes to browse.</div>
+
+    <div class="install">
+      <span class="dollar">$</span>
+      <span class="cmd">bun add @tidesurf/core</span>
+    </div>
+
+    <div class="bottom">
+      <div class="stat"><span class="stat-val accent">39x</span><span class="stat-label">compression</span></div>
+      <div class="stat-dot"></div>
+      <div class="stat"><span class="stat-val">97%</span><span class="stat-label">reduction</span></div>
+      <div class="stat-dot"></div>
+      <div class="stat"><span class="stat-val">30ms</span><span class="stat-label">parse</span></div>
+      <span class="bottom-url">tidesurf.org</span>
+    </div>
+  </div>
 </body>
 </html>

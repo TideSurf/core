@@ -33,7 +33,7 @@ This means an agent can open a reference page in one tab, switch to a form in an
 // Example: cross-reference between two pages
 await browser.newTab("https://docs.example.com/api");
 const docsState = await browser.getState();
-// Agent reads API details from docsState.xml
+// Agent reads API details from docsState.content
 
 await browser.switchTab(originalTabId);
 await page.type("I1", valueFromDocs);

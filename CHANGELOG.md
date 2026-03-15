@@ -1,5 +1,61 @@
 # Changelog
 
+## 0.3.0 (2026-03-16)
+
+### New output format
+
+TideSurf's output has been completely rewritten from XML to a compact, markdown-like text format that uses **4-5x fewer tokens** than the previous XML format:
+
+```
+# Page Title
+> example.com/search | 0/3000 800vh
+
+NAV
+  [L1](/) Home
+  [L2](/about) About
+
+FORM F1
+  I1 ~Search... ="TideSurf"
+  [B1] Search
+```
+
+Key changes:
+- Headings use `#`/`##`/`###` markers instead of `<heading>` tags
+- Links: `[L1](/href) text` instead of `<link id="L1" href="/">text</link>`
+- Buttons: `[B1] text` instead of `<button id="B1">text</button>`
+- Inputs: `I1:type ~placeholder ="value"` instead of `<input id="I1" type="text" placeholder="..." />`
+- Structural containers: `NAV`, `FORM F1`, `TABLE T1` on their own line
+- Page wrapper: `# Title` + `> url | scroll` instead of `<page url="..." title="...">`
+- No XML escaping needed (plain text)
+
+### Token optimization pipeline
+
+- **URL compression** — strips tracking params (`utm_*`, `fbclid`, `gclid`), relativizes same-origin URLs, drops protocol, truncates long paths
+- **Text truncation** — body text outside interactive elements and headings is truncated to 60 chars at word boundaries
+- **Sibling deduplication** — runs of 4+ structurally identical siblings (e.g. product cards, search results) are collapsed to 3 examples + a summary like `...17 more (L4-L20)`
+- **Attribute reduction** — removes `name`, `data-testid`, `action` from output; elides `type="text"` (default), `method="get"` (default), and duplicate `aria-label`/`placeholder`
+- **Heading levels preserved** — H1-H6 now emit `h1`-`h6` instead of generic `heading`, enabling `#`/`##`/`###` in output
+- **Conditional structural collapse** — `<section>`, `<article>`, `<aside>` only kept when they have `aria-label` or `role`; `<header>`, `<footer>` only kept when they contain interactive children
+
+### Viewport default
+
+- `getState()` now uses viewport mode by default. Set `viewport: false` for full-page output.
+- Off-screen content is summarized as `ABOVE:` / `BELOW:` lines with interactive element counts
+
+### API changes
+
+- `PageState.content` is the new primary field (`.xml` remains as a deprecated alias, both return the same value)
+- `GetStateOptions.viewport` now defaults to `true`
+
+### Expected impact
+
+| Page type | Before | After | Reduction |
+|---|---|---|---|
+| Simple form | ~150 tok | ~40-60 tok | 60-70% |
+| Search results (10 items) | ~500 tok | ~100-150 tok | 70-80% |
+| E-commerce (20 products) | ~800 tok | ~120-180 tok | 75-85% |
+| News article | ~600 tok | ~80-120 tok | 80-85% |
+
 ## 0.2.3 (2026-03-14)
 
 ### Fixed

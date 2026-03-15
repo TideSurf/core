@@ -25,25 +25,22 @@ const KEEP_TAG_MAP: Record<string, string> = {
   "TD": "cell",
   TH: "cell",
   IMG: "img",
-  H1: "heading",
-  H2: "heading",
-  H3: "heading",
-  H4: "heading",
-  H5: "heading",
-  H6: "heading",
+  H1: "h1",
+  H2: "h2",
+  H3: "h3",
+  H4: "h4",
+  H5: "h5",
+  H6: "h6",
   UL: "list",
   OL: "list",
   LI: "item",
   LABEL: "label",
   DIALOG: "dialog",
   IFRAME: "iframe",
-  SECTION: "section",
-  ARTICLE: "article",
   MAIN: "main",
-  HEADER: "header",
-  FOOTER: "footer",
-  ASIDE: "aside",
 };
+
+const INTERACTIVE_TAGS = new Set(["A", "BUTTON", "INPUT", "SELECT", "TEXTAREA"]);
 
 const ROLE_TAG_MAP: Record<string, string> = {
   button: "button",
@@ -114,6 +111,24 @@ export function classify(
     if (mapped) {
       return { action: "KEEP", mappedTag: mapped };
     }
+  }
+
+  // Conditional structural tags: KEEP only when semantically meaningful
+  if (upper === "SECTION" || upper === "ARTICLE" || upper === "ASIDE") {
+    if (attributes?.["aria-label"] || attributes?.["role"]) {
+      return { action: "KEEP", mappedTag: upper.toLowerCase() };
+    }
+    return { action: "COLLAPSE" };
+  }
+
+  if (upper === "HEADER" || upper === "FOOTER") {
+    const hasInteractiveChild = _children?.some((c) =>
+      INTERACTIVE_TAGS.has(c.nodeName.toUpperCase())
+    );
+    if (hasInteractiveChild) {
+      return { action: "KEEP", mappedTag: upper.toLowerCase() };
+    }
+    return { action: "COLLAPSE" };
   }
 
   // Keep tags

@@ -32,14 +32,14 @@ const translations: Translations = {
   },
   "compare.label": { en: "How it works", ja: "仕組み", ko: "동작 원리" },
   "compare.headline": {
-    en: "XML is all you need.",
-    ja: "XMLさえあればいい。",
-    ko: "XML, 그것이면 충분합니다.",
+    en: "Text is all you need.",
+    ja: "テキストさえあればいい。",
+    ko: "텍스트, 그것이면 충분합니다.",
   },
   "compare.desc": {
-    en: "TideSurf strips wrapper elements, classes, scripts and styles. What's left is clean, semantic XML that any LLM can consume.",
-    ja: "TideSurfはラッパー要素、クラス、スクリプト、スタイルを除去。残るのは、どのLLMでも消費できるクリーンなセマンティックXMLです。",
-    ko: "래퍼 요소, 클래스, 스크립트, 스타일을 모두 걷어내고 LLM이 바로 이해할 수 있는 깔끔한 시맨틱 XML만 남깁니다.",
+    en: "TideSurf strips wrapper elements, classes, scripts and styles. What's left is clean, compact text that any LLM can consume.",
+    ja: "TideSurfはラッパー要素、クラス、スクリプト、スタイルを除去。残るのは、どのLLMでも消費できるクリーンでコンパクトなテキストです。",
+    ko: "래퍼 요소, 클래스, 스크립트, 스타일을 모두 걷어내고 LLM이 바로 이해할 수 있는 깔끔하고 압축된 텍스트만 남깁니다.",
   },
   "compare.nav.label": {
     en: "Navigation",
@@ -63,9 +63,9 @@ const translations: Translations = {
   },
   "compare.raw": { en: "Raw HTML", ja: "生HTML", ko: "원본 HTML" },
   "compare.tidesurf": {
-    en: "TideSurf XML",
-    ja: "TideSurf XML",
-    ko: "TideSurf XML",
+    en: "TideSurf",
+    ja: "TideSurf",
+    ko: "TideSurf",
   },
   "bench.label": { en: "Performance", ja: "パフォーマンス", ko: "성능" },
   "bench.title": {
@@ -75,8 +75,8 @@ const translations: Translations = {
   },
   "bench.stat.peak": {
     en: "Peak compression on GitHub",
-    ja: "GitHubでの最大圧縮率",
-    ko: "GitHub 최대 압축률",
+    ja: "GitHubでの最高圧縮率",
+    ko: "GitHub 최고 압축률",
   },
   "bench.stat.reduction": {
     en: "Token reduction",
@@ -90,9 +90,9 @@ const translations: Translations = {
   },
   "bench.legend.raw": { en: "Raw HTML", ja: "生HTML", ko: "원본 HTML" },
   "bench.legend.tidesurf": {
-    en: "TideSurf XML",
-    ja: "TideSurf XML",
-    ko: "TideSurf XML",
+    en: "TideSurf",
+    ja: "TideSurf",
+    ko: "TideSurf",
   },
   "bench.why.title": {
     en: "Why this matters",
@@ -100,15 +100,15 @@ const translations: Translations = {
     ko: "왜 중요한가",
   },
   "bench.why.body": {
-    en: "Every token your agent reads costs money and eats into the context window. A GitHub page that takes 84,668 tokens raw fits in just 10,968 with TideSurf — that's the difference between one page filling your context and browsing dozens of pages in a single session.",
-    ja: "エージェントが読むトークンにはすべてコストが発生し、コンテキストウィンドウを消費します。生HTMLで84,668トークンのGitHubページがTideSurfでは10,968トークンに収まります。1ページでコンテキストが埋まるか、1セッションで数十ページを閲覧できるかの違いです。",
-    ko: "에이전트가 읽는 모든 토큰에는 비용이 발생하며 컨텍스트 윈도우를 소모합니다. 원본 HTML로 84,668 토큰인 GitHub 페이지가 TideSurf에서는 10,968 토큰으로 줄어듭니다. 한 페이지로 컨텍스트가 가득 차는 것과 한 세션에서 수십 페이지를 탐색하는 것의 차이입니다.",
+    en: "Every token your agent reads costs money and eats into the context window. A GitHub page that takes 84,357 tokens raw fits in just 2,148 with TideSurf — that's 39x compression. Browse dozens of pages in a single session instead of one page filling your context.",
+    ja: "エージェントが読むトークンにはすべてコストが発生し、コンテキストウィンドウを消費します。生HTMLで84,357トークンのGitHubページがTideSurfではわずか2,148トークンに — 39倍の圧縮です。1ページでコンテキストが埋まるか、1セッションで数十ページを閲覧できるかの違いです。",
+    ko: "에이전트가 읽는 모든 토큰에는 비용이 발생하며 컨텍스트 윈도우를 소모합니다. 원본 HTML로 84,357 토큰인 GitHub 페이지가 TideSurf에서는 단 2,148 토큰으로 — 39배 압축됩니다. 한 페이지로 컨텍스트가 가득 차는 것이 아니라 수십 페이지를 탐색할 수 있습니다.",
   },
   "bench.how.title": { en: "How we measure", ja: "測定方法", ko: "측정 방법" },
   "bench.how.body": {
-    en: "We launch headless Chrome, navigate to each site, and compare the full rendered DOM against TideSurf's compressed XML output. Token counts use cl100k_base estimation. No cherry-picking — these are live pages, measured as-is.",
-    ja: "ヘッドレスChromeを起動し、各サイトに遷移して、レンダリング済みDOMとTideSurfの圧縮XMLを比較しています。トークン数はcl100k_base推定を使用しています。意図的な選別はしていません。すべて実際のページをそのまま計測しています。",
-    ko: "헤드리스 Chrome을 실행하여 각 사이트에 접속한 후, 렌더링된 전체 DOM과 TideSurf의 압축 XML 출력을 비교합니다. 토큰 수는 cl100k_base 추정을 사용합니다. 의도적인 선별 없이 실제 페이지를 있는 그대로 측정합니다.",
+    en: "We launch headless Chrome, navigate to each site, and compare the full rendered DOM against TideSurf's compressed output. Token counts use cl100k_base estimation. No cherry-picking — these are live pages, measured as-is.",
+    ja: "ヘッドレスChromeを起動し、各サイトに遷移して、レンダリング済みDOMとTideSurfの圧縮出力を比較しています。トークン数はcl100k_base推定を使用しています。意図的な選別はしていません。すべて実際のページをそのまま計測しています。",
+    ko: "헤드리스 Chrome을 실행하여 각 사이트에 접속한 후, 렌더링된 전체 DOM과 TideSurf의 압축 출력을 비교합니다. 토큰 수는 cl100k_base 추정을 사용합니다. 의도적인 선별 없이 실제 페이지를 있는 그대로 측정합니다.",
   },
   "bench.varies.title": {
     en: "Compression varies",
@@ -116,9 +116,9 @@ const translations: Translations = {
     ko: "압축률은 사이트마다 다릅니다",
   },
   "bench.varies.body": {
-    en: "Heavy sites like GitHub (deep nesting, SVGs, generated classes) compress dramatically. Minimal sites like Hacker News are already lean — TideSurf still strips what it can, but the gains are modest. The more bloated the source, the more TideSurf helps.",
-    ja: "GitHubのように重いサイト（深いネスト、SVG、自動生成クラス）は劇的に圧縮されます。Hacker Newsのような軽量なサイトはすでにシンプルなため、TideSurfの効果は控えめです。ソースが肥大化しているほど、TideSurfの効果は大きくなります。",
-    ko: "GitHub처럼 무거운 사이트(깊은 중첩, SVG, 자동 생성 클래스)는 극적으로 압축됩니다. Hacker News처럼 이미 가벼운 사이트는 효과가 제한적입니다. 원본이 비대할수록 TideSurf의 효과가 커집니다.",
+    en: "Heavy sites like GitHub (deep nesting, SVGs, generated classes) see 39x compression. Even lean sites like Hacker News still achieve 8.5x thanks to the compact output format, URL compression, and text truncation.",
+    ja: "GitHubのように重いサイト（深いネスト、SVG、自動生成クラス）は39倍の圧縮を実現します。Hacker Newsのような軽量なサイトでも、コンパクトな出力形式、URL圧縮、テキスト切り詰めにより8.5倍の圧縮を達成します。",
+    ko: "GitHub처럼 무거운 사이트(깊은 중첩, SVG, 자동 생성 클래스)는 39배 압축됩니다. Hacker News처럼 가벼운 사이트도 압축된 출력 형식, URL 압축, 텍스트 트렁케이션 덕분에 8.5배 압축을 달성합니다.",
   },
   "features.label": { en: "Features", ja: "機能", ko: "기능" },
   "features.title": {
@@ -132,8 +132,8 @@ const translations: Translations = {
     ko: "DOM 압축",
   },
   "feature.compression.desc": {
-    en: "Strips classes, wrapper divs, scripts and styles while preserving interactive elements, semantic structure and text at 100-800 tokens per page",
-    ja: "クラス、ラッパーdiv、スクリプト、スタイルを除去し、インタラクティブ要素と意味構造、テキストを保持。1ページ100-800トークン",
+    en: "Strips classes, wrapper divs, scripts and styles while preserving interactive elements, semantic structure and text at 50-200 tokens per page",
+    ja: "クラス、ラッパーdiv、スクリプト、スタイルを除去し、インタラクティブ要素と意味構造、テキストを保持。1ページ50-200トークン",
     ko: "클래스, 래퍼 div, 스크립트, 스타일을 제거하되 인터랙티브 요소와 시맨틱 구조, 텍스트는 보존합니다.",
   },
   "feature.tools.title": {

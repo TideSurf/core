@@ -1,8 +1,8 @@
 import type { OSNode } from "../types.js";
-import { serializeToXml } from "./xml-serializer.js";
+import { serialize } from "./serializer.js";
 
 /**
- * Estimate the number of tokens in an XML string.
+ * Estimate the number of tokens in a serialized string.
  * Uses a simple heuristic of ~4 characters per token.
  */
 export function estimateTokens(xml: string, charsPerToken: number = 4): number {
@@ -43,7 +43,7 @@ export function pruneToFit(
   const { maxTokens, charsPerToken = 4 } = options;
 
   // Check if already under budget
-  const xml = serializeToXml(nodes, 1);
+  const xml = serialize(nodes, 1);
   if (estimateTokens(xml, charsPerToken) <= maxTokens) {
     return nodes;
   }
@@ -74,7 +74,7 @@ export function pruneToFit(
   for (const item of scored) {
     const tentative = [...kept, item].sort((a, b) => a.originalIndex - b.originalIndex);
     const tentativeNodes = tentative.map((s) => s.node);
-    const tentativeXml = serializeToXml(tentativeNodes, 1);
+    const tentativeXml = serialize(tentativeNodes, 1);
 
     if (estimateTokens(tentativeXml, charsPerToken) <= maxTokens) {
       kept.push(item);

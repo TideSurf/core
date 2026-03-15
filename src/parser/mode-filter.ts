@@ -73,7 +73,7 @@ const LANDMARK_TAGS = new Set([
 /**
  * Count interactive children by prefix type.
  */
-function countInteractiveChildren(
+export function countInteractiveChildren(
   node: OSNode
 ): Record<string, number> {
   const counts: Record<string, number> = {};
@@ -115,7 +115,7 @@ function countInteractiveChildren(
 /**
  * Collect all descendant text content from a subtree.
  */
-function collectText(node: OSNode): string {
+export function collectText(node: OSNode): string {
   const parts: string[] = [];
 
   function walk(n: OSNode): void {
@@ -132,7 +132,7 @@ function collectText(node: OSNode): string {
 /**
  * Build an interactive summary string like "[3 links, 1 button, 2 inputs]".
  */
-function interactiveSummary(counts: Record<string, number>): string {
+export function interactiveSummary(counts: Record<string, number>): string {
   const parts: string[] = [];
   for (const [label, count] of Object.entries(counts)) {
     if (count > 0) {

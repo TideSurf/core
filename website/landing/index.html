@@ -19,7 +19,7 @@
         <meta property="og:type" content="website">
         <meta name="twitter:card" content="summary_large_image">
         <meta name="twitter:title" content="TideSurf">
-        <meta name="twitter:description" content="The web, compressed for AI agents. 7.7x compression, 87% token reduction, 18ms parse time.">
+        <meta name="twitter:description" content="The web, compressed for AI agents. 39x compression, 97% token reduction, 30ms parse time.">
         <meta name="twitter:image" content="https://tidesurf.org/og.png">
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -180,7 +180,7 @@
             <section class="section comparison">
                 <div class="section-header reveal">
                     <span class="section-label">How it works</span>
-                    <h2 class="compare-headline">HTML in, XML out</h2>
+                    <h2 class="compare-headline">HTML in, text out</h2>
                 </div>
 
                 <div class="transform-demo reveal">
@@ -200,11 +200,10 @@
 <span class="x-cut">&lt;/div&gt;</span></code></pre>
                     </div>
                     <div class="code-block">
-                        <div class="code-header"><span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span><span class="code-filename">tidesurf.xml</span><span class="code-badge">4 lines</span></div>
-                        <pre><code>&lt;nav&gt;
-  &lt;link <span class="x-id">id="L1"</span> href="/"&gt;<span class="x-keep">Home</span>&lt;/link&gt;
-  &lt;link <span class="x-id">id="L2"</span> href="/about"&gt;<span class="x-keep">About</span>&lt;/link&gt;
-&lt;/nav&gt;</code></pre>
+                        <div class="code-header"><span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span><span class="code-filename">tidesurf.txt</span><span class="code-badge">3 lines</span></div>
+                        <pre><code>NAV
+  [<span class="x-id">L1</span>](/) <span class="x-keep">Home</span>
+  [<span class="x-id">L2</span>](/about) <span class="x-keep">About</span></code></pre>
                     </div>
                 </div>
             </section>
@@ -213,7 +212,7 @@
             <section class="section benchmarks">
                 <div class="section-header reveal">
                     <span class="section-label">Compression</span>
-                    <h2>Less tokens, less cost</h2>
+                    <h2>Fewer tokens, less cost</h2>
                 </div>
 
                 <div class="bench-duo reveal">
@@ -223,29 +222,24 @@
                             <div class="bench-y"><span>120K</span><span>60K</span><span>0</span></div>
                             <div class="bench-chart-area">
                                 <div class="bench-col">
-                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 68%" data-val="84,668"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 9%" data-val="10,968"></div></div>
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 68%" data-val="84,357"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 2%" data-val="2,148"></div></div>
                                     <span class="bench-col-site">GitHub</span>
-                                    <span class="bench-col-ratio">7.7×</span>
+                                    <span class="bench-col-ratio">39×</span>
                                 </div>
                                 <div class="bench-col">
-                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 100%" data-val="123,631"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 20%" data-val="25,189"></div></div>
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 100%" data-val="123,615"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 7%" data-val="8,564"></div></div>
                                     <span class="bench-col-site">Wiki</span>
-                                    <span class="bench-col-ratio">4.9×</span>
+                                    <span class="bench-col-ratio">14×</span>
                                 </div>
                                 <div class="bench-col">
-                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 38%" data-val="47,489"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 18%" data-val="21,972"></div></div>
-                                    <span class="bench-col-site">Reddit</span>
-                                    <span class="bench-col-ratio">2.2×</span>
-                                </div>
-                                <div class="bench-col">
-                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 20%" data-val="24,919"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 15%" data-val="18,769"></div></div>
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 20%" data-val="24,923"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 2%" data-val="1,535"></div></div>
                                     <span class="bench-col-site">MDN</span>
-                                    <span class="bench-col-ratio">1.3×</span>
+                                    <span class="bench-col-ratio">16×</span>
                                 </div>
                                 <div class="bench-col">
-                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 7%" data-val="8,694"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 6%" data-val="7,364"></div></div>
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 7%" data-val="8,736"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 1%" data-val="1,032"></div></div>
                                     <span class="bench-col-site">HN</span>
-                                    <span class="bench-col-ratio">1.2×</span>
+                                    <span class="bench-col-ratio">8.5×</span>
                                 </div>
                             </div>
                         </div>
@@ -256,29 +250,24 @@
                             <div class="bench-y"><span>$618</span><span>$309</span><span>$0</span></div>
                             <div class="bench-chart-area">
                                 <div class="bench-col">
-                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 68%" data-val="$423"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 9%" data-val="$55"></div></div>
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 68%" data-val="$422"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 2%" data-val="$11"></div></div>
                                     <span class="bench-col-site">GitHub</span>
-                                    <span class="bench-col-save">&minus;$369</span>
+                                    <span class="bench-col-save">&minus;$411</span>
                                 </div>
                                 <div class="bench-col">
-                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 100%" data-val="$618"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 20%" data-val="$126"></div></div>
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 100%" data-val="$618"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 7%" data-val="$43"></div></div>
                                     <span class="bench-col-site">Wiki</span>
-                                    <span class="bench-col-save">&minus;$492</span>
+                                    <span class="bench-col-save">&minus;$575</span>
                                 </div>
                                 <div class="bench-col">
-                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 38%" data-val="$237"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 18%" data-val="$110"></div></div>
-                                    <span class="bench-col-site">Reddit</span>
-                                    <span class="bench-col-save">&minus;$128</span>
-                                </div>
-                                <div class="bench-col">
-                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 20%" data-val="$125"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 15%" data-val="$94"></div></div>
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 20%" data-val="$125"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 2%" data-val="$8"></div></div>
                                     <span class="bench-col-site">MDN</span>
-                                    <span class="bench-col-save">&minus;$31</span>
+                                    <span class="bench-col-save">&minus;$117</span>
                                 </div>
                                 <div class="bench-col">
-                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 7%" data-val="$43"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 6%" data-val="$37"></div></div>
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 7%" data-val="$44"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 1%" data-val="$5"></div></div>
                                     <span class="bench-col-site">HN</span>
-                                    <span class="bench-col-save">&minus;$7</span>
+                                    <span class="bench-col-save">&minus;$39</span>
                                 </div>
                             </div>
                         </div>

@@ -58,7 +58,7 @@ describe("DOM Walker - Shadow DOM", () => {
     const { nodes } = walkDOM(root);
 
     // The heading should be there
-    const heading = nodes.find((n) => n.tag === "heading");
+    const heading = nodes.find((n) => n.tag === "h1");
     expect(heading).toBeDefined();
 
     // The shadow button should be promoted (host COLLAPSEs)
