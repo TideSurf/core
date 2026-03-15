@@ -30,7 +30,7 @@
     --ease-out: cubic-bezier(0, 0, 0.2, 1);
     --duration: 0.15s;
     --duration-slow: 0.2s;
-    --font: "Gothic A1", "Noto Sans JP", system-ui, -apple-system, sans-serif;
+    --font: "Inter", "Noto Sans JP", system-ui, -apple-system, sans-serif;
     --font-mono: "SF Mono", ui-monospace, monospace;
 
     --sidebar-w: 280px;
@@ -715,6 +715,24 @@ main pre code {
     padding: 0;
     font-weight: inherit;
 }
+
+/* ── Syntax Highlighting ── */
+
+.tk-kw { color: #7c3aed; }
+.tk-fn { color: #2563eb; }
+.tk-str { color: #16a34a; }
+.tk-cm { color: #9ca3af; font-style: italic; }
+.tk-num { color: #ea580c; }
+.tk-type { color: #ca8a04; }
+.tk-op { color: #0891b2; }
+
+[data-theme="dark"] .tk-kw { color: #c678dd; }
+[data-theme="dark"] .tk-fn { color: #61afef; }
+[data-theme="dark"] .tk-str { color: #98c379; }
+[data-theme="dark"] .tk-cm { color: #5c6370; }
+[data-theme="dark"] .tk-num { color: #d19a66; }
+[data-theme="dark"] .tk-type { color: #e5c07b; }
+[data-theme="dark"] .tk-op { color: #56b6c2; }
 
 /* ── Tables ── */
 

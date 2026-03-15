@@ -362,6 +362,30 @@ function addCodeCopyButtons(): void {
   });
 }
 
+function highlightCode(): void {
+  const rules: [RegExp, string][] = [
+    [/\/\/.*$/gm, "tk-cm"],
+    [/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g, "tk-str"],
+    [/\b(\d+(?:\.\d+)?)\b/g, "tk-num"],
+    [/\b(const|let|var|import|export|from|await|async|return|if|else|new|function|class|extends|implements|interface|type|enum|throw|try|catch|for|of|in|while|do|switch|case|default|break|continue|void|null|undefined|true|false|this|super)\b/g, "tk-kw"],
+    [/\b([A-Z][A-Za-z0-9]*)\b/g, "tk-type"],
+    [/\.([a-zA-Z_]\w*)\s*\(/g, "tk-fn"],
+  ];
+
+  contentEl.querySelectorAll("pre code").forEach((block) => {
+    let html = block.innerHTML;
+    const saved: string[] = [];
+    // Preserve existing HTML tags
+    html = html.replace(/<[^>]+>/g, (m) => { saved.push(m); return `\x00${saved.length - 1}\x00`; });
+    for (const [re, cls] of rules) {
+      html = html.replace(re, (match) => `<span class="${cls}">${match}</span>`);
+    }
+    // Restore saved tags
+    html = html.replace(/\x00(\d+)\x00/g, (_, i) => saved[Number(i)]);
+    block.innerHTML = html;
+  });
+}
+
 function renderMissingPage(): void {
   const wrapper = document.createElement("div");
   wrapper.className = "error-page";
@@ -392,6 +416,7 @@ function renderPage(pageName: string): void {
   contentEl.replaceChildren(fragment);
 
   addCodeCopyButtons();
+  highlightCode();
 
   document.querySelectorAll(".sidebar-link").forEach((link) => {
     link.classList.toggle("active", link.getAttribute("data-page") === pageName);
