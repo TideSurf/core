@@ -62,14 +62,14 @@ Navigates the active tab to the given URL and waits for the page to load. Throws
 getState(options?: GetStateOptions): Promise<PageState>
 ```
 
-Returns the compressed XML representation of the active tab's DOM. The returned `PageState` object contains an `xml` property with the compressed page content.
+Returns the compressed text representation of the active tab's DOM. The returned `PageState` object contains a `content` property with the compressed page content (`.xml` is a deprecated alias).
 
 **Options:**
 
 | Option | Type | Default | Description |
 |---|---|---|---|
 | `maxTokens` | `number` | unlimited | Maximum token budget for the output |
-| `viewport` | `boolean` | `false` | Only include elements visible in the current viewport |
+| `viewport` | `boolean` | `true` | Only include elements visible in the current viewport |
 | `mode` | `"full" \| "minimal" \| "interactive"` | `"full"` | Output filtering mode |
 
 Modes compose: `getState({ viewport: true, mode: "interactive", maxTokens: 200 })` filters to visible interactive elements, then prunes to 200 tokens.
@@ -152,7 +152,7 @@ Scrolls the page in the given direction. The `amount` parameter is measured in p
 extract(selector: string): Promise<string>
 ```
 
-Extracts the text content of elements matching the given CSS selector. Useful for reading content that isn't included in the compressed XML output, or for targeting specific elements precisely.
+Extracts the text content of elements matching the given CSS selector. Useful for reading content that isn't included in the compressed output, or for targeting specific elements precisely.
 
 ### `navigate(url)`
 
@@ -228,7 +228,7 @@ These 18 tools are returned by `getToolDefinitions()` and can be used with any L
 
 | Tool | Parameters | Description |
 |---|---|---|
-| `get_state` | `maxTokens?`, `viewport?`, `mode?` | Get the compressed page state as XML |
+| `get_state` | `maxTokens?`, `viewport?`, `mode?` | Get the compressed page state |
 | `navigate` | `url` | Navigate to a URL |
 | `click` | `id` | Click an element by its TideSurf ID |
 | `type` | `id`, `text`, `clear?` | Type text into an input field |

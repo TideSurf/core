@@ -19,7 +19,7 @@ const server = Bun.serve({
   },
 });
 
-const surf = await TideSurf.launch({ headless: true });
+const surf = await TideSurf.launch({ headless: true, defaultViewport: { width: 1200, height: 630 } });
 await surf.navigate(`http://localhost:${server.port}/`);
 
 // Wait for fonts

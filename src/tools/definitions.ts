@@ -22,7 +22,7 @@ export function getToolDefinitions(options?: {
     {
       name: "get_state",
       description:
-        "Get the current page state as compressed XML. Returns the page URL, title, and a token-efficient XML representation of the visible DOM. Interactive elements have IDs (L=link, B=button, I=input, S=select) for use with other tools.",
+        "Get the current page state as compressed text. Returns the page URL, title, and a token-efficient representation of the visible DOM. Interactive elements have IDs (L=link, B=button, I=input, S=select) for use with other tools.",
       input_schema: {
         type: "object",
         properties: {

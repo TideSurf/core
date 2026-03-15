@@ -30,7 +30,7 @@ try {
     // The element ID from a previous getState() call is no longer valid,
     // likely because the page content changed — re-fetch state and retry
     const freshState = await browser.getState();
-    // ... find the right element in freshState.xml and try again
+    // ... find the right element in freshState.content and try again
   } else if (err instanceof CDPTimeoutError) {
     // The operation took too long — the page may be unresponsive
     // or loading a heavy resource

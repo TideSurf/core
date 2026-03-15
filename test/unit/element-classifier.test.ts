@@ -114,17 +114,17 @@ describe("classify", () => {
       });
     });
 
-    it("keeps H1 as heading", () => {
+    it("keeps H1 as h1", () => {
       expect(classify("H1")).toEqual({
         action: "KEEP",
-        mappedTag: "heading",
+        mappedTag: "h1",
       });
     });
 
-    it("keeps H6 as heading", () => {
+    it("keeps H6 as h6", () => {
       expect(classify("H6")).toEqual({
         action: "KEEP",
-        mappedTag: "heading",
+        mappedTag: "h6",
       });
     });
 
@@ -179,25 +179,68 @@ describe("classify", () => {
   });
 
   describe("semantic landmarks", () => {
-    it("keeps SECTION as section", () => {
-      expect(classify("SECTION")).toEqual({
+    it("collapses SECTION without aria-label", () => {
+      expect(classify("SECTION")).toEqual({ action: "COLLAPSE" });
+    });
+
+    it("keeps SECTION with aria-label", () => {
+      expect(classify("SECTION", { "aria-label": "Features" })).toEqual({
         action: "KEEP",
         mappedTag: "section",
       });
     });
 
-    it("keeps ARTICLE as article", () => {
-      expect(classify("ARTICLE")).toEqual({
+    it("collapses ARTICLE without aria-label or role", () => {
+      expect(classify("ARTICLE")).toEqual({ action: "COLLAPSE" });
+    });
+
+    it("keeps ARTICLE with role", () => {
+      expect(classify("ARTICLE", { role: "article" })).toEqual({
         action: "KEEP",
         mappedTag: "article",
       });
     });
 
-    it("keeps MAIN, HEADER, FOOTER, and ASIDE", () => {
+    it("collapses ASIDE without aria-label", () => {
+      expect(classify("ASIDE")).toEqual({ action: "COLLAPSE" });
+    });
+
+    it("keeps ASIDE with aria-label", () => {
+      expect(classify("ASIDE", { "aria-label": "Sidebar" })).toEqual({
+        action: "KEEP",
+        mappedTag: "aside",
+      });
+    });
+
+    it("keeps MAIN always", () => {
       expect(classify("MAIN")).toEqual({ action: "KEEP", mappedTag: "main" });
-      expect(classify("HEADER")).toEqual({ action: "KEEP", mappedTag: "header" });
-      expect(classify("FOOTER")).toEqual({ action: "KEEP", mappedTag: "footer" });
-      expect(classify("ASIDE")).toEqual({ action: "KEEP", mappedTag: "aside" });
+    });
+
+    it("collapses HEADER without interactive children", () => {
+      expect(
+        classify("HEADER", {}, [
+          { nodeName: "DIV" },
+          { nodeName: "SPAN" },
+        ])
+      ).toEqual({ action: "COLLAPSE" });
+    });
+
+    it("keeps HEADER with interactive child A", () => {
+      expect(
+        classify("HEADER", {}, [
+          { nodeName: "A", attributes: ["href", "/"] },
+        ])
+      ).toEqual({ action: "KEEP", mappedTag: "header" });
+    });
+
+    it("collapses FOOTER without interactive children", () => {
+      expect(classify("FOOTER", {}, [])).toEqual({ action: "COLLAPSE" });
+    });
+
+    it("keeps FOOTER with interactive child BUTTON", () => {
+      expect(
+        classify("FOOTER", {}, [{ nodeName: "BUTTON" }])
+      ).toEqual({ action: "KEEP", mappedTag: "footer" });
     });
   });
 });

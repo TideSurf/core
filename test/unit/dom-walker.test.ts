@@ -109,7 +109,7 @@ describe("walkDOM", () => {
     const { nodes } = walkDOM(root);
 
     expect(nodes).toHaveLength(1);
-    expect(nodes[0].tag).toBe("heading");
+    expect(nodes[0].tag).toBe("h1");
     expect(nodes[0].children).toHaveLength(1);
     expect(nodes[0].children[0].text).toBe("Hello World");
   });

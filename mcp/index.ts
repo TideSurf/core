@@ -81,7 +81,7 @@ server.registerTool(
   "get_state",
   {
     description:
-      "Get the current page as compressed XML. Interactive elements have IDs (L=link, B=button, I=input, S=select) for use with click/type/select.",
+      "Get the current page as compressed text. Interactive elements have IDs (L=link, B=button, I=input, S=select) for use with click/type/select.",
     inputSchema: {
       maxTokens: z.number().optional().describe("Token budget — prunes low-priority elements to fit"),
       viewport: z.boolean().optional().describe("Only include visible viewport elements"),
@@ -95,7 +95,7 @@ server.registerTool(
       ...(viewport ? { viewport } : {}),
       ...(mode ? { mode } : {}),
     });
-    return text(state.xml);
+    return text(state.content);
   }
 );
 
@@ -112,7 +112,7 @@ if (!readOnly) {
       const s = await browser();
       await s.navigate(url);
       const state = await s.getState();
-      return text(state.xml);
+      return text(state.content);
     }
   );
 

@@ -2,7 +2,7 @@
 
 ## What is this?
 
-TideSurf is a TypeScript library that connects Chromium to LLM agents. It launches Chrome via CDP, walks the live DOM, compresses it into token-efficient XML (100–800 tokens per page), and exposes tool definitions for LLM function calling. Ships with an MCP adapter for Claude Code.
+TideSurf is a TypeScript library that connects Chromium to LLM agents. It launches Chrome via CDP, walks the live DOM, compresses it into a token-efficient markdown-like format (50–200 tokens per page), and exposes tool definitions for LLM function calling. Ships with an MCP adapter for Claude Code.
 
 ## Architecture
 
@@ -26,8 +26,10 @@ src/
 │   ├── dom-walker.ts    # Recursive DOM traversal (shadow DOM + iframes)
 │   ├── element-classifier.ts  # KEEP / COLLAPSE / DISCARD per element
 │   ├── id-assigner.ts   # Assigns L/B/I/S IDs to interactive elements
-│   ├── xml-serializer.ts # OSNode → compressed XML string
-│   └── token-budget.ts  # Token estimation + priority-based pruning
+│   ├── serializer.ts     # OSNode → compact markdown-like text
+│   ├── url-compressor.ts # URL compression (strip tracking, relativize, truncate)
+│   ├── dedup.ts          # Sibling pattern deduplication
+│   └── token-budget.ts   # Token estimation + priority-based pruning
 ├── tools/
 │   ├── definitions.ts   # 18 tool definitions for LLM function calling
 │   └── executor.ts      # Tool execution engine
@@ -60,6 +62,6 @@ bun run test:all         # All tests
 - **ID scheme** — Interactive elements get prefix-based IDs: `L` (links), `B` (buttons), `I` (inputs), `S` (selects). These are stable within a single getState() call.
 - **Token budgeting** — `getState({ maxTokens })` prunes low-priority elements to fit a budget. Priority: interactive > visible text > structural.
 - **Auto-connect** — `TideSurf.connect()` attaches to an already-running Chrome instead of spawning one. Uses `discoverBrowser()` to probe CDP on a given port. When auto-connected, `close()` only disconnects CDP — it never kills the external process.
-- **Output modes** — `getState({ mode })` supports `"full"`, `"minimal"` (landmarks + summaries), and `"interactive"` (only elements with IDs). Viewport mode (`viewport: true`) filters to visible elements only.
+- **Output modes** — `getState({ mode })` supports `"full"`, `"minimal"` (landmarks + summaries), and `"interactive"` (only elements with IDs). Viewport mode is on by default (`viewport: false` for full page).
 - **Read-only mode** — `readOnly: true` disables write tools. Agent can observe but not interact.
 - **MCP as optional** — `@modelcontextprotocol/sdk` and `zod` are `optionalDependencies`. The CLI `mcp` subcommand dynamically imports them.

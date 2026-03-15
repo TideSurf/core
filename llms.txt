@@ -2,7 +2,7 @@
 
 > The connector between Chromium and LLM agents — no screenshots, no vision models, just the DOM compressed for machines.
 
-TideSurf launches Chrome via CDP, walks the live DOM, and compresses it into token-efficient XML (100–800 tokens per page vs 5,000–50,000+ for raw HTML). Interactive elements get stable IDs (L=link, B=button, I=input, S=select) so agents can act on them. Ships with 18 tool definitions and an MCP adapter.
+TideSurf launches Chrome via CDP, walks the live DOM, and compresses it into a token-efficient markdown-like format (50–200 tokens per page vs 5,000–50,000+ for raw HTML). Interactive elements get stable IDs (L=link, B=button, I=input, S=select) so agents can act on them. Ships with 18 tool definitions and an MCP adapter.
 
 ## Install
 
@@ -19,7 +19,7 @@ const browser = await TideSurf.launch();
 await browser.navigate("https://example.com");
 
 const state = await browser.getState();
-console.log(state.xml);
+console.log(state.content);
 
 const page = browser.getPage();
 await page.click("B1");

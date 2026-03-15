@@ -62,27 +62,27 @@ describeBrowser("Browser integration", () => {
 
     expect(state.url).toContain("data:text/html");
     expect(state.title).toBe("Test Page");
-    expect(state.xml).toContain("<page");
-    expect(state.xml).toContain("</page>");
+    expect(state.content).toContain("# ");
+    expect(state.content).toContain(">");
 
     // Should contain interactive elements with IDs
-    expect(state.xml).toContain("L1");
-    expect(state.xml).toContain("B1");
-    expect(state.xml).toContain("I1");
+    expect(state.content).toContain("L1");
+    expect(state.content).toContain("B1");
+    expect(state.content).toContain("I1");
 
     // Should NOT contain scripts
-    expect(state.xml).not.toContain("alert");
-    expect(state.xml).not.toContain("<script");
+    expect(state.content).not.toContain("alert");
+    expect(state.content).not.toContain("<script");
 
     // Should NOT contain aria-hidden content
-    expect(state.xml).not.toContain("Hidden content");
+    expect(state.content).not.toContain("Hidden content");
   }, 15000);
 
   it("clicks a button", async () => {
     await surfing.navigate(fixtureUrls["interactive.html"]);
     const state = await surfing.getState();
 
-    expect(state.xml).toContain("button");
+    expect(state.content).toContain("[B1]");
 
     const page = surfing.getPage();
     await page.click("B1");
@@ -130,7 +130,7 @@ describeBrowser("Browser integration", () => {
 
     expect(result.success).toBe(true);
     expect(typeof result.data).toBe("string");
-    expect(result.data as string).toContain("<page");
+    expect(result.data as string).toContain("# ");
   }, 15000);
 
   it("search returns nearest interactive element IDs", async () => {
@@ -148,11 +148,11 @@ describeBrowser("Browser integration", () => {
   it("viewport mode keeps visible shadow and iframe content", async () => {
     await surfing.navigate(fixtureUrls["shadow.html"]);
     const shadowState = await surfing.getState({ viewport: true });
-    expect(shadowState.xml).toContain("Shadow Button");
+    expect(shadowState.content).toContain("Shadow Button");
 
     await surfing.navigate(fixtureUrls["iframe-parent.html"]);
     const iframeState = await surfing.getState({ viewport: true });
-    expect(iframeState.xml).toContain("Child Link");
+    expect(iframeState.content).toContain("Child Link");
   }, 15000);
 
   it("closing the initial active tab keeps the session usable", async () => {
@@ -200,7 +200,7 @@ describeBrowser("Browser integration", () => {
     await surfing.navigate(fixtureUrls["interactive.html"]);
     const state = await surfing.getState({ mode: "minimal" });
 
-    expect(state.xml).not.toContain('id="B1"');
+    expect(state.content).not.toContain("B1");
     expect(state.nodeMap.has("B1")).toBe(false);
 
     const page = surfing.getPage();

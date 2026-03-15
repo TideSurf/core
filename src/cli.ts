@@ -17,7 +17,7 @@ function printUsage() {
   console.log(`tidesurf — DOM compression for LLM agents
 
 Usage:
-  tidesurf inspect <url> [options]   Navigate to a URL and print compressed XML
+  tidesurf inspect <url> [options]   Navigate to a URL and print compressed DOM
   tidesurf mcp [options]             Start the MCP server over stdio
   tidesurf --help                    Show this help
 
@@ -82,7 +82,7 @@ async function inspect() {
   try {
     await browser.navigate(url);
     const state = await browser.getState(maxTokens ? { maxTokens } : undefined);
-    console.log(state.xml);
+    console.log(state.content);
   } finally {
     await browser.close();
   }
@@ -157,7 +157,7 @@ async function mcp() {
   // --- Page tools ---
 
   server.registerTool("get_state", {
-    description: "Get the current page as compressed XML. Interactive elements have IDs (L=link, B=button, I=input, S=select) for use with click/type/select.",
+    description: "Get the current page as compressed text. Interactive elements have IDs (L=link, B=button, I=input, S=select) for use with click/type/select.",
     inputSchema: {
       maxTokens: z.number().optional().describe("Token budget — prunes low-priority elements to fit"),
       viewport: z.boolean().optional().describe("Only include visible viewport elements"),
@@ -170,7 +170,7 @@ async function mcp() {
       ...(viewport ? { viewport } : {}),
       ...(mode ? { mode } : {}),
     });
-    return text(state.xml);
+    return text(state.content);
   });
 
   if (!readOnly) {
@@ -181,7 +181,7 @@ async function mcp() {
       const s = await browser();
       await s.navigate(url);
       const state = await s.getState();
-      return text(state.xml);
+      return text(state.content);
     });
 
     server.registerTool("click", {

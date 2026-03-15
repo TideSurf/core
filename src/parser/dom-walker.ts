@@ -13,8 +13,6 @@ const PASS_THROUGH_ATTRS = new Set([
   "placeholder",
   "value",
   "type",
-  "name",
-  "action",
   "method",
   "target",
   "disabled",
@@ -33,7 +31,6 @@ const PASS_THROUGH_ATTRS = new Set([
   "aria-selected",
   "aria-checked",
   "aria-disabled",
-  "data-testid",
 ]);
 
 export interface WalkResult {
@@ -41,14 +38,32 @@ export interface WalkResult {
   nodeMap: NodeMap;
 }
 
+interface WalkContext {
+  insideInteractive: boolean;
+  insideHeading: boolean;
+}
+
+const HEADING_TAGS = new Set(["h1", "h2", "h3", "h4", "h5", "h6", "heading"]);
+const TEXT_TRUNCATE_LIMIT = 60;
+
+function truncateText(text: string, limit: number): string {
+  if (text.length <= limit) return text;
+  const cut = text.lastIndexOf(" ", limit);
+  const end = cut > 0 ? cut : limit;
+  return text.slice(0, end) + "...";
+}
+
 /**
- * Walk a CDP DOM tree and produce compressed OSNode tree + nodeMap
+ * Walk a CDP DOM tree and produce compressed OSNode tree + nodeMap.
+ * @param truncate - Set false to disable text truncation (e.g. for search)
  */
-export function walkDOM(root: CDPNode): WalkResult {
+export function walkDOM(root: CDPNode, options?: { truncate?: boolean }): WalkResult {
   const assigner = new IDAssigner();
   const nodeMap: NodeMap = new Map();
+  const doTruncate = options?.truncate !== false;
+  const ctx: WalkContext = { insideInteractive: false, insideHeading: false };
 
-  const nodes = walkChildren(root.children ?? [], assigner, nodeMap);
+  const nodes = walkChildren(root.children ?? [], assigner, nodeMap, ctx, doTruncate);
   const cleaned = postProcess(nodes);
 
   return { nodes: cleaned, nodeMap };
@@ -57,12 +72,17 @@ export function walkDOM(root: CDPNode): WalkResult {
 function walkNode(
   node: CDPNode,
   assigner: IDAssigner,
-  nodeMap: NodeMap
+  nodeMap: NodeMap,
+  ctx: WalkContext,
+  doTruncate: boolean
 ): OSNode[] {
   // Text nodes
   if (node.nodeType === 3) {
-    const text = (node.nodeValue ?? "").trim();
+    let text = (node.nodeValue ?? "").trim();
     if (!text) return [];
+    if (doTruncate && !ctx.insideInteractive && !ctx.insideHeading) {
+      text = truncateText(text, TEXT_TRUNCATE_LIMIT);
+    }
     return [{ tag: "#text", attributes: {}, children: [], text }];
   }
 
@@ -82,12 +102,12 @@ function walkNode(
 
   if (result.action === "COLLAPSE") {
     // Promote children
-    const promoted = walkChildren(children, assigner, nodeMap);
+    const promoted = walkChildren(children, assigner, nodeMap, ctx, doTruncate);
     // Also walk shadow roots if present
     if (node.shadowRoots) {
       for (const shadowRoot of node.shadowRoots) {
         promoted.push(
-          ...walkChildren(shadowRoot.children ?? [], assigner, nodeMap)
+          ...walkChildren(shadowRoot.children ?? [], assigner, nodeMap, ctx, doTruncate)
         );
       }
     }
@@ -112,7 +132,9 @@ function walkNode(
       const iframeChildren = walkChildren(
         node.contentDocument.children ?? [],
         assigner,
-        nodeMap
+        nodeMap,
+        ctx,
+        doTruncate
       );
       return [
         {
@@ -151,14 +173,35 @@ function walkNode(
     }
   }
 
+  // Elide default/redundant attributes
+  if (tag === "input" && filteredAttrs["type"] === "text") {
+    delete filteredAttrs["type"];
+  }
+  if (tag === "form" && filteredAttrs["method"]?.toLowerCase() === "get") {
+    delete filteredAttrs["method"];
+  }
+  if (
+    filteredAttrs["aria-label"] &&
+    filteredAttrs["placeholder"] &&
+    filteredAttrs["aria-label"] === filteredAttrs["placeholder"]
+  ) {
+    delete filteredAttrs["aria-label"];
+  }
+
+  // Build child context
+  const childCtx: WalkContext = {
+    insideInteractive: ctx.insideInteractive || !!id,
+    insideHeading: ctx.insideHeading || HEADING_TAGS.has(tag),
+  };
+
   // Walk regular children
-  const osChildren = walkChildren(children, assigner, nodeMap);
+  const osChildren = walkChildren(children, assigner, nodeMap, childCtx, doTruncate);
 
   // Walk shadow roots and merge shadow children into host's children
   if (node.shadowRoots) {
     for (const shadowRoot of node.shadowRoots) {
       osChildren.push(
-        ...walkChildren(shadowRoot.children ?? [], assigner, nodeMap)
+        ...walkChildren(shadowRoot.children ?? [], assigner, nodeMap, childCtx, doTruncate)
       );
     }
   }
@@ -180,11 +223,13 @@ function walkNode(
 function walkChildren(
   children: CDPNode[],
   assigner: IDAssigner,
-  nodeMap: NodeMap
+  nodeMap: NodeMap,
+  ctx: WalkContext,
+  doTruncate: boolean
 ): OSNode[] {
   const result: OSNode[] = [];
   for (const child of children) {
-    result.push(...walkNode(child, assigner, nodeMap));
+    result.push(...walkNode(child, assigner, nodeMap, ctx, doTruncate));
   }
   return result;
 }

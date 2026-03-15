@@ -1,6 +1,6 @@
 # Page format
 
-When you call `getState()`, TideSurf walks the live DOM tree, strips away everything an LLM doesn't need, and produces a compact XML document that preserves only the parts that matter: interactive elements, semantic structure, and visible text.
+When you call `getState()`, TideSurf walks the live DOM tree, strips away everything an LLM doesn't need, and produces a compact text representation that preserves only the parts that matter: interactive elements, semantic structure, and visible text.
 
 ## Before and after
 
@@ -27,17 +27,17 @@ Consider a typical page fragment with navigation and a search form. The raw HTML
 
 TideSurf compresses this into a handful of tokens while retaining everything an agent needs to understand and interact with the page:
 
-```xml
-<page url="https://example.com/search" title="Example Search">
-  <nav>
-    <link id="L1" href="/">Home</link>
-    <link id="L2" href="/about">About</link>
-  </nav>
-  <form id="F1" action="/search">
-    <input id="I1" type="text" value="TideSurf" placeholder="Search..." />
-    <button id="B1" type="submit">Search</button>
-  </form>
-</page>
+```
+# Example Search
+> example.com/search
+
+NAV
+  [L1](/) Home
+  [L2](/about) About
+
+FORM F1
+  I1 ~Search... ="TideSurf"
+  [B1] Search
 ```
 
 ## Element ID scheme
@@ -71,10 +71,10 @@ TideSurf applies a clear set of rules to decide what stays and what goes:
 
 ## Special cases
 
-**Images** are preserved as `<img>` with their `alt` text, but `src` is omitted to save tokens — the alt text is usually sufficient for an LLM to understand what the image represents.
+**Images** are preserved as `[img: alt text]`, but `src` is omitted to save tokens — the alt text is usually sufficient for an LLM to understand what the image represents.
 
 **Shadow DOM** is pierced automatically, so elements inside web components appear in the output as if they were part of the regular DOM tree.
 
-**Cross-origin iframes** cannot be accessed due to browser security restrictions and appear as `<iframe status="inaccessible" />` in the output.
+**Cross-origin iframes** cannot be accessed due to browser security restrictions and appear as `[iframe: inaccessible]` in the output.
 
-**Headings** maintain their hierarchy (`<heading>` tag) to give the LLM a sense of page structure and content organization.
+**Headings** maintain their hierarchy using markdown heading markers (`#`, `##`, `###`) to give the LLM a sense of page structure and content organization.

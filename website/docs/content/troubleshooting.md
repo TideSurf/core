@@ -82,8 +82,8 @@ Shadow DOM is pierced automatically by default. If you're not seeing shadow DOM 
 
 Iframes that load content from a different origin are subject to the browser's same-origin policy and cannot be accessed by TideSurf. These appear in the output as:
 
-```xml
-<iframe status="inaccessible" />
+```
+[iframe: inaccessible]
 ```
 
 This is a fundamental browser security boundary. Same-origin iframes are accessed and compressed normally.

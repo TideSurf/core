@@ -49,6 +49,8 @@ export type NodeMap = Map<string, number>;
 export interface PageState {
   url: string;
   title: string;
+  content: string;
+  /** @deprecated Use `content` instead */
   xml: string;
   nodeMap: NodeMap;
 }
@@ -58,7 +60,7 @@ export interface PageState {
  */
 export interface GetStateOptions {
   maxTokens?: number;
-  /** Only include elements visible in the current viewport */
+  /** Only include elements visible in the current viewport. Defaults to true. Set false for full page. */
   viewport?: boolean;
   /** Output mode: "full" (default), "minimal" (landmarks + summaries), "interactive" (only elements with IDs) */
   mode?: "full" | "minimal" | "interactive";

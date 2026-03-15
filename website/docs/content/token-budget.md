@@ -1,6 +1,6 @@
 # Token budget
 
-Complex web pages can produce XML output that's larger than what you want to send to your LLM, especially for token-constrained models or high-frequency agent loops where cost matters. The `maxTokens` parameter lets you set an upper bound on output size, and TideSurf will intelligently prune the page to fit within that budget.
+Complex web pages can produce output that's larger than what you want to send to your LLM, especially for token-constrained models or high-frequency agent loops where cost matters. The `maxTokens` parameter lets you set an upper bound on output size, and TideSurf will intelligently prune the page to fit within that budget.
 
 ## Setting a budget
 
@@ -10,7 +10,7 @@ Pass `maxTokens` to `getState()` to cap the output:
 const state = await browser.getState({ maxTokens: 500 });
 ```
 
-If the full page XML would exceed 500 tokens, TideSurf starts removing content — beginning with the least important elements — until the output fits within the budget.
+If the full page output would exceed 500 tokens, TideSurf starts removing content — beginning with the least important elements — until the output fits within the budget.
 
 ## How TideSurf prioritizes content
 
@@ -26,19 +26,19 @@ Within each priority tier, elements closer to the top of the page take precedenc
 
 ## Truncation indicator
 
-When TideSurf removes elements to meet the token budget, it appends a `<truncated>` tag at the end of the output so the LLM knows that additional content exists beyond what's shown:
+When TideSurf removes elements to meet the token budget, it appends a truncation indicator at the end of the output so the LLM knows that additional content exists beyond what's shown:
 
-```xml
-<page url="https://example.com" title="Example">
-  <nav>
-    <link id="L1" href="/">Home</link>
-  </nav>
-  <button id="B1">Sign up</button>
-  <truncated count="12" />
-</page>
+```
+# Example
+> example.com
+
+NAV
+  [L1](/) Home
+[B1] Sign up
+[...12 more sections truncated]
 ```
 
-The `count` attribute indicates how many top-level subtrees were removed. This gives the agent the option to request a larger budget on the next call, or to scroll down and get a different view of the page.
+The number indicates how many top-level sections were removed. This gives the agent the option to request a larger budget on the next call, or to scroll down and get a different view of the page.
 
 ## Choosing the right budget
 

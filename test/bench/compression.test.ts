@@ -31,8 +31,8 @@ interface BenchResult {
 
 const results: BenchResult[] = [];
 
-function countInteractiveIds(xml: string): number {
-  const matches = xml.match(/id="[A-Z]\d+"/g);
+function countInteractiveIds(content: string): number {
+  const matches = content.match(/\b[LBISTFD]\d+\b/g);
   return matches ? matches.length : 0;
 }
 
@@ -164,8 +164,8 @@ describeBench("Compression benchmarks", () => {
 
       // Get TideSurf compressed state
       const state = await surfing.getState();
-      const osTokens = estimateTokens(state.xml);
-      const interactiveElements = countInteractiveIds(state.xml);
+      const osTokens = estimateTokens(state.content);
+      const interactiveElements = countInteractiveIds(state.content);
 
       results.push({
         page: page.name,
@@ -184,12 +184,12 @@ describeBench("Compression benchmarks", () => {
       expect(interactiveElements).toBeGreaterThan(0);
 
       // Verify no data/style/script noise leaked
-      expect(state.xml).not.toContain("data-tracking");
-      expect(state.xml).not.toContain("data-product-id");
-      expect(state.xml).not.toContain("font-family");
-      expect(state.xml).not.toContain("<script");
-      expect(state.xml).not.toContain("<style");
-      expect(state.xml).not.toContain("google");
+      expect(state.content).not.toContain("data-tracking");
+      expect(state.content).not.toContain("data-product-id");
+      expect(state.content).not.toContain("font-family");
+      expect(state.content).not.toContain("<script");
+      expect(state.content).not.toContain("<style");
+      expect(state.content).not.toContain("google");
     }, 15000);
   }
 
@@ -199,18 +199,18 @@ describeBench("Compression benchmarks", () => {
     const full = await surfing.getState();
     const budgeted = await surfing.getState({ maxTokens: 300 });
 
-    const fullTokens = estimateTokens(full.xml);
-    const budgetedTokens = estimateTokens(budgeted.xml);
+    const fullTokens = estimateTokens(full.content);
+    const budgetedTokens = estimateTokens(budgeted.content);
 
     console.log(
       `\n  Token budget: ${fullTokens} tok → ${budgetedTokens} tok (budget: 300)`
     );
 
     expect(budgetedTokens).toBeLessThanOrEqual(350); // approximate
-    expect(budgeted.xml).toContain("<page");
-    expect(countInteractiveIds(budgeted.xml)).toBeGreaterThan(0);
+    expect(budgeted.content).toContain("# ");
+    expect(countInteractiveIds(budgeted.content)).toBeGreaterThan(0);
     // Should have truncated indicator
-    expect(budgeted.xml).toContain("truncated");
+    expect(budgeted.content).toContain("truncated");
   }, 15000);
 
   it("speed: getState < 500ms average", async () => {

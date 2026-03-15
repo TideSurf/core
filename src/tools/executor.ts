@@ -50,13 +50,13 @@ export function createToolExecutor(
             | "interactive"
             | undefined;
           const state = await instance.getState({ maxTokens, viewport, mode });
-          return { success: true, data: state.xml };
+          return { success: true, data: state.content };
         }
         case "navigate": {
           const url = tool.input["url"] as string;
           await page.navigate(url);
           const state = await instance.getState();
-          return { success: true, data: state.xml };
+          return { success: true, data: state.content };
         }
         case "click": {
           const id = tool.input["id"] as string;

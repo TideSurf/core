@@ -65,7 +65,7 @@ describe("DOM Walker - iframe", () => {
     const { nodes } = walkDOM(root);
 
     // Parent heading
-    const heading = nodes.find((n) => n.tag === "heading");
+    const heading = nodes.find((n) => n.tag === "h1");
     expect(heading).toBeDefined();
 
     // iframe node should exist with children from the content document
@@ -74,7 +74,7 @@ describe("DOM Walker - iframe", () => {
     expect(iframeNode!.attributes["src"]).toBe("child.html");
 
     // Should have child content
-    const childHeading = iframeNode!.children.find((n) => n.tag === "heading");
+    const childHeading = iframeNode!.children.find((n) => n.tag === "h2");
     expect(childHeading).toBeDefined();
 
     const childLink = iframeNode!.children.find((n) => n.tag === "link");

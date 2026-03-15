@@ -47,7 +47,7 @@ describe("Viewport-aware visible marking", () => {
     expect(btn).toBeDefined();
     expect(btn!.visible).toBe(true);
 
-    const h = nodes.find((n) => n.tag === "heading");
+    const h = nodes.find((n) => n.tag === "h1");
     expect(h).toBeDefined();
     expect(h!.visible).toBeUndefined();
   });

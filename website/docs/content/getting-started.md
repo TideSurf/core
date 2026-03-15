@@ -2,7 +2,7 @@
 
 *In the modern web era, the tide is strong. Let's surf.*
 
-TideSurf is the connector between Chromium and LLM agents — it translates the live DOM into minimal, token-efficient XML that any language model can understand (typically 100–800 tokens instead of 5,000–50,000+ for raw HTML), and translates agent actions back into browser commands via the Chrome DevTools Protocol.
+TideSurf is the connector between Chromium and LLM agents — it translates the live DOM into minimal, token-efficient text that any language model can understand (typically 50–200 tokens instead of 5,000–50,000+ for raw HTML), and translates agent actions back into browser commands via the Chrome DevTools Protocol.
 
 Special thanks to [SaltyAom](https://github.com/SaltyAom) and [ElysiaJS](https://elysiajs.com).
 
@@ -38,9 +38,9 @@ await browser.navigate("https://example.com");
 
 // Get compressed page state — this is what you feed to your LLM
 const state = await browser.getState();
-console.log(state.xml);
+console.log(state.content);
 
-// Execute agent actions using the element IDs from the XML
+// Execute agent actions using the element IDs from the output
 const page = browser.getPage();
 await page.click("B1");        // Click the first button
 await page.type("I1", "hello world");  // Type into the first input
@@ -48,7 +48,7 @@ await page.type("I1", "hello world");  // Type into the first input
 await browser.close();
 ```
 
-The `state.xml` output is a clean XML document that strips away all CSS classes, wrapper divs, scripts, and styles — keeping only interactive elements (buttons, links, inputs), semantic structure (nav, form, headings), and visible text content, each tagged with a short ID like `B1`, `L3`, or `I2` that your agent can reference when performing actions.
+The `state.content` output is compact text that strips away all CSS classes, wrapper divs, scripts, and styles — keeping only interactive elements (buttons, links, inputs), semantic structure (nav, form, headings), and visible text content, with short IDs like `B1`, `L3`, or `I2` that your agent can reference when performing actions.
 
 ## Connecting to an existing browser
 
@@ -185,14 +185,14 @@ const interactive = await browser.getState({ mode: "interactive" });
 // Landmarks and summaries only
 const minimal = await browser.getState({ mode: "minimal" });
 
-// Only what's visible in the viewport
-const viewport = await browser.getState({ viewport: true });
+// Only what's visible in the viewport (this is now the default)
+const viewport = await browser.getState(); // viewport defaults to true
 ```
 
 Modes compose with each other and `maxTokens`.
 
 ## What to read next
 
-- **[Page format](#page-format)** — understand the XML schema TideSurf produces and how element IDs work
+- **[Page format](#page-format)** — understand the output format TideSurf produces and how element IDs work
 - **[Token budget](#token-budget)** — control output size with `maxTokens` and learn how TideSurf prioritizes content
 - **[API reference](#api-reference)** — full method signatures and tool definitions (including `TideSurf.connect()`)
