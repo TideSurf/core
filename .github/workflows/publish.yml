@@ -18,6 +18,10 @@ jobs:
           node-version: 20
           registry-url: https://registry.npmjs.org
       - run: bun install
+      - run: bun install
+        working-directory: website/landing
+      - run: bun install
+        working-directory: website/docs
       - run: bun run verify:release
       - run: npm publish --provenance --access public
         env:
