@@ -249,171 +249,12 @@ function safeStorageSet(key: string, value: string): void {
   }
 }
 
-// ── Showcase Carousel ──
-
-function initShowcase(): void {
-  const track = document.querySelector(".showcase-track") as HTMLElement | null;
-  const prevBtn = document.querySelector(".showcase-prev");
-  const nextBtn = document.querySelector(".showcase-next");
-  const dots = document.querySelectorAll(".showcase-dot");
-  if (!track || !prevBtn || !nextBtn) return;
-
-  const slides = track.querySelectorAll(".showcase-slide");
-  const total = slides.length;
-  let current = 0;
-
-  function goTo(index: number): void {
-    current = ((index % total) + total) % total;
-    track!.style.transform = `translateX(-${current * 100}%)`;
-    dots.forEach((d, i) => d.classList.toggle("active", i === current));
-  }
-
-  prevBtn.addEventListener("click", () => goTo(current - 1));
-  nextBtn.addEventListener("click", () => goTo(current + 1));
-  dots.forEach((d, i) => d.addEventListener("click", () => goTo(i)));
-}
-
-// ── Syntax Highlighting ──
-
-interface CodeLine {
-  text: string;
-  step: number; // 1, 2, or 3
-}
-
-const quickstartLines: CodeLine[] = [
-  { text: 'import { TideSurf } from "@tidesurf/core"', step: 1 },
-  { text: "", step: 1 },
-  { text: "const browser = await TideSurf.launch()", step: 2 },
-  { text: 'await browser.navigate("https://example.com")', step: 2 },
-  { text: "", step: 2 },
-  { text: "// Get compressed page state", step: 3 },
-  { text: "const state = await browser.getState()", step: 3 },
-  { text: "console.log(state.xml)", step: 3 },
-  { text: "", step: 3 },
-  { text: "// Execute agent actions", step: 3 },
-  { text: "const page = browser.getPage()", step: 3 },
-  { text: 'await page.click("B1")', step: 3 },
-  { text: 'await page.type("I1", "hello world")', step: 3 },
-  { text: "", step: 3 },
-  { text: "await browser.close()", step: 3 },
-];
-
-function highlightTS(line: string): string {
-  if (!line) return "\n";
-
-  // Comments
-  if (line.trimStart().startsWith("//")) {
-    return `<span class="tk-cm">${escapeHtml(line)}</span>`;
-  }
-
-  let result = escapeHtml(line);
-
-  // Strings (double-quoted)
-  result = result.replace(
-    /&quot;([^&]*)&quot;/g,
-    '<span class="tk-str">&quot;$1&quot;</span>',
-  );
-  // Also handle literal quotes that didn't get escaped
-  result = result.replace(/"([^"<]*)"/g, '<span class="tk-str">"$1"</span>');
-
-  // Keywords
-  const keywords = [
-    "import",
-    "from",
-    "const",
-    "await",
-    "let",
-    "var",
-    "async",
-    "function",
-    "return",
-    "type",
-    "interface",
-    "export",
-    "new",
-  ];
-  keywords.forEach((kw) => {
-    result = result.replace(
-      new RegExp(`\\b(${kw})\\b`, "g"),
-      '<span class="tk-kw">$1</span>',
-    );
-  });
-
-  // Types/constructors
-  result = result.replace(
-    /\b(TideSurf|PageState|ToolDefinition|DownloadResult|SearchResult)\b/g,
-    '<span class="tk-type">$1</span>',
-  );
-
-  // Booleans & numbers
-  result = result.replace(
-    /\b(true|false|null|undefined)\b/g,
-    '<span class="tk-num">$1</span>',
-  );
-  result = result.replace(/\b(\d+)\b/g, '<span class="tk-num">$1</span>');
-
-  // Method calls: .word(
-  result = result.replace(/\.(\w+)\(/g, '.<span class="tk-fn">$1</span>(');
-
-  // Property access: .word (no paren)
-  result = result.replace(
-    /\.(\w+)(?![(<\w])/g,
-    '.<span class="tk-pr">$1</span>',
-  );
-
-  // Object braces
-  result = result.replace(/([{}])/g, '<span class="tk-br">$1</span>');
-
-  return result;
-}
-
 function escapeHtml(str: string): string {
   return str
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
-}
-
-function initQuickstart(): void {
-  const codeEl = document.getElementById("quickstart-code");
-  if (!codeEl) return;
-
-  // Render all lines with syntax highlighting
-  const html = quickstartLines
-    .map((line, i) => {
-      const highlighted = highlightTS(line.text);
-      return `<span class="code-line" data-line-step="${line.step}" data-line-index="${i}">${highlighted}</span>`;
-    })
-    .join("");
-  codeEl.innerHTML = html;
-
-  setActiveQuickstartStep(1);
-
-  document.querySelectorAll<HTMLButtonElement>(".step[data-step]").forEach((step) => {
-    step.addEventListener("click", () => {
-      const stepNum = parseInt(step.getAttribute("data-step") || "1", 10);
-      setActiveQuickstartStep(stepNum);
-    });
-  });
-}
-
-function updateCodeHighlight(activeStep: number): void {
-  document.querySelectorAll(".code-line").forEach((line) => {
-    const lineStep = parseInt(line.getAttribute("data-line-step") || "0", 10);
-    line.classList.toggle("dimmed", lineStep !== activeStep);
-  });
-}
-
-function setActiveQuickstartStep(activeStep: number): void {
-  document.querySelectorAll<HTMLButtonElement>(".step[data-step]").forEach((step) => {
-    const stepNum = parseInt(step.getAttribute("data-step") || "0", 10);
-    const isActive = stepNum === activeStep;
-    step.classList.toggle("active", isActive);
-    step.setAttribute("aria-pressed", isActive ? "true" : "false");
-  });
-
-  updateCodeHighlight(activeStep);
 }
 
 // ── Theme ──
@@ -826,14 +667,6 @@ function initCodeWall(): void {
 
 // ── Init ──
 
-function highlightAllCodeBlocks(): void {
-  document.querySelectorAll(".feature-code code").forEach((block) => {
-    const raw = block.textContent || "";
-    const lines = raw.split("\n");
-    block.innerHTML = lines.map((line) => highlightTS(line)).join("\n");
-  });
-}
-
 async function initGitHubStars(): Promise<void> {
   const el = document.getElementById("star-count");
   if (!el) {
@@ -865,9 +698,6 @@ async function initGitHubStars(): Promise<void> {
 async function init(): Promise<void> {
   initCodeWall();
   initScrollMorph();
-  initShowcase();
-  initQuickstart();
-  highlightAllCodeBlocks();
   initTheme();
   initLanguage();
   initCopyButtons();
