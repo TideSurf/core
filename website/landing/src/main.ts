@@ -25,6 +25,11 @@ const translations: Translations = {
     ko: "웹 페이지를 핵심만 남겨 압축합니다.",
   },
   "hero.scroll": { en: "Scroll", ja: "スクロール", ko: "아래로" },
+  "hero.tagline": {
+    en: "Your agent does not need eyes to browse.",
+    ja: "LLM向けDOM圧縮。不要な要素を除去し、ナビゲート、操作、抽出を実現。",
+    ko: "LLM을 위한 DOM 압축. 불필요한 요소를 제거하고 탐색, 상호작용, 추출을 수행합니다.",
+  },
   "compare.label": { en: "How it works", ja: "仕組み", ko: "동작 원리" },
   "compare.headline": {
     en: "XML is all you need.",
@@ -222,8 +227,6 @@ const translations: Translations = {
 
 let currentLang: Language = "en";
 let currentTheme: Theme = "dark";
-let canvas: HTMLCanvasElement | null = null;
-let ctx: CanvasRenderingContext2D | null = null;
 const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 function prefersReducedMotion(): boolean {
@@ -246,536 +249,12 @@ function safeStorageSet(key: string, value: string): void {
   }
 }
 
-// ── Tide Animation ──
-
-class TideWave {
-  private phase: number;
-  private amplitude: number;
-  private frequency: number;
-  private speed: number;
-  private yOffset: number;
-  private color: string;
-
-  constructor(
-    phase: number,
-    amplitude: number,
-    frequency: number,
-    speed: number,
-    yOffset: number,
-    color: string,
-  ) {
-    this.phase = phase;
-    this.amplitude = amplitude;
-    this.frequency = frequency;
-    this.speed = speed;
-    this.yOffset = yOffset;
-    this.color = color;
-  }
-
-  draw(
-    ctx: CanvasRenderingContext2D,
-    width: number,
-    height: number,
-    time: number,
-  ): void {
-    ctx.beginPath();
-    ctx.moveTo(0, height);
-    for (let x = 0; x <= width; x += 3) {
-      const y =
-        this.yOffset +
-        Math.sin(x * this.frequency + time * this.speed + this.phase) *
-          this.amplitude +
-        Math.sin(x * this.frequency * 0.4 + time * this.speed * 0.6) *
-          (this.amplitude * 0.3);
-      ctx.lineTo(x, y);
-    }
-    ctx.lineTo(width, height);
-    ctx.closePath();
-    ctx.fillStyle = this.color;
-    ctx.fill();
-  }
-
-  update(): void {
-    this.phase += 0.001;
-  }
-}
-
-let waves: TideWave[] = [];
-
-function initTideAnimation(): void {
-  canvas = document.getElementById("tide-canvas") as HTMLCanvasElement;
-  if (!canvas) return;
-  ctx = canvas.getContext("2d");
-  if (!ctx) return;
-
-  resizeCanvas();
-  window.addEventListener("resize", resizeCanvas, { passive: true });
-
-  waves = [
-    new TideWave(0, 20, 0.002, 0.0003, 0, "rgba(120, 120, 120, 0.035)"),
-    new TideWave(1.5, 15, 0.003, 0.0004, 30, "rgba(160, 160, 160, 0.02)"),
-  ];
-
-  animate();
-}
-
-function resizeCanvas(): void {
-  if (!canvas) return;
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
-}
-
-function animate(): void {
-  if (!ctx || !canvas) return;
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  const time = Date.now();
-  waves.forEach((w) => {
-    w.update();
-    w.draw(ctx!, canvas!.width, canvas!.height, time);
-  });
-  requestAnimationFrame(animate);
-}
-
-// ── Floating Tags ──
-
-function initFloatingTags(): void {
-  const container = document.getElementById("floating-tags");
-  if (!container) return;
-
-  const tagPool = [
-    "<div>",
-    "<span>",
-    "<nav>",
-    "<header>",
-    "<footer>",
-    "<section>",
-    "<article>",
-    "<main>",
-    "<aside>",
-    "<form>",
-    "<input>",
-    "<button>",
-    "<a>",
-    "<ul>",
-    "<ol>",
-    "<li>",
-    "<p>",
-    "<h1>",
-    "<h2>",
-    "<h3>",
-    "<img>",
-    "<table>",
-    "<tr>",
-    "<td>",
-    "<th>",
-    "<select>",
-    "<textarea>",
-    "<label>",
-    "<canvas>",
-    "<video>",
-    "<audio>",
-    "<svg>",
-    "<path>",
-    "<dialog>",
-    "<details>",
-    "<summary>",
-    "<figure>",
-    "<picture>",
-    "<template>",
-    "<slot>",
-    "</div>",
-    "</span>",
-    "</nav>",
-    "</header>",
-    "</section>",
-    "</form>",
-    "</button>",
-    "</a>",
-    "</ul>",
-    "</li>",
-    "</p>",
-    "</table>",
-    "</svg>",
-    "</body>",
-    "</html>",
-    '<div class="container">',
-    '<div id="root">',
-    '<a href="/about">',
-    '<input type="text">',
-    '<button type="submit">',
-    '<img src="..." alt="">',
-    '<form action="/api">',
-    '<link rel="stylesheet">',
-    '<meta charset="UTF-8">',
-    '<script src="app.js">',
-    '<div data-id="42">',
-    '<span role="alert">',
-    "display: flex;",
-    "margin: 0 auto;",
-    "padding: 1rem;",
-    "color: inherit;",
-    "font-size: 16px;",
-    "position: relative;",
-    "z-index: 10;",
-    "overflow: hidden;",
-    "border-radius: 8px;",
-    "opacity: 0.5;",
-    "grid-template-columns:",
-    "justify-content: center;",
-    "align-items: center;",
-    "transform: scale(1);",
-    "transition: all 0.3s;",
-    'class="..."',
-    'id="app"',
-    'style="..."',
-    "onClick={}",
-    'aria-label=""',
-    'role="button"',
-    'data-testid=""',
-    "key={id}",
-    "ref={el}",
-    'className="..."',
-  ];
-
-  const strippedTags = new Set([
-    '<script src="app.js">',
-    'class="..."',
-    'style="..."',
-    "onClick={}",
-    '<div class="container">',
-    'className="..."',
-    'data-testid=""',
-    "display: flex;",
-    "margin: 0 auto;",
-    "padding: 1rem;",
-    "color: inherit;",
-    "font-size: 16px;",
-    "position: relative;",
-    "z-index: 10;",
-    "overflow: hidden;",
-    "border-radius: 8px;",
-    "opacity: 0.5;",
-    "grid-template-columns:",
-    "justify-content: center;",
-    "align-items: center;",
-    "transform: scale(1);",
-    "transition: all 0.3s;",
-  ]);
-
-  const count = 100;
-
-  for (let i = 0; i < count; i++) {
-    const el = document.createElement("span");
-    el.className = "floating-tag";
-    const tagText = tagPool[i % tagPool.length];
-    el.textContent = tagText;
-
-    if (strippedTags.has(tagText)) {
-      el.classList.add("is-stripped");
-    }
-
-    const animRoll = Math.random();
-    if (animRoll > 0.6) {
-      el.classList.add(animRoll > 0.8 ? "anim-wave" : "anim-drift");
-    }
-
-    const layer = Math.random();
-    let size: number, opacity: number, duration: number, blur: number;
-
-    if (layer < 0.25) {
-      size = 0.55 + Math.random() * 0.15;
-      opacity = 0.06 + Math.random() * 0.04;
-      duration = 75 + Math.random() * 45;
-      blur = 1;
-    } else if (layer < 0.6) {
-      size = 0.75 + Math.random() * 0.2;
-      opacity = 0.09 + Math.random() * 0.06;
-      duration = 48 + Math.random() * 28;
-      blur = 0;
-    } else if (layer < 0.85) {
-      size = 0.95 + Math.random() * 0.3;
-      opacity = 0.13 + Math.random() * 0.07;
-      duration = 32 + Math.random() * 20;
-      blur = 0;
-    } else {
-      size = 1.15 + Math.random() * 0.35;
-      opacity = 0.16 + Math.random() * 0.08;
-      duration = 25 + Math.random() * 18;
-      blur = 0;
-    }
-
-    const x = Math.random() * 96 + 2;
-    const y = Math.random() * 90 + 5;
-    const delay = -(Math.random() * duration);
-    const sway = (Math.random() - 0.5) * 40;
-    const rotation = (Math.random() - 0.5) * 12;
-
-    const hue = 0;
-    const sat = 0;
-    const lit = 32 + Math.random() * 28;
-
-    el.style.cssText = `--x:${x}%;--y:${y}%;--s:${size}rem;--o:${opacity};--d:${duration}s;--delay:${delay}s;--sway:${sway}px;--r:${rotation}deg;--blur:${blur}px;color:hsl(${hue},${sat}%,${lit}%)`;
-
-    container.appendChild(el);
-  }
-}
-
-// ── Mouse Parallax ──
-
-function initMouseParallax(): void {
-  const hero = document.querySelector(".hero") as HTMLElement | null;
-  const container = document.getElementById("floating-tags");
-  if (!hero || !container) return;
-
-  let targetX = 0;
-  let targetY = 0;
-  let currentX = 0;
-  let currentY = 0;
-  let rafId = 0;
-
-  function lerp(a: number, b: number, t: number): number {
-    return a + (b - a) * t;
-  }
-
-  function updateParallax(): void {
-    currentX = lerp(currentX, targetX, 0.06);
-    currentY = lerp(currentY, targetY, 0.06);
-
-    if (
-      Math.abs(currentX - targetX) > 0.01 ||
-      Math.abs(currentY - targetY) > 0.01
-    ) {
-      container!.style.setProperty("--mx", `${currentX}px`);
-      container!.style.setProperty("--my", `${currentY}px`);
-      rafId = requestAnimationFrame(updateParallax);
-    } else {
-      container!.style.setProperty("--mx", `${targetX}px`);
-      container!.style.setProperty("--my", `${targetY}px`);
-      rafId = 0;
-    }
-  }
-
-  hero.addEventListener("mousemove", (e: MouseEvent) => {
-    const rect = hero.getBoundingClientRect();
-    const nx = (e.clientX - rect.left) / rect.width - 0.5;
-    const ny = (e.clientY - rect.top) / rect.height - 0.5;
-    targetX = nx * -18;
-    targetY = ny * -12;
-    if (!rafId) rafId = requestAnimationFrame(updateParallax);
-  });
-
-  hero.addEventListener("mouseleave", () => {
-    targetX = 0;
-    targetY = 0;
-    if (!rafId) rafId = requestAnimationFrame(updateParallax);
-  });
-}
-
-// ── Slot Machine ──
-
-function initSlotMachine(): void {
-  const track = document.getElementById("slot-track") as HTMLElement | null;
-  const copyBtn = document.querySelector(
-    ".install-box .copy-btn",
-  ) as HTMLElement | null;
-  if (!track || !copyBtn) return;
-
-  const commands = [
-    "bun add @tidesurf/core",
-    "npm install @tidesurf/core",
-    "yarn add @tidesurf/core",
-    "pnpm add @tidesurf/core",
-  ];
-  const total = commands.length;
-  let current = 0;
-
-  if (prefersReducedMotion()) {
-    copyBtn.dataset.copy = commands[0];
-    track.style.transform = "translateY(0)";
-    return;
-  }
-
-  setInterval(() => {
-    current++;
-    track.style.transition = "transform 0.45s cubic-bezier(0.23, 1, 0.32, 1)";
-    track.style.transform = `translateY(-${current * (100 / (total + 1))}%)`;
-    copyBtn.dataset.copy = commands[current % total];
-
-    if (current >= total) {
-      setTimeout(() => {
-        track.style.transition = "none";
-        track.style.transform = "translateY(0)";
-        current = 0;
-      }, 500);
-    }
-  }, 3000);
-}
-
-// ── Showcase Carousel ──
-
-function initShowcase(): void {
-  const track = document.querySelector(".showcase-track") as HTMLElement | null;
-  const prevBtn = document.querySelector(".showcase-prev");
-  const nextBtn = document.querySelector(".showcase-next");
-  const dots = document.querySelectorAll(".showcase-dot");
-  if (!track || !prevBtn || !nextBtn) return;
-
-  const slides = track.querySelectorAll(".showcase-slide");
-  const total = slides.length;
-  let current = 0;
-
-  function goTo(index: number): void {
-    current = ((index % total) + total) % total;
-    track!.style.transform = `translateX(-${current * 100}%)`;
-    dots.forEach((d, i) => d.classList.toggle("active", i === current));
-  }
-
-  prevBtn.addEventListener("click", () => goTo(current - 1));
-  nextBtn.addEventListener("click", () => goTo(current + 1));
-  dots.forEach((d, i) => d.addEventListener("click", () => goTo(i)));
-}
-
-// ── Syntax Highlighting ──
-
-interface CodeLine {
-  text: string;
-  step: number; // 1, 2, or 3
-}
-
-const quickstartLines: CodeLine[] = [
-  { text: 'import { TideSurf } from "@tidesurf/core"', step: 1 },
-  { text: "", step: 1 },
-  { text: "const browser = await TideSurf.launch()", step: 2 },
-  { text: 'await browser.navigate("https://example.com")', step: 2 },
-  { text: "", step: 2 },
-  { text: "// Get compressed page state", step: 3 },
-  { text: "const state = await browser.getState()", step: 3 },
-  { text: "console.log(state.xml)", step: 3 },
-  { text: "", step: 3 },
-  { text: "// Execute agent actions", step: 3 },
-  { text: "const page = browser.getPage()", step: 3 },
-  { text: 'await page.click("B1")', step: 3 },
-  { text: 'await page.type("I1", "hello world")', step: 3 },
-  { text: "", step: 3 },
-  { text: "await browser.close()", step: 3 },
-];
-
-function highlightTS(line: string): string {
-  if (!line) return "\n";
-
-  // Comments
-  if (line.trimStart().startsWith("//")) {
-    return `<span class="tk-cm">${escapeHtml(line)}</span>`;
-  }
-
-  let result = escapeHtml(line);
-
-  // Strings (double-quoted)
-  result = result.replace(
-    /&quot;([^&]*)&quot;/g,
-    '<span class="tk-str">&quot;$1&quot;</span>',
-  );
-  // Also handle literal quotes that didn't get escaped
-  result = result.replace(/"([^"<]*)"/g, '<span class="tk-str">"$1"</span>');
-
-  // Keywords
-  const keywords = [
-    "import",
-    "from",
-    "const",
-    "await",
-    "let",
-    "var",
-    "async",
-    "function",
-    "return",
-    "type",
-    "interface",
-    "export",
-    "new",
-  ];
-  keywords.forEach((kw) => {
-    result = result.replace(
-      new RegExp(`\\b(${kw})\\b`, "g"),
-      '<span class="tk-kw">$1</span>',
-    );
-  });
-
-  // Types/constructors
-  result = result.replace(
-    /\b(TideSurf|PageState|ToolDefinition|DownloadResult|SearchResult)\b/g,
-    '<span class="tk-type">$1</span>',
-  );
-
-  // Booleans & numbers
-  result = result.replace(
-    /\b(true|false|null|undefined)\b/g,
-    '<span class="tk-num">$1</span>',
-  );
-  result = result.replace(/\b(\d+)\b/g, '<span class="tk-num">$1</span>');
-
-  // Method calls: .word(
-  result = result.replace(/\.(\w+)\(/g, '.<span class="tk-fn">$1</span>(');
-
-  // Property access: .word (no paren)
-  result = result.replace(
-    /\.(\w+)(?![(<\w])/g,
-    '.<span class="tk-pr">$1</span>',
-  );
-
-  // Object braces
-  result = result.replace(/([{}])/g, '<span class="tk-br">$1</span>');
-
-  return result;
-}
-
 function escapeHtml(str: string): string {
   return str
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
-}
-
-function initQuickstart(): void {
-  const codeEl = document.getElementById("quickstart-code");
-  if (!codeEl) return;
-
-  // Render all lines with syntax highlighting
-  const html = quickstartLines
-    .map((line, i) => {
-      const highlighted = highlightTS(line.text);
-      return `<span class="code-line" data-line-step="${line.step}" data-line-index="${i}">${highlighted}</span>`;
-    })
-    .join("");
-  codeEl.innerHTML = html;
-
-  setActiveQuickstartStep(1);
-
-  document.querySelectorAll<HTMLButtonElement>(".step[data-step]").forEach((step) => {
-    step.addEventListener("click", () => {
-      const stepNum = parseInt(step.getAttribute("data-step") || "1", 10);
-      setActiveQuickstartStep(stepNum);
-    });
-  });
-}
-
-function updateCodeHighlight(activeStep: number): void {
-  document.querySelectorAll(".code-line").forEach((line) => {
-    const lineStep = parseInt(line.getAttribute("data-line-step") || "0", 10);
-    line.classList.toggle("dimmed", lineStep !== activeStep);
-  });
-}
-
-function setActiveQuickstartStep(activeStep: number): void {
-  document.querySelectorAll<HTMLButtonElement>(".step[data-step]").forEach((step) => {
-    const stepNum = parseInt(step.getAttribute("data-step") || "0", 10);
-    const isActive = stepNum === activeStep;
-    step.classList.toggle("active", isActive);
-    step.setAttribute("aria-pressed", isActive ? "true" : "false");
-  });
-
-  updateCodeHighlight(activeStep);
 }
 
 // ── Theme ──
@@ -884,8 +363,7 @@ function initCopyButtons(): void {
 
 function initScrollMorph(): void {
   const hero = document.querySelector(".hero") as HTMLElement;
-  const floatingTags = document.getElementById("floating-tags");
-  const scrollHint = document.querySelector(".scroll-hint") as HTMLElement;
+    const scrollHint = document.querySelector(".scroll-hint") as HTMLElement;
 
   if (!hero) return;
 
@@ -911,10 +389,6 @@ function initScrollMorph(): void {
         const scrolled = window.scrollY;
         const progress = Math.min(1, Math.max(0, scrolled / heroH));
 
-        // Floating tags: scroll parallax via CSS custom property
-        if (floatingTags) {
-          floatingTags.style.setProperty("--sy", `${progress * -150}px`);
-        }
 
         // Scroll hint: disappears immediately on scroll
         if (scrollHint && scrollHintReady) {
@@ -975,15 +449,230 @@ function initScrollReveal(): void {
   document.querySelectorAll(".reveal").forEach((el) => observer.observe(el));
 }
 
-// ── Init ──
+// ── Code Wall ──
 
-function highlightAllCodeBlocks(): void {
-  document.querySelectorAll(".feature-code code").forEach((block) => {
-    const raw = block.textContent || "";
-    const lines = raw.split("\n");
-    block.innerHTML = lines.map((line) => highlightTS(line)).join("\n");
-  });
+interface CodeLine {
+  tag: string;
+  attrs: string[];
+  content?: string;
+  isSemantic: boolean;
+  indent: number;
 }
+
+const codeTemplates: CodeLine[] = [
+  { tag: "!DOCTYPE", attrs: ['html'], isSemantic: false, indent: 0 },
+  { tag: "html", attrs: ['lang="en"', 'class="scroll-smooth"'], isSemantic: false, indent: 0 },
+  { tag: "head", attrs: [], isSemantic: false, indent: 1 },
+  { tag: "meta", attrs: ['charset="UTF-8"'], isSemantic: false, indent: 2 },
+  { tag: "title", attrs: [], isSemantic: true, indent: 2, content: "My Website" },
+  { tag: "/title", attrs: [], isSemantic: true, indent: 2 },
+  { tag: "link", attrs: ['rel="stylesheet"', 'href="/styles.css"'], isSemantic: false, indent: 2 },
+  { tag: "/head", attrs: [], isSemantic: false, indent: 1 },
+  { tag: "body", attrs: ['class="antialiased"'], isSemantic: false, indent: 1 },
+  { tag: "header", attrs: ['class="fixed top-0"'], isSemantic: true, indent: 2 },
+  { tag: "nav", attrs: ['class="container mx-auto"'], isSemantic: true, indent: 3 },
+  { tag: "a", attrs: ['href="/"', 'class="text-xl font-bold"'], isSemantic: true, indent: 4, content: "Logo" },
+  { tag: "ul", attrs: ['class="flex gap-8"'], isSemantic: true, indent: 4 },
+  { tag: "li", attrs: [], isSemantic: true, indent: 5 },
+  { tag: "a", attrs: ['href="/features"'], isSemantic: true, indent: 6, content: "Features" },
+  { tag: "/li", attrs: [], isSemantic: true, indent: 5 },
+  { tag: "li", attrs: [], isSemantic: true, indent: 5 },
+  { tag: "a", attrs: ['href="/pricing"'], isSemantic: true, indent: 6, content: "Pricing" },
+  { tag: "/li", attrs: [], isSemantic: true, indent: 5 },
+  { tag: "/ul", attrs: [], isSemantic: true, indent: 4 },
+  { tag: "button", attrs: ['type="button"', 'class="md:hidden"'], isSemantic: true, indent: 4 },
+  { tag: "/button", attrs: [], isSemantic: true, indent: 4 },
+  { tag: "/nav", attrs: [], isSemantic: true, indent: 3 },
+  { tag: "/header", attrs: [], isSemantic: true, indent: 2 },
+  { tag: "main", attrs: [], isSemantic: true, indent: 2 },
+  { tag: "section", attrs: ['class="py-20"'], isSemantic: true, indent: 3 },
+  { tag: "div", attrs: ['class="container"'], isSemantic: false, indent: 4 },
+  { tag: "h1", attrs: ['class="text-4xl font-bold"'], isSemantic: true, indent: 5, content: "Welcome" },
+  { tag: "/h1", attrs: [], isSemantic: true, indent: 5 },
+  { tag: "p", attrs: ['class="text-lg text-gray-600"'], isSemantic: true, indent: 5, content: "Build faster" },
+  { tag: "/p", attrs: [], isSemantic: true, indent: 5 },
+  { tag: "div", attrs: ['class="flex gap-4"'], isSemantic: false, indent: 5 },
+  { tag: "a", attrs: ['href="/signup"', 'class="btn btn-primary"'], isSemantic: true, indent: 6, content: "Get Started" },
+  { tag: "/a", attrs: [], isSemantic: true, indent: 6 },
+  { tag: "a", attrs: ['href="/demo"', 'class="btn btn-secondary"'], isSemantic: true, indent: 6, content: "View Demo" },
+  { tag: "/a", attrs: [], isSemantic: true, indent: 6 },
+  { tag: "/div", attrs: [], isSemantic: false, indent: 5 },
+  { tag: "/div", attrs: [], isSemantic: false, indent: 4 },
+  { tag: "/section", attrs: [], isSemantic: true, indent: 3 },
+  { tag: "section", attrs: ['class="py-20 bg-gray-50"'], isSemantic: true, indent: 3 },
+  { tag: "div", attrs: ['class="container"'], isSemantic: false, indent: 4 },
+  { tag: "h2", attrs: ['class="text-3xl font-bold"'], isSemantic: true, indent: 5, content: "Features" },
+  { tag: "/h2", attrs: [], isSemantic: true, indent: 5 },
+  { tag: "div", attrs: ['class="grid md:grid-cols-3 gap-8"'], isSemantic: false, indent: 5 },
+  { tag: "article", attrs: ['class="p-6 rounded-xl border"'], isSemantic: true, indent: 6 },
+  { tag: "h3", attrs: ['class="text-xl font-semibold"'], isSemantic: true, indent: 7, content: "Fast" },
+  { tag: "/h3", attrs: [], isSemantic: true, indent: 7 },
+  { tag: "p", attrs: ['class="text-gray-600"'], isSemantic: true, indent: 7, content: "Optimized" },
+  { tag: "/p", attrs: [], isSemantic: true, indent: 7 },
+  { tag: "/article", attrs: [], isSemantic: true, indent: 6 },
+  { tag: "/div", attrs: [], isSemantic: false, indent: 5 },
+  { tag: "/div", attrs: [], isSemantic: false, indent: 4 },
+  { tag: "/section", attrs: [], isSemantic: true, indent: 3 },
+  { tag: "section", attrs: ['class="py-20"'], isSemantic: true, indent: 3 },
+  { tag: "div", attrs: ['class="container max-w-md"'], isSemantic: false, indent: 4 },
+  { tag: "form", attrs: ['action="/subscribe"', 'method="POST"'], isSemantic: true, indent: 5 },
+  { tag: "label", attrs: ['for="email"'], isSemantic: true, indent: 6, content: "Email" },
+  { tag: "/label", attrs: [], isSemantic: true, indent: 6 },
+  { tag: "input", attrs: ['type="email"', 'id="email"', 'placeholder="you@example.com"'], isSemantic: true, indent: 6 },
+  { tag: "button", attrs: ['type="submit"'], isSemantic: true, indent: 6, content: "Subscribe" },
+  { tag: "/button", attrs: [], isSemantic: true, indent: 6 },
+  { tag: "/form", attrs: [], isSemantic: true, indent: 5 },
+  { tag: "/div", attrs: [], isSemantic: false, indent: 4 },
+  { tag: "/section", attrs: [], isSemantic: true, indent: 3 },
+  { tag: "section", attrs: ['class="py-20"'], isSemantic: true, indent: 3 },
+  { tag: "div", attrs: ['class="container"'], isSemantic: false, indent: 4 },
+  { tag: "table", attrs: ['class="w-full"'], isSemantic: true, indent: 5 },
+  { tag: "thead", attrs: [], isSemantic: true, indent: 6 },
+  { tag: "tr", attrs: [], isSemantic: true, indent: 7 },
+  { tag: "th", attrs: [], isSemantic: true, indent: 8, content: "Name" },
+  { tag: "/th", attrs: [], isSemantic: true, indent: 8 },
+  { tag: "th", attrs: [], isSemantic: true, indent: 8, content: "Status" },
+  { tag: "/th", attrs: [], isSemantic: true, indent: 8 },
+  { tag: "/tr", attrs: [], isSemantic: true, indent: 7 },
+  { tag: "/thead", attrs: [], isSemantic: true, indent: 6 },
+  { tag: "tbody", attrs: [], isSemantic: true, indent: 6 },
+  { tag: "tr", attrs: [], isSemantic: true, indent: 7 },
+  { tag: "td", attrs: [], isSemantic: true, indent: 8, content: "Alice" },
+  { tag: "/td", attrs: [], isSemantic: true, indent: 8 },
+  { tag: "td", attrs: [], isSemantic: true, indent: 8, content: "Active" },
+  { tag: "/td", attrs: [], isSemantic: true, indent: 8 },
+  { tag: "/tr", attrs: [], isSemantic: true, indent: 7 },
+  { tag: "/tbody", attrs: [], isSemantic: true, indent: 6 },
+  { tag: "/table", attrs: [], isSemantic: true, indent: 5 },
+  { tag: "/div", attrs: [], isSemantic: false, indent: 4 },
+  { tag: "/section", attrs: [], isSemantic: true, indent: 3 },
+  { tag: "footer", attrs: ['class="bg-gray-900 text-white py-12"'], isSemantic: true, indent: 2 },
+  { tag: "div", attrs: ['class="container"'], isSemantic: false, indent: 3 },
+  { tag: "p", attrs: ['class="text-center"'], isSemantic: true, indent: 4, content: "© 2025" },
+  { tag: "/p", attrs: [], isSemantic: true, indent: 4 },
+  { tag: "/div", attrs: [], isSemantic: false, indent: 3 },
+  { tag: "/footer", attrs: [], isSemantic: true, indent: 2 },
+  { tag: "/body", attrs: [], isSemantic: false, indent: 1 },
+  { tag: "/html", attrs: [], isSemantic: false, indent: 0 },
+];
+
+const interactiveTags = new Set(["a", "button", "input", "form", "select", "textarea", "label"]);
+
+function generateHTMLSnippet(startIndex: number, length: number): string {
+  let html = "";
+  for (let i = 0; i < length; i++) {
+    const template = codeTemplates[(startIndex + i) % codeTemplates.length];
+    const indent = "  ".repeat(Math.min(template.indent, 4));
+    const isClosing = template.tag.startsWith("/");
+    const isSelfClosing = ["input", "img", "br", "hr", "meta", "link", "path"].includes(template.tag);
+    
+    html += indent;
+    html += `&lt;`;
+    if (isClosing) {
+      html += `/${template.tag.slice(1)}`;
+    } else {
+      html += `${template.tag}`;
+    }
+    
+    const visibleAttrs = template.attrs.slice(0, 1 + (i % 2));
+    visibleAttrs.forEach(attr => {
+      const eqIndex = attr.indexOf("=");
+      if (eqIndex > 0) {
+        const name = attr.slice(0, eqIndex);
+        const value = attr.slice(eqIndex + 1);
+        const highlightedValue = value.replace(/"/g, '<span class="cw-string">"</span>');
+        html += ` <span class="cw-attr">${name}</span>=<span class="cw-value">${highlightedValue}</span>`;
+      } else {
+        html += ` <span class="cw-attr">${attr}</span>`;
+      }
+    });
+    
+    if (template.attrs.length > visibleAttrs.length) {
+      html += `<span class="cw-attr">...</span>`;
+    }
+    
+    html += `${isSelfClosing ? " /" : ""}&gt;`;
+    
+    if (template.content && !isClosing) {
+      html += `<span class="cw-content">${escapeHtml(template.content)}</span>`;
+      if (!isSelfClosing) {
+        html += `&lt;/${template.tag}&gt;`;
+      }
+    }
+    
+    html += "  ";
+  }
+  return html;
+}
+
+function initCodeWall(): void {
+  const container = document.getElementById("code-wall");
+  if (!container) return;
+
+  const stripCount = 10;
+  const snippetLength = 25;
+  
+  for (let i = 0; i < stripCount; i++) {
+    const strip = document.createElement("div");
+    strip.className = "code-wall-strip";
+    
+    const startOffset = Math.floor(Math.random() * codeTemplates.length);
+    
+    const hasSemantic = codeTemplates.slice(startOffset, startOffset + 5).some(t => t.isSemantic);
+    const hasInteractive = codeTemplates.slice(startOffset, startOffset + 5).some(t => interactiveTags.has(t.tag));
+    
+    if (hasSemantic) {
+      strip.classList.add("is-semantic");
+    }
+    if (hasInteractive) {
+      strip.classList.add("is-interactive");
+    }
+    
+    const content = document.createElement("div");
+    content.className = "code-wall-content";
+    
+    const snippet = generateHTMLSnippet(startOffset, snippetLength);
+    content.innerHTML = snippet + "    " + snippet;
+
+    const y = Math.round(i * (100 / stripCount));
+    
+    let baseOpacity = 0.12;
+    if (hasInteractive) baseOpacity = 0.22;
+    else if (hasSemantic) baseOpacity = 0.17;
+
+    const opacity = baseOpacity + Math.random() * 0.06;
+    
+    const duration = 600 + Math.random() * 400;
+    const startOffsetPx = Math.random() * -2000;
+    
+    strip.style.cssText = `
+      --y: ${y}vh;
+      --o: ${opacity};
+      --o-highlight: ${opacity + 0.15};
+      top: var(--y);
+    `;
+    
+    content.style.cssText = `
+      --duration: ${duration}s;
+      --start-offset: ${startOffsetPx}px;
+      --play-state: running;
+      padding-left: var(--start-offset);
+    `;
+    
+    strip.appendChild(content);
+    container.appendChild(strip);
+  }
+
+  // Pause animations when hero is not visible (huge perf win)
+  const heroEl = document.querySelector(".hero");
+  if (heroEl) {
+    new IntersectionObserver((entries) => {
+      container.classList.toggle("paused", !entries[0].isIntersecting);
+    }).observe(heroEl);
+  }
+}
+
+// ── Init ──
 
 async function initGitHubStars(): Promise<void> {
   const el = document.getElementById("star-count");
@@ -1013,28 +702,179 @@ async function initGitHubStars(): Promise<void> {
   }
 }
 
+// ── Count Up Animation ──
+
+function initCountUp(): void {
+  if (prefersReducedMotion()) return;
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        const el = entry.target as HTMLElement;
+        if (el.dataset.counted) return;
+        el.dataset.counted = "true";
+
+        const unitEl = el.querySelector(".bench-stat-unit");
+        const unitText = unitEl?.textContent || "";
+        const numStr = (el.textContent || "").replace(unitText, "").trim();
+        const target = parseFloat(numStr);
+        if (isNaN(target)) return;
+
+        const hasDot = numStr.includes(".");
+        const decimals = hasDot ? (numStr.split(".")[1]?.length || 1) : 0;
+        const dur = 1600;
+        const t0 = performance.now();
+
+        function tick(now: number): void {
+          const p = Math.min((now - t0) / dur, 1);
+          const ease = 1 - Math.pow(1 - p, 4);
+          const val = target * ease;
+          const display = hasDot
+            ? val.toFixed(decimals)
+            : String(Math.round(val));
+          const tn = el.childNodes[0];
+          if (tn?.nodeType === Node.TEXT_NODE) tn.textContent = display;
+          if (p < 1) requestAnimationFrame(tick);
+        }
+
+        requestAnimationFrame(tick);
+        observer.unobserve(el);
+      });
+    },
+    { threshold: 0.5 },
+  );
+
+  document
+    .querySelectorAll(".bench-stat-value")
+    .forEach((el) => observer.observe(el));
+}
+
+// ── Bar Growth Animation ──
+
+function initBenchGraph(): void {
+  if (prefersReducedMotion()) return;
+
+  const bars = document.querySelectorAll(".bench-col-bar") as NodeListOf<HTMLElement>;
+  bars.forEach((bar) => {
+    bar.dataset.h = bar.style.height;
+    bar.style.height = "0";
+  });
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        const all = entry.target.querySelectorAll(".bench-col-bar") as NodeListOf<HTMLElement>;
+        all.forEach((bar, i) => {
+          setTimeout(() => {
+            bar.style.height = bar.dataset.h || "0";
+          }, i * 60);
+        });
+        observer.unobserve(entry.target);
+      });
+    },
+    { threshold: 0.1 },
+  );
+
+  const chart = document.querySelector(".bench-duo") || document.querySelector(".bench-chart");
+  if (chart) observer.observe(chart);
+}
+
+// ── Bento Popup ──
+
+function initBentoPopup(): void {
+  const modal = document.getElementById("bento-modal");
+  const content = document.getElementById("bento-modal-content");
+  if (!modal || !content) return;
+
+  function openModal(card: HTMLElement): void {
+    const clone = card.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll("[hidden]").forEach((el) => el.removeAttribute("hidden"));
+    content.innerHTML =
+      '<button class="bento-modal-close" aria-label="Close">\u00d7</button>' +
+      clone.innerHTML;
+    content.querySelector(".bento-modal-close")?.addEventListener("click", closeModal);
+    modal.classList.add("is-open");
+  }
+
+  function closeModal(): void {
+    modal!.classList.remove("is-open");
+  }
+
+  document.querySelectorAll(".bento-card").forEach((card) => {
+    (card as HTMLElement).style.cursor = "pointer";
+    card.addEventListener("click", (e) => {
+      if ((e.target as HTMLElement).closest("a")) return;
+      openModal(card as HTMLElement);
+    });
+  });
+
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) closeModal();
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && modal!.classList.contains("is-open")) closeModal();
+  });
+}
+
 async function init(): Promise<void> {
-  initTideAnimation();
-  initFloatingTags();
-  initMouseParallax();
+  initCodeWall();
   initScrollMorph();
-  initSlotMachine();
-  initShowcase();
-  initQuickstart();
-  highlightAllCodeBlocks();
   initTheme();
   initLanguage();
   initCopyButtons();
   initNavScroll();
   initScrollReveal();
+  initCountUp();
+  initBenchGraph();
+  initBentoPopup();
   updateLangButtons();
   await initGitHubStars();
 }
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => {
+  initPkgCycle();
     void init();
   });
 } else {
   void init();
+}
+
+function initPkgCycle() {
+  const track = document.getElementById("pkg-track");
+  const copyBtn = document.getElementById("install-copy-btn");
+  if (!track || !copyBtn) return;
+
+  const commands = [
+    "bun add @tidesurf/core",
+    "npm i @tidesurf/core",
+    "yarn add @tidesurf/core",
+    "pnpm add @tidesurf/core",
+  ];
+  
+  let currentIndex = 0;
+  const itemHeight = track.firstElementChild?.clientHeight || track.getBoundingClientRect().height / 5 || 24;
+
+  setInterval(() => {
+    currentIndex++;
+    track.style.transition = "transform 0.45s cubic-bezier(0.23, 1, 0.32, 1)";
+    track.style.transform = `translateY(-${currentIndex * itemHeight}px)`;
+
+    const cmdIndex = currentIndex % commands.length;
+    copyBtn.setAttribute("data-copy", commands[cmdIndex]);
+    
+    // Check if the current visible text has changed in translations if applicable, otherwise keep it English
+    // Or we leave text as is since we just shift the div. The copy button holds the actual data to strip.
+
+    if (currentIndex === commands.length) {
+      setTimeout(() => {
+        track.style.transition = "none";
+        track.style.transform = "translateY(0)";
+        currentIndex = 0;
+      }, 500);
+    }
+  }, 3000);
 }

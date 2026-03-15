@@ -4,6 +4,7 @@ declare module "chrome-remote-interface" {
     port?: number;
     secure?: boolean;
     target?: number | string;
+    useHostName?: boolean;
   }
 
   interface Target {
@@ -87,9 +88,9 @@ declare module "chrome-remote-interface" {
   function CDP(options?: CDPOptions): Promise<Client>;
 
   namespace CDP {
-    function List(options?: { host?: string; port?: number }): Promise<Target[]>;
-    function New(options?: { host?: string; port?: number; url?: string }): Promise<Target>;
-    function Close(options?: { host?: string; port?: number; id: string }): Promise<void>;
+    function List(options?: { host?: string; port?: number; useHostName?: boolean }): Promise<Target[]>;
+    function New(options?: { host?: string; port?: number; url?: string; useHostName?: boolean }): Promise<Target>;
+    function Close(options?: { host?: string; port?: number; id: string; useHostName?: boolean }): Promise<void>;
   }
 
   export default CDP;

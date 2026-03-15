@@ -23,16 +23,14 @@
         <meta name="twitter:image" content="https://tidesurf.org/og.png">
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <link
-            href="https://fonts.googleapis.com/css2?family=Gothic+A1:wght@300;400;500;600;700;800&family=Noto+Sans+JP:wght@300;400;500;600;700&display=swap"
-            rel="stylesheet"
-        />
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet" />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <script src="/theme-init.js"></script>
         <link rel="stylesheet" href="/src/style.css" />
     </head>
     <body>
-        <canvas id="tide-canvas" class="tide-canvas"></canvas>
+        <!-- Hero Code Wall Background -->
+        <div class="code-wall" id="code-wall" aria-hidden="true"></div>
 
         <nav class="nav">
             <div class="nav-left">
@@ -124,59 +122,26 @@
         </nav>
 
         <header class="hero">
-            <div class="hero-watermark" aria-hidden="true">
-                <span class="wm-layer">Tide</span>
-                <span class="wm-layer">Tide</span>
-                <span class="wm-layer">Tide</span>
-                <span class="wm-layer">Tide</span>
-                <span class="wm-layer">Tide</span>
-                <span class="wm-layer">Tide</span>
-                <span class="wm-layer">Tide</span>
-                <span class="wm-layer">Tide</span>
-                <span class="wm-layer">Tide</span>
-                <span class="wm-layer">Tide</span>
-            </div>
-            <div class="floating-tags" id="floating-tags"></div>
             <div class="hero-content">
                 <h1 class="hero-title">
-                    <span
-                        class="hero-word hero-word-1"
-                        data-i18n="hero.title.line1"
-                        >Surf</span
-                    >
-                    <span
-                        class="hero-word hero-word-2"
-                        data-i18n="hero.title.line2"
-                        >the</span
-                    >
-                    <span
-                        class="hero-word hero-word-3"
-                        data-i18n="hero.title.line3"
-                        >Tide</span
-                    >
+                    <span class="hero-word hero-word-single">Surf the Tide</span>
                 </h1>
-                <p class="hero-shortline" data-i18n="hero.shortline">In the modern web era, the tide is strong. Let's surf.</p>
-                <div class="hero-tagline">
-                    <p class="tagline-line" data-i18n="hero.tagline1">
-                        Your AI doesn't need eyes to browse.
-                    </p>
-                    <p class="tagline-line" data-i18n="hero.tagline2">
-                        We compress every page to what matters.
-                    </p>
-                </div>
+                <p class="hero-tagline" data-i18n="hero.tagline">Your agent does not need eyes to browse.</p>
                 <div class="hero-cta">
                     <div class="install-box">
-                        <div class="slot-machine">
-                            <div class="slot-track" id="slot-track">
+                        <span class="prompt" style="color: var(--accent); user-select: none;">$</span>
+                        <div class="pkg-cycle">
+                            <div class="pkg-track" id="pkg-track">
                                 <code>bun add @tidesurf/core</code>
                                 <code>npm install @tidesurf/core</code>
-                                <code>yarn add @tidesurf/core</code>
+                                <code style="padding-right: 2rem;">yarn add @tidesurf/core</code>
                                 <code>pnpm add @tidesurf/core</code>
                                 <code>bun add @tidesurf/core</code>
                             </div>
                         </div>
                         <button
                             class="copy-btn"
+                            id="install-copy-btn"
                             data-copy="bun add @tidesurf/core"
                             aria-label="Copy to clipboard"
                         >
@@ -211,375 +176,35 @@
         </header>
 
         <main>
-            <!-- ── Comparison Showcase ── -->
+            <!-- ── How it Works ── -->
             <section class="section comparison">
                 <div class="section-header reveal">
-                    <span class="section-label" data-i18n="compare.label"
-                        >How it works</span
-                    >
-                    <h2 class="compare-headline" data-i18n="compare.headline">
-                        XML is all you need.
-                    </h2>
-                    <p class="section-desc" data-i18n="compare.desc">
-                        TideSurf strips wrapper elements, classes, scripts and
-                        styles. What's left is clean, semantic XML that any LLM
-                        can consume.
-                    </p>
+                    <span class="section-label">How it works</span>
+                    <h2 class="compare-headline">HTML in, XML out</h2>
                 </div>
 
-                <div class="showcase reveal">
-                    <div class="showcase-container">
-                        <button
-                            class="showcase-nav showcase-prev"
-                            aria-label="Previous example"
-                        >
-                            <svg
-                                width="20"
-                                height="20"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="2"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                            >
-                                <path d="M15 18l-6-6 6-6" />
-                            </svg>
-                        </button>
-                        <div class="showcase-viewport">
-                            <div class="showcase-track">
-                                <!-- Slide 1: Navigation -->
-                                <div class="showcase-slide">
-                                    <div
-                                        class="slide-label"
-                                        data-i18n="compare.nav.label"
-                                    >
-                                        Navigation
-                                    </div>
-                                    <div class="transform-pair">
-                                        <div
-                                            class="transform-side transform-before"
-                                        >
-                                            <span
-                                                class="transform-tag"
-                                                data-i18n="compare.raw"
-                                                >Raw HTML</span
-                                            >
-                                            <pre><code>&lt;div class="header"&gt;
-  &lt;nav class="main-nav"
-    role="navigation"&gt;
-    &lt;ul class="nav-list"&gt;
-      &lt;li class="nav-item"&gt;
-        &lt;a href="/"
-          class="nav-link active"&gt;
-          Home
-        &lt;/a&gt;
-      &lt;/li&gt;
-      &lt;li class="nav-item"&gt;
-        &lt;a href="/about"
-          class="nav-link"&gt;
-          About
-        &lt;/a&gt;
-      &lt;/li&gt;
-    &lt;/ul&gt;
+                <div class="transform-demo reveal">
+                    <div class="code-block">
+                        <div class="code-header"><span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span><span class="code-filename">raw.html</span><span class="code-badge">12 lines</span></div>
+                        <pre><code><span class="x-cut">&lt;div class="header"&gt;</span>
+  &lt;nav <span class="x-cut">class="main-nav" role="navigation"</span>&gt;
+    <span class="x-cut">&lt;ul class="nav-list"&gt;</span>
+      <span class="x-cut">&lt;li class="nav-item"&gt;</span>
+        &lt;a href="/" <span class="x-cut">class="nav-link active"</span>&gt;<span class="x-keep">Home</span>&lt;/a&gt;
+      <span class="x-cut">&lt;/li&gt;</span>
+      <span class="x-cut">&lt;li class="nav-item"&gt;</span>
+        &lt;a href="/about" <span class="x-cut">class="nav-link"</span>&gt;<span class="x-keep">About</span>&lt;/a&gt;
+      <span class="x-cut">&lt;/li&gt;</span>
+    <span class="x-cut">&lt;/ul&gt;</span>
   &lt;/nav&gt;
-&lt;/div&gt;</code></pre>
-                                        </div>
-                                        <div class="transform-arrow">
-                                            <svg
-                                                width="24"
-                                                height="24"
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                stroke-width="1.5"
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                            >
-                                                <path
-                                                    d="M5 12h14M13 6l6 6-6 6"
-                                                />
-                                            </svg>
-                                        </div>
-                                        <div
-                                            class="transform-side transform-after"
-                                        >
-                                            <span
-                                                class="transform-tag"
-                                                data-i18n="compare.tidesurf"
-                                                >TideSurf XML</span
-                                            >
-                                            <pre><code>&lt;nav&gt;
-  &lt;link id="L1"
-    href="/"&gt;Home&lt;/link&gt;
-  &lt;link id="L2"
-    href="/about"&gt;About&lt;/link&gt;
-&lt;/nav&gt;</code></pre>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Slide 2: Search form -->
-                                <div class="showcase-slide">
-                                    <div
-                                        class="slide-label"
-                                        data-i18n="compare.form.label"
-                                    >
-                                        Search form
-                                    </div>
-                                    <div class="transform-pair">
-                                        <div
-                                            class="transform-side transform-before"
-                                        >
-                                            <span
-                                                class="transform-tag"
-                                                data-i18n="compare.raw"
-                                                >Raw HTML</span
-                                            >
-                                            <pre><code>&lt;div class="search-container"&gt;
-  &lt;form id="search-form"
-    action="/search"&gt;
-    &lt;div class="input-wrapper"&gt;
-      &lt;input type="text"
-        name="q"
-        placeholder="Search..."
-        value="TideSurf" /&gt;
-      &lt;button type="submit"
-        class="btn btn-primary"&gt;
-        Search
-      &lt;/button&gt;
-    &lt;/div&gt;
-  &lt;/form&gt;
-&lt;/div&gt;</code></pre>
-                                        </div>
-                                        <div class="transform-arrow">
-                                            <svg
-                                                width="24"
-                                                height="24"
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                stroke-width="1.5"
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                            >
-                                                <path
-                                                    d="M5 12h14M13 6l6 6-6 6"
-                                                />
-                                            </svg>
-                                        </div>
-                                        <div
-                                            class="transform-side transform-after"
-                                        >
-                                            <span
-                                                class="transform-tag"
-                                                data-i18n="compare.tidesurf"
-                                                >TideSurf XML</span
-                                            >
-                                            <pre><code>&lt;form id="F1"
-  action="/search"&gt;
-  &lt;input id="I1"
-    type="text"
-    value="TideSurf"
-    placeholder="Search..." /&gt;
-  &lt;button id="B1"&gt;
-    Search
-  &lt;/button&gt;
-&lt;/form&gt;</code></pre>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Slide 3: Product card -->
-                                <div class="showcase-slide">
-                                    <div
-                                        class="slide-label"
-                                        data-i18n="compare.product.label"
-                                    >
-                                        Product card
-                                    </div>
-                                    <div class="transform-pair">
-                                        <div
-                                            class="transform-side transform-before"
-                                        >
-                                            <span
-                                                class="transform-tag"
-                                                data-i18n="compare.raw"
-                                                >Raw HTML</span
-                                            >
-                                            <pre><code>&lt;div class="product-card"&gt;
-  &lt;img src="/tee.jpg"
-    class="product-img"
-    loading="lazy"
-    alt="Blue T-Shirt" /&gt;
-  &lt;div class="product-info"&gt;
-    &lt;h3 class="title"&gt;
-      Blue T-Shirt
-    &lt;/h3&gt;
-    &lt;span class="price"&gt;
-      $29.99
-    &lt;/span&gt;
-    &lt;span class="badge sale"&gt;
-      -20%
-    &lt;/span&gt;
-    &lt;button class="btn add-to-cart"
-      data-product-id="1842"&gt;
-      Add to Cart
-    &lt;/button&gt;
-  &lt;/div&gt;
-&lt;/div&gt;</code></pre>
-                                        </div>
-                                        <div class="transform-arrow">
-                                            <svg
-                                                width="24"
-                                                height="24"
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                stroke-width="1.5"
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                            >
-                                                <path
-                                                    d="M5 12h14M13 6l6 6-6 6"
-                                                />
-                                            </svg>
-                                        </div>
-                                        <div
-                                            class="transform-side transform-after"
-                                        >
-                                            <span
-                                                class="transform-tag"
-                                                data-i18n="compare.tidesurf"
-                                                >TideSurf XML</span
-                                            >
-                                            <pre><code>&lt;img id="I1"
-  alt="Blue T-Shirt" /&gt;
-&lt;text&gt;Blue T-Shirt&lt;/text&gt;
-&lt;text&gt;$29.99 -20%&lt;/text&gt;
-&lt;button id="B1"&gt;
-  Add to Cart
-&lt;/button&gt;</code></pre>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Slide 4: Data table -->
-                                <div class="showcase-slide">
-                                    <div
-                                        class="slide-label"
-                                        data-i18n="compare.table.label"
-                                    >
-                                        Data table
-                                    </div>
-                                    <div class="transform-pair">
-                                        <div
-                                            class="transform-side transform-before"
-                                        >
-                                            <span
-                                                class="transform-tag"
-                                                data-i18n="compare.raw"
-                                                >Raw HTML</span
-                                            >
-                                            <pre><code>&lt;table class="data-table"
-  role="grid"&gt;
-  &lt;thead&gt;
-    &lt;tr class="header-row"&gt;
-      &lt;th class="sortable"
-        aria-sort="asc"&gt;Name&lt;/th&gt;
-      &lt;th&gt;Role&lt;/th&gt;
-    &lt;/tr&gt;
-  &lt;/thead&gt;
-  &lt;tbody&gt;
-    &lt;tr data-row-id="1"&gt;
-      &lt;td&gt;Alice&lt;/td&gt;
-      &lt;td&gt;Engineer&lt;/td&gt;
-    &lt;/tr&gt;
-    &lt;tr data-row-id="2"&gt;
-      &lt;td&gt;Bob&lt;/td&gt;
-      &lt;td&gt;Designer&lt;/td&gt;
-    &lt;/tr&gt;
-  &lt;/tbody&gt;
-&lt;/table&gt;</code></pre>
-                                        </div>
-                                        <div class="transform-arrow">
-                                            <svg
-                                                width="24"
-                                                height="24"
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                stroke-width="1.5"
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                            >
-                                                <path
-                                                    d="M5 12h14M13 6l6 6-6 6"
-                                                />
-                                            </svg>
-                                        </div>
-                                        <div
-                                            class="transform-side transform-after"
-                                        >
-                                            <span
-                                                class="transform-tag"
-                                                data-i18n="compare.tidesurf"
-                                                >TideSurf XML</span
-                                            >
-                                            <pre><code>&lt;table id="T1"&gt;
-  &lt;tr&gt;
-    &lt;th&gt;Name&lt;/th&gt;
-    &lt;th&gt;Role&lt;/th&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-    &lt;td&gt;Alice&lt;/td&gt;
-    &lt;td&gt;Engineer&lt;/td&gt;
-  &lt;/tr&gt;
-  &lt;tr&gt;
-    &lt;td&gt;Bob&lt;/td&gt;
-    &lt;td&gt;Designer&lt;/td&gt;
-  &lt;/tr&gt;
-&lt;/table&gt;</code></pre>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <button
-                            class="showcase-nav showcase-next"
-                            aria-label="Next example"
-                        >
-                            <svg
-                                width="20"
-                                height="20"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="2"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                            >
-                                <path d="M9 18l6-6-6-6" />
-                            </svg>
-                        </button>
+<span class="x-cut">&lt;/div&gt;</span></code></pre>
                     </div>
-                    <div class="showcase-dots">
-                        <button
-                            class="showcase-dot active"
-                            aria-label="Slide 1"
-                        ></button>
-                        <button
-                            class="showcase-dot"
-                            aria-label="Slide 2"
-                        ></button>
-                        <button
-                            class="showcase-dot"
-                            aria-label="Slide 3"
-                        ></button>
-                        <button
-                            class="showcase-dot"
-                            aria-label="Slide 4"
-                        ></button>
+                    <div class="code-block">
+                        <div class="code-header"><span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span><span class="code-filename">tidesurf.xml</span><span class="code-badge">4 lines</span></div>
+                        <pre><code>&lt;nav&gt;
+  &lt;link <span class="x-id">id="L1"</span> href="/"&gt;<span class="x-keep">Home</span>&lt;/link&gt;
+  &lt;link <span class="x-id">id="L2"</span> href="/about"&gt;<span class="x-keep">About</span>&lt;/link&gt;
+&lt;/nav&gt;</code></pre>
                     </div>
                 </div>
             </section>
@@ -587,131 +212,80 @@
             <!-- ── Benchmarks ── -->
             <section class="section benchmarks">
                 <div class="section-header reveal">
-                    <span class="section-label" data-i18n="bench.label">Performance</span>
-                    <h2 data-i18n="bench.title">Real-world compression</h2>
+                    <span class="section-label">Compression</span>
+                    <h2>Less tokens, less cost</h2>
                 </div>
 
-                <!-- Hero stats -->
-                <div class="bench-hero reveal">
-                    <div class="bench-stat bench-stat-primary">
-                        <span class="bench-stat-value">7.7<span class="bench-stat-unit">x</span></span>
-                        <span class="bench-stat-caption" data-i18n="bench.stat.peak">Peak compression on GitHub</span>
-                    </div>
-                    <div class="bench-stat-divider"></div>
-                    <div class="bench-stat">
-                        <span class="bench-stat-value">87<span class="bench-stat-unit">%</span></span>
-                        <span class="bench-stat-caption" data-i18n="bench.stat.reduction">Token reduction</span>
-                    </div>
-                    <div class="bench-stat-divider"></div>
-                    <div class="bench-stat">
-                        <span class="bench-stat-value">18<span class="bench-stat-unit">ms</span></span>
-                        <span class="bench-stat-caption" data-i18n="bench.stat.speed">Average parse time</span>
-                    </div>
-                </div>
-
-                <!-- Bar chart -->
-                <div class="bench-chart reveal" id="bench-chart">
-                    <div class="bench-row" data-raw="123631" data-compressed="25189">
-                        <div class="bench-row-label">
-                            <span class="bench-site">Wikipedia</span>
-                            <span class="bench-ratio-badge">4.9x</span>
-                        </div>
-                        <div class="bench-bars">
-                            <div class="bench-bar bench-bar-raw" style="--target-width: 100%">
-                                <span class="bench-bar-value">123,631</span>
-                            </div>
-                            <div class="bench-bar bench-bar-compressed" style="--target-width: 20.4%">
-                                <span class="bench-bar-value">25,189</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="bench-row" data-raw="84668" data-compressed="10968">
-                        <div class="bench-row-label">
-                            <span class="bench-site">GitHub</span>
-                            <span class="bench-ratio-badge bench-ratio-best">7.7x</span>
-                        </div>
-                        <div class="bench-bars">
-                            <div class="bench-bar bench-bar-raw" style="--target-width: 68.5%">
-                                <span class="bench-bar-value">84,668</span>
-                            </div>
-                            <div class="bench-bar bench-bar-compressed" style="--target-width: 8.9%">
-                                <span class="bench-bar-value">10,968</span>
+                <div class="bench-duo reveal">
+                    <div class="bench-chart">
+                        <span class="bench-chart-title">Tokens</span>
+                        <div class="bench-chart-wrap">
+                            <div class="bench-y"><span>120K</span><span>60K</span><span>0</span></div>
+                            <div class="bench-chart-area">
+                                <div class="bench-col">
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 68%" data-val="84,668"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 9%" data-val="10,968"></div></div>
+                                    <span class="bench-col-site">GitHub</span>
+                                    <span class="bench-col-ratio">7.7×</span>
+                                </div>
+                                <div class="bench-col">
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 100%" data-val="123,631"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 20%" data-val="25,189"></div></div>
+                                    <span class="bench-col-site">Wiki</span>
+                                    <span class="bench-col-ratio">4.9×</span>
+                                </div>
+                                <div class="bench-col">
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 38%" data-val="47,489"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 18%" data-val="21,972"></div></div>
+                                    <span class="bench-col-site">Reddit</span>
+                                    <span class="bench-col-ratio">2.2×</span>
+                                </div>
+                                <div class="bench-col">
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 20%" data-val="24,919"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 15%" data-val="18,769"></div></div>
+                                    <span class="bench-col-site">MDN</span>
+                                    <span class="bench-col-ratio">1.3×</span>
+                                </div>
+                                <div class="bench-col">
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 7%" data-val="8,694"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 6%" data-val="7,364"></div></div>
+                                    <span class="bench-col-site">HN</span>
+                                    <span class="bench-col-ratio">1.2×</span>
+                                </div>
                             </div>
                         </div>
                     </div>
-                    <div class="bench-row" data-raw="47489" data-compressed="21972">
-                        <div class="bench-row-label">
-                            <span class="bench-site">Reddit</span>
-                            <span class="bench-ratio-badge">2.2x</span>
-                        </div>
-                        <div class="bench-bars">
-                            <div class="bench-bar bench-bar-raw" style="--target-width: 38.4%">
-                                <span class="bench-bar-value">47,489</span>
-                            </div>
-                            <div class="bench-bar bench-bar-compressed" style="--target-width: 17.8%">
-                                <span class="bench-bar-value">21,972</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="bench-row" data-raw="24919" data-compressed="18769">
-                        <div class="bench-row-label">
-                            <span class="bench-site">MDN Docs</span>
-                            <span class="bench-ratio-badge">1.3x</span>
-                        </div>
-                        <div class="bench-bars">
-                            <div class="bench-bar bench-bar-raw" style="--target-width: 20.2%">
-                                <span class="bench-bar-value">24,919</span>
-                            </div>
-                            <div class="bench-bar bench-bar-compressed" style="--target-width: 15.2%">
-                                <span class="bench-bar-value">18,769</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="bench-row" data-raw="8694" data-compressed="7364">
-                        <div class="bench-row-label">
-                            <span class="bench-site">Hacker News</span>
-                            <span class="bench-ratio-badge">1.2x</span>
-                        </div>
-                        <div class="bench-bars">
-                            <div class="bench-bar bench-bar-raw" style="--target-width: 7.0%">
-                                <span class="bench-bar-value">8,694</span>
-                            </div>
-                            <div class="bench-bar bench-bar-compressed" style="--target-width: 6.0%">
-                                <span class="bench-bar-value">7,364</span>
+                    <div class="bench-chart">
+                        <span class="bench-chart-title">Input cost <span class="bench-chart-unit">/ 1K pages</span></span>
+                        <div class="bench-chart-wrap">
+                            <div class="bench-y"><span>$618</span><span>$309</span><span>$0</span></div>
+                            <div class="bench-chart-area">
+                                <div class="bench-col">
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 68%" data-val="$423"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 9%" data-val="$55"></div></div>
+                                    <span class="bench-col-site">GitHub</span>
+                                    <span class="bench-col-save">&minus;$369</span>
+                                </div>
+                                <div class="bench-col">
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 100%" data-val="$618"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 20%" data-val="$126"></div></div>
+                                    <span class="bench-col-site">Wiki</span>
+                                    <span class="bench-col-save">&minus;$492</span>
+                                </div>
+                                <div class="bench-col">
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 38%" data-val="$237"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 18%" data-val="$110"></div></div>
+                                    <span class="bench-col-site">Reddit</span>
+                                    <span class="bench-col-save">&minus;$128</span>
+                                </div>
+                                <div class="bench-col">
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 20%" data-val="$125"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 15%" data-val="$94"></div></div>
+                                    <span class="bench-col-site">MDN</span>
+                                    <span class="bench-col-save">&minus;$31</span>
+                                </div>
+                                <div class="bench-col">
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 7%" data-val="$43"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 6%" data-val="$37"></div></div>
+                                    <span class="bench-col-site">HN</span>
+                                    <span class="bench-col-save">&minus;$7</span>
+                                </div>
                             </div>
                         </div>
                     </div>
-                    <div class="bench-legend">
-                        <span class="bench-legend-item"><span class="bench-legend-swatch bench-legend-raw"></span> <span data-i18n="bench.legend.raw">Raw HTML</span></span>
-                        <span class="bench-legend-item"><span class="bench-legend-swatch bench-legend-compressed"></span> <span data-i18n="bench.legend.tidesurf">TideSurf XML</span></span>
-                    </div>
-                </div>
-
-                <!-- Explanation -->
-                <div class="bench-explain reveal">
-                    <div class="bench-explain-block">
-                        <h3 data-i18n="bench.why.title">Why this matters</h3>
-                        <p data-i18n="bench.why.body">
-                            Every token your agent reads costs money and eats into the context window.
-                            A GitHub page that takes 84,668 tokens raw fits in just 10,968 with TideSurf — that's
-                            the difference between one page filling your context and browsing dozens of pages in a single session.
-                        </p>
-                    </div>
-                    <div class="bench-explain-block">
-                        <h3 data-i18n="bench.how.title">How we measure</h3>
-                        <p data-i18n="bench.how.body">
-                            We launch headless Chrome, navigate to each site, and compare the full rendered DOM
-                            against TideSurf's compressed XML output. Token counts use cl100k_base estimation.
-                            No cherry-picking — these are live pages, measured as-is.
-                        </p>
-                    </div>
-                    <div class="bench-explain-block">
-                        <h3 data-i18n="bench.varies.title">Compression varies</h3>
-                        <p data-i18n="bench.varies.body">
-                            Heavy sites like GitHub (deep nesting, SVGs, generated classes) compress dramatically.
-                            Minimal sites like Hacker News are already lean — TideSurf still strips what it can,
-                            but the gains are modest. The more bloated the source, the more TideSurf helps.
-                        </p>
+                    <div class="bench-duo-footer">
+                        <div class="bench-chart-legend"><span><span class="bench-swatch bench-swatch--raw"></span>Raw HTML</span><span><span class="bench-swatch bench-swatch--comp"></span>TideSurf</span></div>
+                        <span class="bench-note-sm">cl100k_base · Input cost based on Claude Opus 4.6 ($5/MTok)</span>
                     </div>
                 </div>
             </section>
@@ -719,1236 +293,80 @@
             <!-- ── Features ── -->
             <section class="section features">
                 <div class="section-header reveal">
-                    <span class="section-label" data-i18n="features.label"
-                        >Features</span
-                    >
-                    <h2 data-i18n="features.title">Built for agents</h2>
+                    <span class="section-label">Features</span>
+                    <h2>What ships</h2>
                 </div>
 
-                <div class="feature-list">
-                    <!-- 01 DOM compression -->
-                    <div class="feature-block reveal">
-                        <div class="feature-block-header">
-                            <span class="feature-num">01</span>
-                            <h3 data-i18n="feature.compression.title">
-                                DOM compression
-                            </h3>
+                <div class="feat-bento reveal">
+                    <div class="bento-card bento-hero-card">
+                        <div class="bento-hero-text">
+                            <h3 class="bento-title">Tools</h3>
+                            <p class="bento-desc">18 tool schemas that map directly to LLM function calling. Click elements, fill forms, scroll, extract data. Works with OpenAI, Claude, Gemini, or local models.</p>
                         </div>
-                        <div class="feature-block-body">
-                            <div class="feature-visual">
-                                <svg
-                                    class="feature-svg"
-                                    viewBox="0 0 400 260"
-                                    fill="none"
-                                >
-                                    <g
-                                        opacity="0.2"
-                                        stroke="currentColor"
-                                        stroke-width="0.8"
-                                    >
-                                        <circle cx="80" cy="35" r="9" />
-                                        <circle cx="45" cy="80" r="7" />
-                                        <circle cx="115" cy="80" r="7" />
-                                        <circle cx="25" cy="125" r="5.5" />
-                                        <circle cx="55" cy="125" r="5.5" />
-                                        <circle cx="95" cy="125" r="5.5" />
-                                        <circle cx="125" cy="125" r="5.5" />
-                                        <circle cx="145" cy="125" r="5.5" />
-                                        <circle cx="15" cy="168" r="4" />
-                                        <circle cx="35" cy="168" r="4" />
-                                        <circle cx="55" cy="168" r="4" />
-                                        <circle cx="85" cy="168" r="4" />
-                                        <circle cx="105" cy="168" r="4" />
-                                        <circle cx="135" cy="168" r="4" />
-                                        <circle cx="155" cy="168" r="4" />
-                                        <line x1="80" y1="44" x2="45" y2="73" />
-                                        <line
-                                            x1="80"
-                                            y1="44"
-                                            x2="115"
-                                            y2="73"
-                                        />
-                                        <line
-                                            x1="45"
-                                            y1="87"
-                                            x2="25"
-                                            y2="119"
-                                        />
-                                        <line
-                                            x1="45"
-                                            y1="87"
-                                            x2="55"
-                                            y2="119"
-                                        />
-                                        <line
-                                            x1="115"
-                                            y1="87"
-                                            x2="95"
-                                            y2="119"
-                                        />
-                                        <line
-                                            x1="115"
-                                            y1="87"
-                                            x2="125"
-                                            y2="119"
-                                        />
-                                        <line
-                                            x1="115"
-                                            y1="87"
-                                            x2="145"
-                                            y2="119"
-                                        />
-                                        <line
-                                            x1="25"
-                                            y1="131"
-                                            x2="15"
-                                            y2="164"
-                                        />
-                                        <line
-                                            x1="25"
-                                            y1="131"
-                                            x2="35"
-                                            y2="164"
-                                        />
-                                        <line
-                                            x1="55"
-                                            y1="131"
-                                            x2="55"
-                                            y2="164"
-                                        />
-                                        <line
-                                            x1="95"
-                                            y1="131"
-                                            x2="85"
-                                            y2="164"
-                                        />
-                                        <line
-                                            x1="95"
-                                            y1="131"
-                                            x2="105"
-                                            y2="164"
-                                        />
-                                        <line
-                                            x1="125"
-                                            y1="131"
-                                            x2="135"
-                                            y2="164"
-                                        />
-                                        <line
-                                            x1="145"
-                                            y1="131"
-                                            x2="155"
-                                            y2="164"
-                                        />
-                                    </g>
-                                    <g opacity="0.25">
-                                        <line
-                                            x1="185"
-                                            y1="130"
-                                            x2="225"
-                                            y2="130"
-                                            stroke="currentColor"
-                                            stroke-width="1"
-                                            stroke-dasharray="4 3"
-                                        />
-                                        <path
-                                            d="M221 125 L230 130 L221 135"
-                                            stroke="currentColor"
-                                            stroke-width="1.2"
-                                        />
-                                    </g>
-                                    <g stroke="#2563eb" stroke-width="1.5">
-                                        <circle
-                                            cx="320"
-                                            cy="65"
-                                            r="12"
-                                            fill="rgba(37,99,235,0.1)"
-                                        />
-                                        <circle
-                                            cx="280"
-                                            cy="130"
-                                            r="10"
-                                            fill="rgba(37,99,235,0.07)"
-                                        />
-                                        <circle
-                                            cx="360"
-                                            cy="130"
-                                            r="10"
-                                            fill="rgba(37,99,235,0.07)"
-                                        />
-                                        <circle
-                                            cx="265"
-                                            cy="192"
-                                            r="8"
-                                            fill="rgba(37,99,235,0.05)"
-                                        />
-                                        <circle
-                                            cx="295"
-                                            cy="192"
-                                            r="8"
-                                            fill="rgba(37,99,235,0.05)"
-                                        />
-                                        <circle
-                                            cx="360"
-                                            cy="192"
-                                            r="8"
-                                            fill="rgba(37,99,235,0.05)"
-                                        />
-                                        <line
-                                            x1="320"
-                                            y1="77"
-                                            x2="280"
-                                            y2="120"
-                                            opacity="0.6"
-                                        />
-                                        <line
-                                            x1="320"
-                                            y1="77"
-                                            x2="360"
-                                            y2="120"
-                                            opacity="0.6"
-                                        />
-                                        <line
-                                            x1="280"
-                                            y1="140"
-                                            x2="265"
-                                            y2="184"
-                                            opacity="0.5"
-                                        />
-                                        <line
-                                            x1="280"
-                                            y1="140"
-                                            x2="295"
-                                            y2="184"
-                                            opacity="0.5"
-                                        />
-                                        <line
-                                            x1="360"
-                                            y1="140"
-                                            x2="360"
-                                            y2="184"
-                                            opacity="0.5"
-                                        />
-                                    </g>
-                                </svg>
-                            </div>
-                            <div class="feature-content">
-                                <p data-i18n="feature.compression.desc">
-                                    Strips classes, wrapper divs, scripts and
-                                    styles while preserving interactive
-                                    elements, semantic structure and text at
-                                    100-800 tokens per page
-                                </p>
-                                <div class="feature-code">
-                                    <pre><code>const state = await browser.getState()
-console.log(state.xml)
-// &lt;page url="..." title="..."&gt;
-//   &lt;nav&gt;
-//     &lt;link id="L1"&gt;Home&lt;/link&gt;
-//   &lt;/nav&gt;
-// &lt;/page&gt;</code></pre>
-                                </div>
+                        <div class="bento-hero-code">
+                            <div class="code-block">
+                                <div class="code-header"><span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span><span class="code-filename">agent.ts</span></div>
+                                <pre><code><span class="tk-kw">await</span> page.<span class="tk-fn">click</span>(<span class="tk-str">"B1"</span>)
+<span class="tk-kw">await</span> page.<span class="tk-fn">type</span>(<span class="tk-str">"I1"</span>, <span class="tk-str">"hello world"</span>)
+<span class="tk-kw">await</span> page.<span class="tk-fn">scroll</span>(<span class="tk-str">"down"</span>, <span class="tk-num">3</span>)
+<span class="tk-kw">const</span> data = <span class="tk-kw">await</span> page.<span class="tk-fn">extract</span>(<span class="tk-str">"T1"</span>)</code></pre>
                             </div>
                         </div>
                     </div>
-
-                    <!-- 02 18 standard tools -->
-                    <div class="feature-block reveal">
-                        <div class="feature-block-header">
-                            <span class="feature-num">02</span>
-                            <h3 data-i18n="feature.tools.title">
-                                18 standard tools
-                            </h3>
-                        </div>
-                        <div class="feature-block-body">
-                            <div class="feature-visual">
-                                <svg
-                                    class="feature-svg"
-                                    viewBox="0 0 400 260"
-                                    fill="none"
-                                >
-                                    <g
-                                        stroke="#2563eb"
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                    >
-                                        <circle
-                                            cx="80"
-                                            cy="70"
-                                            r="30"
-                                            stroke-width="1"
-                                            fill="rgba(37,99,235,0.05)"
-                                        />
-                                        <path
-                                            d="M80 56 L80 84 M73 64 L80 56 L87 64"
-                                            stroke-width="1.5"
-                                        />
-                                        <circle
-                                            cx="200"
-                                            cy="70"
-                                            r="30"
-                                            stroke-width="1"
-                                            fill="rgba(37,99,235,0.05)"
-                                        />
-                                        <path
-                                            d="M194 60 L194 80 L200 76 L205 83"
-                                            stroke-width="1.5"
-                                        />
-                                        <circle
-                                            cx="320"
-                                            cy="70"
-                                            r="30"
-                                            stroke-width="1"
-                                            fill="rgba(37,99,235,0.05)"
-                                        />
-                                        <path
-                                            d="M311 60 L329 60 M320 60 L320 80 M311 80 L329 80"
-                                            stroke-width="1.5"
-                                        />
-                                        <circle
-                                            cx="80"
-                                            cy="190"
-                                            r="30"
-                                            stroke-width="1"
-                                            fill="rgba(37,99,235,0.05)"
-                                        />
-                                        <path
-                                            d="M80 176 L80 204 M74 182 L80 176 L86 182 M74 198 L80 204 L86 198"
-                                            stroke-width="1.5"
-                                        />
-                                        <circle
-                                            cx="200"
-                                            cy="190"
-                                            r="30"
-                                            stroke-width="1"
-                                            fill="rgba(37,99,235,0.05)"
-                                        />
-                                        <circle
-                                            cx="196"
-                                            cy="186"
-                                            r="9"
-                                            stroke-width="1.5"
-                                        />
-                                        <path
-                                            d="M203 193 L210 200"
-                                            stroke-width="1.5"
-                                        />
-                                        <circle
-                                            cx="320"
-                                            cy="190"
-                                            r="30"
-                                            stroke-width="1"
-                                            fill="rgba(37,99,235,0.05)"
-                                        />
-                                        <rect
-                                            x="306"
-                                            y="183"
-                                            width="28"
-                                            height="14"
-                                            rx="3"
-                                            stroke-width="1.5"
-                                        />
-                                        <path
-                                            d="M316 189 L320 193 L324 189"
-                                            stroke-width="1.5"
-                                        />
-                                    </g>
-                                </svg>
-                            </div>
-                            <div class="feature-content">
-                                <p data-i18n="feature.tools.desc">
-                                    Navigate, click, type, scroll, extract and
-                                    more. Works with any LLM that supports
-                                    function calling
-                                </p>
-                                <div class="feature-code">
-                                    <pre><code>await page.click("B1")
-await page.type("I1", "hello world")
-await page.scroll("down", 3)
-await page.select("S1", "option-2")
-const text = await page.extract("T1")</code></pre>
-                                </div>
-                            </div>
+                    <div class="bento-card">
+                        <h3 class="bento-title">Token Budget</h3>
+                        <p class="bento-desc">Set a ceiling. Buttons, links, and inputs survive. Wrappers and decoration get cut by priority.</p>
+                        <div class="code-block">
+                            <div class="code-header"><span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span><span class="code-filename">budget.ts</span></div>
+                            <pre><code><span class="tk-kw">const</span> state = <span class="tk-kw">await</span> browser.<span class="tk-fn">getState</span>({
+  maxTokens: <span class="tk-num">500</span>
+})</code></pre>
                         </div>
                     </div>
-
-                    <!-- 03 Multi-tab -->
-                    <div class="feature-block reveal">
-                        <div class="feature-block-header">
-                            <span class="feature-num">03</span>
-                            <h3 data-i18n="feature.multitab.title">
-                                Multi-tab
-                            </h3>
-                        </div>
-                        <div class="feature-block-body">
-                            <div class="feature-visual">
-                                <svg
-                                    class="feature-svg"
-                                    viewBox="0 0 400 260"
-                                    fill="none"
-                                >
-                                    <g
-                                        opacity="0.15"
-                                        stroke="currentColor"
-                                        stroke-width="1"
-                                    >
-                                        <rect
-                                            x="60"
-                                            y="30"
-                                            width="220"
-                                            height="150"
-                                            rx="8"
-                                        />
-                                        <rect
-                                            x="60"
-                                            y="30"
-                                            width="70"
-                                            height="22"
-                                            rx="8"
-                                        />
-                                        <line
-                                            x1="60"
-                                            y1="52"
-                                            x2="280"
-                                            y2="52"
-                                            stroke-width="0.5"
-                                        />
-                                        <rect
-                                            x="72"
-                                            y="39"
-                                            width="36"
-                                            height="5"
-                                            rx="2"
-                                            fill="currentColor"
-                                            opacity="0.4"
-                                        />
-                                    </g>
-                                    <g
-                                        opacity="0.3"
-                                        stroke="currentColor"
-                                        stroke-width="1"
-                                    >
-                                        <rect
-                                            x="90"
-                                            y="55"
-                                            width="220"
-                                            height="150"
-                                            rx="8"
-                                            fill="rgba(37,99,235,0.02)"
-                                        />
-                                        <rect
-                                            x="90"
-                                            y="55"
-                                            width="70"
-                                            height="22"
-                                            rx="8"
-                                        />
-                                        <line
-                                            x1="90"
-                                            y1="77"
-                                            x2="310"
-                                            y2="77"
-                                            stroke-width="0.5"
-                                        />
-                                        <rect
-                                            x="102"
-                                            y="64"
-                                            width="36"
-                                            height="5"
-                                            rx="2"
-                                            fill="currentColor"
-                                            opacity="0.4"
-                                        />
-                                    </g>
-                                    <g stroke="#2563eb" stroke-width="1.5">
-                                        <rect
-                                            x="120"
-                                            y="80"
-                                            width="220"
-                                            height="150"
-                                            rx="8"
-                                            fill="rgba(37,99,235,0.05)"
-                                        />
-                                        <rect
-                                            x="120"
-                                            y="80"
-                                            width="70"
-                                            height="22"
-                                            rx="8"
-                                            fill="rgba(37,99,235,0.08)"
-                                        />
-                                        <line
-                                            x1="120"
-                                            y1="102"
-                                            x2="340"
-                                            y2="102"
-                                            stroke-width="0.5"
-                                            opacity="0.4"
-                                        />
-                                        <rect
-                                            x="132"
-                                            y="89"
-                                            width="36"
-                                            height="5"
-                                            rx="2"
-                                            fill="#2563eb"
-                                            opacity="0.4"
-                                        />
-                                        <rect
-                                            x="136"
-                                            y="114"
-                                            width="90"
-                                            height="4"
-                                            rx="2"
-                                            fill="#2563eb"
-                                            opacity="0.15"
-                                        />
-                                        <rect
-                                            x="136"
-                                            y="126"
-                                            width="70"
-                                            height="4"
-                                            rx="2"
-                                            fill="#2563eb"
-                                            opacity="0.1"
-                                        />
-                                        <rect
-                                            x="136"
-                                            y="138"
-                                            width="110"
-                                            height="4"
-                                            rx="2"
-                                            fill="#2563eb"
-                                            opacity="0.08"
-                                        />
-                                        <rect
-                                            x="136"
-                                            y="156"
-                                            width="55"
-                                            height="18"
-                                            rx="4"
-                                            fill="rgba(37,99,235,0.1)"
-                                            opacity="0.5"
-                                        />
-                                    </g>
-                                </svg>
-                            </div>
-                            <div class="feature-content">
-                                <p data-i18n="feature.multitab.desc">
-                                    Open, switch and close tabs with independent
-                                    state per tab. Full browser control through
-                                    one API
-                                </p>
-                                <div class="feature-code">
-                                    <pre><code>await browser.newTab()
-await browser.navigate("https://docs.example.com")
-const tabs = await browser.listTabs()
-await browser.switchTab(tabs[0].id)
-await browser.closeTab(tabs[1].id)</code></pre>
-                                </div>
-                            </div>
+                    <div class="bento-card">
+                        <h3 class="bento-title">Auto-connect</h3>
+                        <p class="bento-desc">Skip the login flows. Attach to your running Chrome — sessions, cookies, and auth carry over.</p>
+                        <div class="code-block">
+                            <div class="code-header"><span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span><span class="code-filename">connect.ts</span></div>
+                            <pre><code><span class="tk-kw">const</span> browser = <span class="tk-kw">await</span> TideSurf.<span class="tk-fn">connect</span>()</code></pre>
                         </div>
                     </div>
-
-                    <!-- 04 Token budget -->
-                    <div class="feature-block reveal">
-                        <div class="feature-block-header">
-                            <span class="feature-num">04</span>
-                            <h3 data-i18n="feature.tokens.title">
-                                Token budget
-                            </h3>
+                    <div class="bento-card bento-wide-card">
+                        <div class="bento-wide-text">
+                            <h3 class="bento-title">Plug in</h3>
+                            <p class="bento-desc">Drop into any MCP-compatible agent.</p>
                         </div>
-                        <div class="feature-block-body">
-                            <div class="feature-visual">
-                                <svg
-                                    class="feature-svg"
-                                    viewBox="0 0 400 260"
-                                    fill="none"
-                                >
-                                    <rect
-                                        x="30"
-                                        y="95"
-                                        width="55"
-                                        height="40"
-                                        rx="4"
-                                        fill="rgba(37,99,235,0.2)"
-                                        stroke="#2563eb"
-                                        stroke-width="1"
-                                    />
-                                    <rect
-                                        x="92"
-                                        y="95"
-                                        width="42"
-                                        height="40"
-                                        rx="4"
-                                        fill="rgba(37,99,235,0.15)"
-                                        stroke="#2563eb"
-                                        stroke-width="1"
-                                    />
-                                    <rect
-                                        x="141"
-                                        y="95"
-                                        width="50"
-                                        height="40"
-                                        rx="4"
-                                        fill="rgba(37,99,235,0.12)"
-                                        stroke="#2563eb"
-                                        stroke-width="1"
-                                    />
-                                    <rect
-                                        x="198"
-                                        y="95"
-                                        width="32"
-                                        height="40"
-                                        rx="4"
-                                        fill="rgba(37,99,235,0.08)"
-                                        stroke="#2563eb"
-                                        stroke-width="1"
-                                        opacity="0.7"
-                                    />
-                                    <line
-                                        x1="250"
-                                        y1="65"
-                                        x2="250"
-                                        y2="170"
-                                        stroke="#2563eb"
-                                        stroke-width="1.5"
-                                        stroke-dasharray="4 3"
-                                        opacity="0.5"
-                                    />
-                                    <rect
-                                        x="264"
-                                        y="95"
-                                        width="38"
-                                        height="40"
-                                        rx="4"
-                                        stroke="currentColor"
-                                        stroke-width="1"
-                                        opacity="0.1"
-                                        stroke-dasharray="3 3"
-                                    />
-                                    <rect
-                                        x="310"
-                                        y="95"
-                                        width="48"
-                                        height="40"
-                                        rx="4"
-                                        stroke="currentColor"
-                                        stroke-width="1"
-                                        opacity="0.07"
-                                        stroke-dasharray="3 3"
-                                    />
-                                    <g
-                                        fill="#2563eb"
-                                        opacity="0.35"
-                                        style="
-                                            font-family: monospace;
-                                            font-size: 10px;
-                                        "
-                                        text-anchor="middle"
-                                    >
-                                        <text x="250" y="56">maxTokens</text>
-                                    </g>
-                                    <g
-                                        stroke="#2563eb"
-                                        stroke-width="1.5"
-                                        stroke-linecap="round"
-                                        opacity="0.4"
-                                    >
-                                        <polyline
-                                            points="46 110 52 120 62 105"
-                                        />
-                                        <polyline
-                                            points="103 110 109 120 119 105"
-                                        />
-                                        <polyline
-                                            points="156 110 162 120 172 105"
-                                        />
-                                    </g>
-                                    <g
-                                        stroke="currentColor"
-                                        stroke-width="1"
-                                        stroke-linecap="round"
-                                        opacity="0.12"
-                                    >
-                                        <path
-                                            d="M276 108 L290 122 M290 108 L276 122"
-                                        />
-                                        <path
-                                            d="M327 108 L341 122 M341 108 L327 122"
-                                        />
-                                    </g>
-                                </svg>
+                        <div class="bento-options">
+                            <div class="bento-opt">
+                                <svg class="bento-opt-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                                <span class="bento-opt-label">CLI</span>
+                                <code class="bento-opt-code">$ bunx tidesurf mcp</code>
                             </div>
-                            <div class="feature-content">
-                                <p data-i18n="feature.tokens.desc">
-                                    Set a max token limit and TideSurf
-                                    prioritizes interactive and visible
-                                    elements, pruning the rest
-                                </p>
-                                <div class="feature-code">
-                                    <pre><code>const state = await browser.getState({
-  maxTokens: 500
-})
-// Interactive elements prioritized
-// Decorative content pruned</code></pre>
+                            <div class="bento-opt">
+                                <svg class="bento-opt-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+                                <span class="bento-opt-label">MCP Config</span>
+                                <code class="bento-opt-code">claude_desktop_config.json</code>
+                            </div>
+                        </div>
+                        <div class="bento-popup-extra" hidden>
+                            <div class="bento-extra-section">
+                                <h4 class="bento-extra-title">CLI Quick Start</h4>
+                                <p class="bento-extra-desc">Launch the MCP server with a single command. Any MCP-compatible agent can connect immediately.</p>
+                                <div class="code-block">
+                                    <div class="code-header"><span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span><span class="code-filename">terminal</span></div>
+                                    <pre><code><span class="tk-cm">$</span> <span class="tk-fn">bunx tidesurf</span> mcp</code></pre>
                                 </div>
                             </div>
-                        </div>
-                    </div>
-
-                    <!-- 05 MCP server -->
-                    <div class="feature-block reveal">
-                        <div class="feature-block-header">
-                            <span class="feature-num">05</span>
-                            <h3 data-i18n="feature.mcp.title">MCP server</h3>
-                        </div>
-                        <div class="feature-block-body">
-                            <div class="feature-visual">
-                                <svg
-                                    class="feature-svg"
-                                    viewBox="0 0 400 260"
-                                    fill="none"
-                                >
-                                    <line
-                                        x1="200"
-                                        y1="130"
-                                        x2="80"
-                                        y2="60"
-                                        stroke="#2563eb"
-                                        stroke-width="1"
-                                        opacity="0.3"
-                                    />
-                                    <line
-                                        x1="200"
-                                        y1="130"
-                                        x2="320"
-                                        y2="60"
-                                        stroke="#2563eb"
-                                        stroke-width="1"
-                                        opacity="0.3"
-                                    />
-                                    <line
-                                        x1="200"
-                                        y1="130"
-                                        x2="200"
-                                        y2="220"
-                                        stroke="#2563eb"
-                                        stroke-width="1"
-                                        opacity="0.3"
-                                    />
-                                    <circle
-                                        r="2.5"
-                                        fill="#2563eb"
-                                        opacity="0.6"
-                                    >
-                                        <animate
-                                            attributeName="cx"
-                                            values="200;140;80"
-                                            dur="2.5s"
-                                            repeatCount="indefinite"
-                                        />
-                                        <animate
-                                            attributeName="cy"
-                                            values="130;95;60"
-                                            dur="2.5s"
-                                            repeatCount="indefinite"
-                                        />
-                                    </circle>
-                                    <circle
-                                        r="2.5"
-                                        fill="#2563eb"
-                                        opacity="0.6"
-                                    >
-                                        <animate
-                                            attributeName="cx"
-                                            values="200;260;320"
-                                            dur="2.5s"
-                                            repeatCount="indefinite"
-                                            begin="0.8s"
-                                        />
-                                        <animate
-                                            attributeName="cy"
-                                            values="130;95;60"
-                                            dur="2.5s"
-                                            repeatCount="indefinite"
-                                            begin="0.8s"
-                                        />
-                                    </circle>
-                                    <circle
-                                        r="2.5"
-                                        fill="#2563eb"
-                                        opacity="0.6"
-                                    >
-                                        <animate
-                                            attributeName="cx"
-                                            values="200;200;200"
-                                            dur="2.5s"
-                                            repeatCount="indefinite"
-                                            begin="1.6s"
-                                        />
-                                        <animate
-                                            attributeName="cy"
-                                            values="130;175;220"
-                                            dur="2.5s"
-                                            repeatCount="indefinite"
-                                            begin="1.6s"
-                                        />
-                                    </circle>
-                                    <circle
-                                        cx="200"
-                                        cy="130"
-                                        r="28"
-                                        fill="rgba(37,99,235,0.1)"
-                                        stroke="#2563eb"
-                                        stroke-width="1.5"
-                                    />
-                                    <circle
-                                        cx="200"
-                                        cy="130"
-                                        r="8"
-                                        fill="rgba(37,99,235,0.3)"
-                                        stroke="#2563eb"
-                                        stroke-width="1"
-                                    />
-                                    <circle
-                                        cx="80"
-                                        cy="60"
-                                        r="22"
-                                        fill="rgba(37,99,235,0.06)"
-                                        stroke="#2563eb"
-                                        stroke-width="1"
-                                    />
-                                    <circle
-                                        cx="320"
-                                        cy="60"
-                                        r="22"
-                                        fill="rgba(37,99,235,0.06)"
-                                        stroke="#2563eb"
-                                        stroke-width="1"
-                                    />
-                                    <circle
-                                        cx="200"
-                                        cy="220"
-                                        r="22"
-                                        fill="rgba(37,99,235,0.06)"
-                                        stroke="#2563eb"
-                                        stroke-width="1"
-                                    />
-                                </svg>
-                            </div>
-                            <div class="feature-content">
-                                <p data-i18n="feature.mcp.desc">
-                                    Ships with a Model Context Protocol server.
-                                    Drop it into Claude Code or any MCP client
-                                </p>
-                                <div class="feature-code">
+                            <div class="bento-extra-section">
+                                <h4 class="bento-extra-title">MCP Configuration</h4>
+                                <p class="bento-extra-desc">Add to your claude_desktop_config.json:</p>
+                                <div class="code-block">
+                                    <div class="code-header"><span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span><span class="code-filename">claude_desktop_config.json</span></div>
                                     <pre><code>{
-  "mcpServers": {
-    "tidesurf": {
-      "command": "bunx",
-      "args": ["tidesurf", "mcp"]
-    }
-  }
-}
-// Or connect to your running Chrome:
-// "args": ["tidesurf", "mcp", "--auto-connect"]</code></pre>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 06 TypeScript-first -->
-                    <div class="feature-block reveal">
-                        <div class="feature-block-header">
-                            <span class="feature-num">06</span>
-                            <h3 data-i18n="feature.typescript.title">
-                                TypeScript-first
-                            </h3>
-                        </div>
-                        <div class="feature-block-body">
-                            <div class="feature-visual">
-                                <svg
-                                    class="feature-svg"
-                                    viewBox="0 0 400 260"
-                                    fill="none"
-                                >
-                                    <g
-                                        stroke="#2563eb"
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                    >
-                                        <rect
-                                            x="80"
-                                            y="40"
-                                            width="240"
-                                            height="180"
-                                            rx="8"
-                                            stroke-width="1"
-                                            fill="rgba(37,99,235,0.04)"
-                                        />
-                                        <rect
-                                            x="100"
-                                            y="66"
-                                            width="75"
-                                            height="4"
-                                            rx="2"
-                                            fill="#2563eb"
-                                            opacity="0.4"
-                                        />
-                                        <rect
-                                            x="100"
-                                            y="86"
-                                            width="110"
-                                            height="4"
-                                            rx="2"
-                                            fill="#2563eb"
-                                            opacity="0.25"
-                                        />
-                                        <rect
-                                            x="100"
-                                            y="106"
-                                            width="55"
-                                            height="4"
-                                            rx="2"
-                                            fill="#2563eb"
-                                            opacity="0.15"
-                                        />
-                                        <rect
-                                            x="100"
-                                            y="126"
-                                            width="95"
-                                            height="4"
-                                            rx="2"
-                                            fill="#2563eb"
-                                            opacity="0.25"
-                                        />
-                                        <rect
-                                            x="100"
-                                            y="146"
-                                            width="130"
-                                            height="4"
-                                            rx="2"
-                                            fill="#2563eb"
-                                            opacity="0.2"
-                                        />
-                                        <rect
-                                            x="100"
-                                            y="166"
-                                            width="70"
-                                            height="4"
-                                            rx="2"
-                                            fill="#2563eb"
-                                            opacity="0.3"
-                                        />
-                                        <rect
-                                            x="100"
-                                            y="186"
-                                            width="45"
-                                            height="4"
-                                            rx="2"
-                                            fill="#2563eb"
-                                            opacity="0.15"
-                                        />
-                                        <path
-                                            d="M60 90 L40 130 L60 170"
-                                            stroke-width="2"
-                                            opacity="0.3"
-                                        />
-                                        <path
-                                            d="M340 90 L360 130 L340 170"
-                                            stroke-width="2"
-                                            opacity="0.3"
-                                        />
-                                        <rect
-                                            x="280"
-                                            y="78"
-                                            width="26"
-                                            height="16"
-                                            rx="4"
-                                            fill="rgba(37,99,235,0.12)"
-                                            stroke-width="1"
-                                            opacity="0.5"
-                                        />
-                                        <rect
-                                            x="260"
-                                            y="118"
-                                            width="34"
-                                            height="16"
-                                            rx="4"
-                                            fill="rgba(37,99,235,0.12)"
-                                            stroke-width="1"
-                                            opacity="0.5"
-                                        />
-                                        <rect
-                                            x="280"
-                                            y="138"
-                                            width="26"
-                                            height="16"
-                                            rx="4"
-                                            fill="rgba(37,99,235,0.12)"
-                                            stroke-width="1"
-                                            opacity="0.5"
-                                        />
-                                        <line
-                                            x1="175"
-                                            y1="86"
-                                            x2="280"
-                                            y2="86"
-                                            stroke-width="0.6"
-                                            opacity="0.15"
-                                            stroke-dasharray="3 3"
-                                        />
-                                        <line
-                                            x1="195"
-                                            y1="126"
-                                            x2="260"
-                                            y2="126"
-                                            stroke-width="0.6"
-                                            opacity="0.15"
-                                            stroke-dasharray="3 3"
-                                        />
-                                        <line
-                                            x1="230"
-                                            y1="146"
-                                            x2="280"
-                                            y2="146"
-                                            stroke-width="0.6"
-                                            opacity="0.15"
-                                            stroke-dasharray="3 3"
-                                        />
-                                    </g>
-                                </svg>
-                            </div>
-                            <div class="feature-content">
-                                <p data-i18n="feature.typescript.desc">
-                                    Full type definitions, typed error classes.
-                                    Built for Bun and works with Node
-                                </p>
-                                <div class="feature-code">
-                                    <pre><code>import type {
-  PageState,
-  ToolDefinition
-} from "@tidesurf/core"
-
-const state: PageState =
-  await browser.getState()
-const tools: ToolDefinition[] =
-  browser.getToolDefinitions()</code></pre>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <!-- 07 Auto Connect -->
-                    <div class="feature-block reveal">
-                        <div class="feature-block-header">
-                            <span class="feature-num">07</span>
-                            <h3 data-i18n="feature.autoconnect.title">
-                                Auto Connect
-                            </h3>
-                        </div>
-                        <div class="feature-block-body">
-                            <div class="feature-visual">
-                                <svg
-                                    class="feature-svg"
-                                    viewBox="0 0 400 260"
-                                    fill="none"
-                                >
-                                    <!-- Existing browser window -->
-                                    <g stroke="#2563eb" stroke-width="1.5">
-                                        <rect
-                                            x="200"
-                                            y="40"
-                                            width="170"
-                                            height="130"
-                                            rx="8"
-                                            fill="rgba(37,99,235,0.05)"
-                                        />
-                                        <rect
-                                            x="200"
-                                            y="40"
-                                            width="170"
-                                            height="24"
-                                            rx="8"
-                                            fill="rgba(37,99,235,0.08)"
-                                        />
-                                        <line
-                                            x1="200"
-                                            y1="64"
-                                            x2="370"
-                                            y2="64"
-                                            stroke-width="0.5"
-                                            opacity="0.4"
-                                        />
-                                        <!-- Tab bar -->
-                                        <rect
-                                            x="210"
-                                            y="48"
-                                            width="40"
-                                            height="8"
-                                            rx="2"
-                                            fill="#2563eb"
-                                            opacity="0.3"
-                                        />
-                                        <rect
-                                            x="256"
-                                            y="48"
-                                            width="32"
-                                            height="8"
-                                            rx="2"
-                                            fill="#2563eb"
-                                            opacity="0.15"
-                                        />
-                                        <!-- URL bar glow -->
-                                        <rect
-                                            x="210"
-                                            y="72"
-                                            width="150"
-                                            height="10"
-                                            rx="4"
-                                            fill="rgba(37,99,235,0.06)"
-                                            stroke="#2563eb"
-                                            stroke-width="0.5"
-                                            opacity="0.5"
-                                        />
-                                        <!-- Page content lines -->
-                                        <rect
-                                            x="210"
-                                            y="92"
-                                            width="80"
-                                            height="4"
-                                            rx="2"
-                                            fill="#2563eb"
-                                            opacity="0.12"
-                                        />
-                                        <rect
-                                            x="210"
-                                            y="104"
-                                            width="120"
-                                            height="4"
-                                            rx="2"
-                                            fill="#2563eb"
-                                            opacity="0.08"
-                                        />
-                                        <rect
-                                            x="210"
-                                            y="116"
-                                            width="60"
-                                            height="4"
-                                            rx="2"
-                                            fill="#2563eb"
-                                            opacity="0.06"
-                                        />
-                                        <rect
-                                            x="210"
-                                            y="140"
-                                            width="50"
-                                            height="16"
-                                            rx="4"
-                                            fill="rgba(37,99,235,0.1)"
-                                            opacity="0.5"
-                                        />
-                                    </g>
-                                    <!-- Agent / TideSurf circle -->
-                                    <circle
-                                        cx="65"
-                                        cy="130"
-                                        r="32"
-                                        fill="rgba(37,99,235,0.08)"
-                                        stroke="#2563eb"
-                                        stroke-width="1.5"
-                                    />
-                                    <circle
-                                        cx="65"
-                                        cy="130"
-                                        r="10"
-                                        fill="rgba(37,99,235,0.2)"
-                                        stroke="#2563eb"
-                                        stroke-width="1"
-                                    />
-                                    <!-- Connection line with animated dot -->
-                                    <line
-                                        x1="97"
-                                        y1="130"
-                                        x2="200"
-                                        y2="110"
-                                        stroke="#2563eb"
-                                        stroke-width="1.2"
-                                        stroke-dasharray="6 4"
-                                        opacity="0.4"
-                                    />
-                                    <!-- Plug / connector symbol -->
-                                    <g transform="translate(148,118)" stroke="#2563eb" stroke-width="1.5" fill="none">
-                                        <circle cx="0" cy="0" r="8" fill="rgba(37,99,235,0.15)" />
-                                        <path d="M-3 -3 L3 3 M3 -3 L-3 3" stroke-width="1.5" opacity="0.6" />
-                                    </g>
-                                    <!-- Animated traveling dot -->
-                                    <circle
-                                        r="3"
-                                        fill="#2563eb"
-                                        opacity="0.7"
-                                    >
-                                        <animate
-                                            attributeName="cx"
-                                            values="97;148;200"
-                                            dur="2s"
-                                            repeatCount="indefinite"
-                                        />
-                                        <animate
-                                            attributeName="cy"
-                                            values="130;118;110"
-                                            dur="2s"
-                                            repeatCount="indefinite"
-                                        />
-                                    </circle>
-                                    <!-- "CDP" label -->
-                                    <g
-                                        fill="#2563eb"
-                                        opacity="0.3"
-                                        style="font-family: monospace; font-size: 10px"
-                                        text-anchor="middle"
-                                    >
-                                        <text x="148" y="148">CDP</text>
-                                    </g>
-                                    <!-- "Your Chrome" label -->
-                                    <g
-                                        fill="#2563eb"
-                                        opacity="0.25"
-                                        style="font-family: monospace; font-size: 9px"
-                                        text-anchor="middle"
-                                    >
-                                        <text x="285" y="190">your browser</text>
-                                    </g>
-                                    <!-- "Agent" label -->
-                                    <g
-                                        fill="#2563eb"
-                                        opacity="0.25"
-                                        style="font-family: monospace; font-size: 9px"
-                                        text-anchor="middle"
-                                    >
-                                        <text x="65" y="180">agent</text>
-                                    </g>
-                                </svg>
-                            </div>
-                            <div class="feature-content">
-                                <p data-i18n="feature.autoconnect.desc">
-                                    Connect to an already-running Chrome instead of
-                                    launching a new one. Re-use logged-in sessions,
-                                    debug live pages, seamlessly hand off between
-                                    manual browsing and agent control
-                                </p>
-                                <div class="feature-code">
-                                    <pre><code>// Connect to your running Chrome
-const browser = await TideSurf.connect()
-
-// Or via CLI / MCP
-// tidesurf mcp --auto-connect
-{
-  "mcpServers": {
-    "tidesurf": {
-      "command": "bunx",
-      "args": ["tidesurf", "mcp",
-               "--auto-connect"]
+  <span class="tk-str">"mcpServers"</span>: {
+    <span class="tk-str">"tidesurf"</span>: {
+      <span class="tk-str">"command"</span>: <span class="tk-str">"bunx"</span>,
+      <span class="tk-str">"args"</span>: [<span class="tk-str">"tidesurf"</span>, <span class="tk-str">"mcp"</span>]
     }
   }
 }</code></pre>
@@ -1962,51 +380,20 @@ const browser = await TideSurf.connect()
             <!-- ── Quick Start ── -->
             <section class="section quickstart">
                 <div class="section-header reveal">
-                    <span class="section-label" data-i18n="quickstart.label"
-                        >Quick Start</span
-                    >
-                    <h2 data-i18n="quickstart.title">Get started in seconds</h2>
+                    <span class="section-label">Start</span>
+                    <h2>Three lines</h2>
                 </div>
-                <div class="quickstart-wrapper reveal">
-                    <div class="quickstart-steps">
-                        <button type="button" class="step active" data-step="1" aria-pressed="true">
-                            <span class="step-number">1</span>
-                            <div class="step-content">
-                                <h4 data-i18n="step1.title">Install</h4>
-                                <p data-i18n="step1.desc">
-                                    Add @tidesurf/core to your project
-                                </p>
-                            </div>
-                        </button>
-                        <button type="button" class="step" data-step="2" aria-pressed="false">
-                            <span class="step-number">2</span>
-                            <div class="step-content">
-                                <h4 data-i18n="step2.title">Launch</h4>
-                                <p data-i18n="step2.desc">
-                                    Start a browser instance
-                                </p>
-                            </div>
-                        </button>
-                        <button type="button" class="step" data-step="3" aria-pressed="false">
-                            <span class="step-number">3</span>
-                            <div class="step-content">
-                                <h4 data-i18n="step3.title">Control</h4>
-                                <p data-i18n="step3.desc">
-                                    Navigate and interact with pages
-                                </p>
-                            </div>
-                        </button>
+                <div class="qs-split reveal">
+                    <div class="qs-install">
+                        <pre><code><span class="tk-cm">$</span> <span class="tk-fn">npm install</span> @tidesurf/core</code></pre>
                     </div>
-                    <div class="code-block">
-                        <div class="code-header">
-                            <span class="dot dot-red"></span>
-                            <span class="dot dot-yellow"></span>
-                            <span class="dot dot-green"></span>
-                            <span class="code-filename">example.ts</span>
+                    <div class="qs-code">
+                        <div class="code-block">
+                            <div class="code-header"><span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span><span class="code-filename">index.ts</span></div>
+                            <pre><code><span class="tk-kw">const</span> browser = <span class="tk-kw">await</span> TideSurf.<span class="tk-fn">launch</span>()
+<span class="tk-kw">await</span> browser.<span class="tk-fn">navigate</span>(<span class="tk-str">"https://example.com"</span>)
+<span class="tk-kw">const</span> state = <span class="tk-kw">await</span> browser.<span class="tk-fn">getState</span>()</code></pre>
                         </div>
-                        <pre
-                            class="quickstart-code"
-                        ><code id="quickstart-code"></code></pre>
                     </div>
                 </div>
             </section>
@@ -2035,6 +422,10 @@ const browser = await TideSurf.connect()
                 <div class="footer-copy"><!-- Thanks to SaltyAom --></div>
             </div>
         </footer>
+
+        <div class="bento-modal" id="bento-modal">
+            <div class="bento-modal-content" id="bento-modal-content"></div>
+        </div>
 
         <script type="module" src="/src/main.ts"></script>
     </body>

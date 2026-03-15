@@ -27,6 +27,7 @@ export async function connect(options: {
         port: options.port ?? 9222,
         host: options.host ?? "localhost",
         target: options.tab,
+        useHostName: true,
       }),
       options.timeout ?? 10_000,
       "CDP connect"
