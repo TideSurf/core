@@ -830,15 +830,13 @@ async function init(): Promise<void> {
   initCountUp();
   initBenchGraph();
   initBentoPopup();
+  initPkgCycle();
   updateLangButtons();
   await initGitHubStars();
 }
 
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", () => {
-  initPkgCycle();
-    void init();
-  });
+  document.addEventListener("DOMContentLoaded", () => void init());
 } else {
   void init();
 }

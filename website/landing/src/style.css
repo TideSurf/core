@@ -556,6 +556,20 @@ body {
 }
 
 
+@keyframes rainbow-glow {
+  0%   { color: #ff3333; text-shadow: 0 0 8px #ff333366; }
+  16%  { color: #ff8800; text-shadow: 0 0 8px #ff880066; }
+  33%  { color: #ffdd00; text-shadow: 0 0 8px #ffdd0066; }
+  50%  { color: #33cc33; text-shadow: 0 0 8px #33cc3366; }
+  66%  { color: #3388ff; text-shadow: 0 0 8px #3388ff66; }
+  83%  { color: #aa44ff; text-shadow: 0 0 8px #aa44ff66; }
+  100% { color: #ff3333; text-shadow: 0 0 8px #ff333366; }
+}
+
+.install-box:hover .prompt {
+  animation: rainbow-glow 2s linear infinite;
+}
+
 /* ── Slot Machine ── */
 
 .pkg-cycle {
