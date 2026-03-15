@@ -25,7 +25,7 @@ export class TabManager {
    * List all open tabs (pages only, not service workers etc.)
    */
   async listTabs(): Promise<TabInfo[]> {
-    const targets = await CDP.List({ port: this.port, host: this.host });
+    const targets = await CDP.List({ port: this.port, host: this.host, useHostName: true });
     return (targets as Array<{ id: string; url: string; title: string; type: string }>)
       .filter((t) => t.type === "page")
       .map((t) => ({
@@ -44,6 +44,7 @@ export class TabManager {
       port: this.port,
       host: this.host,
       url,
+      useHostName: true,
     }) as { id: string; url: string; title: string; type: string };
     return {
       id: target.id,
@@ -61,6 +62,7 @@ export class TabManager {
       port: this.port,
       host: this.host,
       id: tabId,
+      useHostName: true,
     });
   }
 

@@ -23,7 +23,7 @@
         <meta name="twitter:image" content="https://tidesurf.org/og.png">
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet" />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <script src="/theme-init.js"></script>
         <link rel="stylesheet" href="/src/style.css" />
@@ -124,17 +124,14 @@
         <header class="hero">
             <div class="hero-content">
                 <h1 class="hero-title">
-                    <span class="hero-word hero-word-top">Surf the</span>
-                    <span class="hero-word hero-word-bottom">Tide</span>
+                    <span class="hero-word hero-word-single">Surf the Tide</span>
                 </h1>
-                <p class="hero-tagline" data-i18n="hero.tagline">DOM compression for LLMs. Navigate, interact, extract — without the bloat.</p>
-                <div class="hero-cta">
-                </div>
+                <p class="hero-tagline" data-i18n="hero.tagline">Your agent does not need eyes to browse.</p>
                 <div class="hero-cta">
                     <div class="install-box">
                         <span class="prompt" style="color: var(--accent); user-select: none;">$</span>
-                        <div class="slot-machine">
-                            <div class="slot-track" id="install-slot-track">
+                        <div class="pkg-cycle">
+                            <div class="pkg-track" id="pkg-track">
                                 <code>bun add @tidesurf/core</code>
                                 <code>npm install @tidesurf/core</code>
                                 <code style="padding-right: 2rem;">yarn add @tidesurf/core</code>
@@ -184,80 +181,30 @@
                 <div class="section-header reveal">
                     <span class="section-label">How it works</span>
                     <h2 class="compare-headline">HTML in, XML out</h2>
-                    <p class="section-desc">
-                        TideSurf compresses the DOM by removing scripts, styles, and presentational markup.
-                        Interactive elements keep IDs for targeting. The result is LLM-readable XML.
-                    </p>
                 </div>
 
-                <div class="showcase">
-                    <div class="showcase-stack">
-                        <!-- Example 1: Navigation -->
-                        <div class="showcase-slide">
-                            <div class="slide-label">Navigation</div>
-                            <div class="transform-pair">
-                                <div class="transform-side transform-before">
-                                    <span class="transform-tag">Raw HTML</span>
-                                    <pre><code>&lt;div class="header"&gt;
-  &lt;nav class="main-nav" role="navigation"&gt;
-    &lt;ul class="nav-list"&gt;
-      &lt;li class="nav-item"&gt;
-        &lt;a href="/" class="nav-link active"&gt;Home&lt;/a&gt;
-      &lt;/li&gt;
-      &lt;li class="nav-item"&gt;
-        &lt;a href="/about" class="nav-link"&gt;About&lt;/a&gt;
-      &lt;/li&gt;
-    &lt;/ul&gt;
+                <div class="transform-demo reveal">
+                    <div class="code-block">
+                        <div class="code-header"><span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span><span class="code-filename">raw.html</span><span class="code-badge">12 lines</span></div>
+                        <pre><code><span class="x-cut">&lt;div class="header"&gt;</span>
+  &lt;nav <span class="x-cut">class="main-nav" role="navigation"</span>&gt;
+    <span class="x-cut">&lt;ul class="nav-list"&gt;</span>
+      <span class="x-cut">&lt;li class="nav-item"&gt;</span>
+        &lt;a href="/" <span class="x-cut">class="nav-link active"</span>&gt;<span class="x-keep">Home</span>&lt;/a&gt;
+      <span class="x-cut">&lt;/li&gt;</span>
+      <span class="x-cut">&lt;li class="nav-item"&gt;</span>
+        &lt;a href="/about" <span class="x-cut">class="nav-link"</span>&gt;<span class="x-keep">About</span>&lt;/a&gt;
+      <span class="x-cut">&lt;/li&gt;</span>
+    <span class="x-cut">&lt;/ul&gt;</span>
   &lt;/nav&gt;
-&lt;/div&gt;</code></pre>
-                                </div>
-                                <div class="transform-arrow">
-                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                        <path d="M5 12h14M13 6l6 6-6 6"/>
-                                    </svg>
-                                </div>
-                                <div class="transform-side transform-after">
-                                    <span class="transform-tag">TideSurf XML</span>
-                                    <pre><code>&lt;nav&gt;
-  &lt;link id="L1" href="/"&gt;Home&lt;/link&gt;
-  &lt;link id="L2" href="/about"&gt;About&lt;/link&gt;
+<span class="x-cut">&lt;/div&gt;</span></code></pre>
+                    </div>
+                    <div class="code-block">
+                        <div class="code-header"><span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span><span class="code-filename">tidesurf.xml</span><span class="code-badge">4 lines</span></div>
+                        <pre><code>&lt;nav&gt;
+  &lt;link <span class="x-id">id="L1"</span> href="/"&gt;<span class="x-keep">Home</span>&lt;/link&gt;
+  &lt;link <span class="x-id">id="L2"</span> href="/about"&gt;<span class="x-keep">About</span>&lt;/link&gt;
 &lt;/nav&gt;</code></pre>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Example 2: Product Card -->
-                        <div class="showcase-slide">
-                            <div class="slide-label">Product Card</div>
-                            <div class="transform-pair">
-                                <div class="transform-side transform-before">
-                                    <span class="transform-tag">Raw HTML</span>
-                                    <pre><code>&lt;div class="product-card"&gt;
-  &lt;img src="/tee.jpg" class="product-img"
-    loading="lazy" alt="Blue T-Shirt" /&gt;
-  &lt;div class="product-info"&gt;
-    &lt;h3 class="title"&gt;Blue T-Shirt&lt;/h3&gt;
-    &lt;span class="price"&gt;$29.99&lt;/span&gt;
-    &lt;span class="badge sale"&gt;-20%&lt;/span&gt;
-    &lt;button class="btn add-to-cart"
-      data-product-id="1842"&gt;Add to Cart&lt;/button&gt;
-  &lt;/div&gt;
-&lt;/div&gt;</code></pre>
-                                </div>
-                                <div class="transform-arrow">
-                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                        <path d="M5 12h14M13 6l6 6-6 6"/>
-                                    </svg>
-                                </div>
-                                <div class="transform-side transform-after">
-                                    <span class="transform-tag">TideSurf XML</span>
-                                    <pre><code>&lt;img id="I1" alt="Blue T-Shirt" /&gt;
-&lt;text&gt;Blue T-Shirt&lt;/text&gt;
-&lt;text&gt;$29.99 -20%&lt;/text&gt;
-&lt;button id="B1"&gt;Add to Cart&lt;/button&gt;</code></pre>
-                                </div>
-                            </div>
-                        </div>
                     </div>
                 </div>
             </section>
@@ -266,211 +213,166 @@
             <section class="section benchmarks">
                 <div class="section-header reveal">
                     <span class="section-label">Compression</span>
-                    <h2>Real-world results</h2>
+                    <h2>Less tokens, less cost</h2>
                 </div>
 
-                <!-- Hero stats -->
-                <div class="bench-hero reveal">
-                    <div class="bench-stat bench-stat-primary">
-                        <span class="bench-stat-value">7.7<span class="bench-stat-unit">x</span></span>
-                        <span class="bench-stat-caption" data-i18n="bench.stat.peak">Peak compression on GitHub</span>
-                    </div>
-                    <div class="bench-stat-divider"></div>
-                    <div class="bench-stat">
-                        <span class="bench-stat-value">87<span class="bench-stat-unit">%</span></span>
-                        <span class="bench-stat-caption" data-i18n="bench.stat.reduction">Token reduction</span>
-                    </div>
-                    <div class="bench-stat-divider"></div>
-                    <div class="bench-stat">
-                        <span class="bench-stat-value">18<span class="bench-stat-unit">ms</span></span>
-                        <span class="bench-stat-caption" data-i18n="bench.stat.speed">Average parse time</span>
-                    </div>
-                </div>
-
-                <!-- Bar chart -->
-                <div class="bench-chart reveal" id="bench-chart">
-                    <div class="bench-row" data-raw="123631" data-compressed="25189">
-                        <div class="bench-row-label">
-                            <span class="bench-site">Wikipedia</span>
-                            <span class="bench-ratio-badge">4.9x</span>
-                        </div>
-                        <div class="bench-bars">
-                            <div class="bench-bar bench-bar-raw" style="--target-width: 100%">
-                                <span class="bench-bar-value">123,631</span>
-                            </div>
-                            <div class="bench-bar bench-bar-compressed" style="--target-width: 20.4%">
-                                <span class="bench-bar-value">25,189</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="bench-row" data-raw="84668" data-compressed="10968">
-                        <div class="bench-row-label">
-                            <span class="bench-site">GitHub</span>
-                            <span class="bench-ratio-badge bench-ratio-best">7.7x</span>
-                        </div>
-                        <div class="bench-bars">
-                            <div class="bench-bar bench-bar-raw" style="--target-width: 68.5%">
-                                <span class="bench-bar-value">84,668</span>
-                            </div>
-                            <div class="bench-bar bench-bar-compressed" style="--target-width: 8.9%">
-                                <span class="bench-bar-value">10,968</span>
+                <div class="bench-duo reveal">
+                    <div class="bench-chart">
+                        <span class="bench-chart-title">Tokens</span>
+                        <div class="bench-chart-wrap">
+                            <div class="bench-y"><span>120K</span><span>60K</span><span>0</span></div>
+                            <div class="bench-chart-area">
+                                <div class="bench-col">
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 68%" data-val="84,668"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 9%" data-val="10,968"></div></div>
+                                    <span class="bench-col-site">GitHub</span>
+                                    <span class="bench-col-ratio">7.7×</span>
+                                </div>
+                                <div class="bench-col">
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 100%" data-val="123,631"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 20%" data-val="25,189"></div></div>
+                                    <span class="bench-col-site">Wiki</span>
+                                    <span class="bench-col-ratio">4.9×</span>
+                                </div>
+                                <div class="bench-col">
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 38%" data-val="47,489"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 18%" data-val="21,972"></div></div>
+                                    <span class="bench-col-site">Reddit</span>
+                                    <span class="bench-col-ratio">2.2×</span>
+                                </div>
+                                <div class="bench-col">
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 20%" data-val="24,919"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 15%" data-val="18,769"></div></div>
+                                    <span class="bench-col-site">MDN</span>
+                                    <span class="bench-col-ratio">1.3×</span>
+                                </div>
+                                <div class="bench-col">
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 7%" data-val="8,694"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 6%" data-val="7,364"></div></div>
+                                    <span class="bench-col-site">HN</span>
+                                    <span class="bench-col-ratio">1.2×</span>
+                                </div>
                             </div>
                         </div>
                     </div>
-                    <div class="bench-row" data-raw="47489" data-compressed="21972">
-                        <div class="bench-row-label">
-                            <span class="bench-site">Reddit</span>
-                            <span class="bench-ratio-badge">2.2x</span>
-                        </div>
-                        <div class="bench-bars">
-                            <div class="bench-bar bench-bar-raw" style="--target-width: 38.4%">
-                                <span class="bench-bar-value">47,489</span>
-                            </div>
-                            <div class="bench-bar bench-bar-compressed" style="--target-width: 17.8%">
-                                <span class="bench-bar-value">21,972</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="bench-row" data-raw="24919" data-compressed="18769">
-                        <div class="bench-row-label">
-                            <span class="bench-site">MDN Docs</span>
-                            <span class="bench-ratio-badge">1.3x</span>
-                        </div>
-                        <div class="bench-bars">
-                            <div class="bench-bar bench-bar-raw" style="--target-width: 20.2%">
-                                <span class="bench-bar-value">24,919</span>
-                            </div>
-                            <div class="bench-bar bench-bar-compressed" style="--target-width: 15.2%">
-                                <span class="bench-bar-value">18,769</span>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="bench-row" data-raw="8694" data-compressed="7364">
-                        <div class="bench-row-label">
-                            <span class="bench-site">Hacker News</span>
-                            <span class="bench-ratio-badge">1.2x</span>
-                        </div>
-                        <div class="bench-bars">
-                            <div class="bench-bar bench-bar-raw" style="--target-width: 7.0%">
-                                <span class="bench-bar-value">8,694</span>
-                            </div>
-                            <div class="bench-bar bench-bar-compressed" style="--target-width: 6.0%">
-                                <span class="bench-bar-value">7,364</span>
+                    <div class="bench-chart">
+                        <span class="bench-chart-title">Input cost <span class="bench-chart-unit">/ 1K pages</span></span>
+                        <div class="bench-chart-wrap">
+                            <div class="bench-y"><span>$618</span><span>$309</span><span>$0</span></div>
+                            <div class="bench-chart-area">
+                                <div class="bench-col">
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 68%" data-val="$423"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 9%" data-val="$55"></div></div>
+                                    <span class="bench-col-site">GitHub</span>
+                                    <span class="bench-col-save">&minus;$369</span>
+                                </div>
+                                <div class="bench-col">
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 100%" data-val="$618"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 20%" data-val="$126"></div></div>
+                                    <span class="bench-col-site">Wiki</span>
+                                    <span class="bench-col-save">&minus;$492</span>
+                                </div>
+                                <div class="bench-col">
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 38%" data-val="$237"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 18%" data-val="$110"></div></div>
+                                    <span class="bench-col-site">Reddit</span>
+                                    <span class="bench-col-save">&minus;$128</span>
+                                </div>
+                                <div class="bench-col">
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 20%" data-val="$125"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 15%" data-val="$94"></div></div>
+                                    <span class="bench-col-site">MDN</span>
+                                    <span class="bench-col-save">&minus;$31</span>
+                                </div>
+                                <div class="bench-col">
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 7%" data-val="$43"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 6%" data-val="$37"></div></div>
+                                    <span class="bench-col-site">HN</span>
+                                    <span class="bench-col-save">&minus;$7</span>
+                                </div>
                             </div>
                         </div>
                     </div>
-                    <div class="bench-legend">
-                        <span class="bench-legend-item"><span class="bench-legend-swatch bench-legend-raw"></span> <span data-i18n="bench.legend.raw">Raw HTML</span></span>
-                        <span class="bench-legend-item"><span class="bench-legend-swatch bench-legend-compressed"></span> <span data-i18n="bench.legend.tidesurf">TideSurf XML</span></span>
+                    <div class="bench-duo-footer">
+                        <div class="bench-chart-legend"><span><span class="bench-swatch bench-swatch--raw"></span>Raw HTML</span><span><span class="bench-swatch bench-swatch--comp"></span>TideSurf</span></div>
+                        <span class="bench-note-sm">cl100k_base · Input cost based on Claude Opus 4.6 ($5/MTok)</span>
                     </div>
-                </div>
-
-                <!-- Note -->
-                <div class="bench-note reveal">
-                    <p>Measured on live sites using headless Chrome. Token counts use cl100k_base encoding. 
-                    Heavy sites with generated classes compress most. Already-minimal sites see smaller gains.</p>
                 </div>
             </section>
 
             <!-- ── Features ── -->
             <section class="section features">
                 <div class="section-header reveal">
-                    <span class="section-label">API</span>
-                    <h2>What you get</h2>
+                    <span class="section-label">Features</span>
+                    <h2>What ships</h2>
                 </div>
 
-                <div class="feature-grid">
-                    <!-- 01 DOM compression -->
-                    <div class="feature-card reveal">
-                        <div class="feature-header">
-                            <span class="feature-num">01</span>
-                            <h3>Compressed State</h3>
+                <div class="feat-bento reveal">
+                    <div class="bento-card bento-hero-card">
+                        <div class="bento-hero-text">
+                            <h3 class="bento-title">Tools</h3>
+                            <p class="bento-desc">18 tool schemas that map directly to LLM function calling. Click elements, fill forms, scroll, extract data. Works with OpenAI, Claude, Gemini, or local models.</p>
                         </div>
-                        <p>Get page state as minimal XML. Interactive elements keep IDs for targeting.</p>
-                        <pre><code>const state = await browser.getState()
-console.log(state.xml)
-// &lt;page url="..." title="..."&gt;
-//   &lt;nav&gt;&lt;link id="L1"&gt;Home&lt;/link&gt;&lt;/nav&gt;
-// &lt;/page&gt;</code></pre>
+                        <div class="bento-hero-code">
+                            <div class="code-block">
+                                <div class="code-header"><span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span><span class="code-filename">agent.ts</span></div>
+                                <pre><code><span class="tk-kw">await</span> page.<span class="tk-fn">click</span>(<span class="tk-str">"B1"</span>)
+<span class="tk-kw">await</span> page.<span class="tk-fn">type</span>(<span class="tk-str">"I1"</span>, <span class="tk-str">"hello world"</span>)
+<span class="tk-kw">await</span> page.<span class="tk-fn">scroll</span>(<span class="tk-str">"down"</span>, <span class="tk-num">3</span>)
+<span class="tk-kw">const</span> data = <span class="tk-kw">await</span> page.<span class="tk-fn">extract</span>(<span class="tk-str">"T1"</span>)</code></pre>
+                            </div>
+                        </div>
                     </div>
-
-                    <!-- 02 18 standard tools -->
-                    <div class="feature-card reveal">
-                        <div class="feature-header">
-                            <span class="feature-num">02</span>
-                            <h3>Browser Tools</h3>
-                        </div>
-                        <p>Click, type, scroll, extract. Functions work with any LLM that supports tool calling.</p>
-                        <pre><code>await page.click("B1")
-await page.type("I1", "hello world")
-await page.scroll("down", 3)
-const text = await page.extract("T1")</code></pre>
-                    </div>
-
-                    <!-- 03 Multi-tab -->
-                    <div class="feature-card reveal">
-                        <div class="feature-header">
-                            <span class="feature-num">03</span>
-                            <h3>Multi-tab</h3>
-                        </div>
-                        <p>Open, switch, close tabs. Independent state per tab.</p>
-                        <pre><code>await browser.newTab()
-await browser.navigate("https://docs.example.com")
-const tabs = await browser.listTabs()
-await browser.switchTab(tabs[0].id)</code></pre>
-                    </div>
-
-                    <!-- 04 Token budget -->
-                    <div class="feature-card reveal">
-                        <div class="feature-header">
-                            <span class="feature-num">04</span>
-                            <h3>Token Budget</h3>
-                        </div>
-                        <p>Set a limit. TideSurf prioritizes interactive elements, drops the rest.</p>
-                        <pre><code>const state = await browser.getState({
-  maxTokens: 500
+                    <div class="bento-card">
+                        <h3 class="bento-title">Token Budget</h3>
+                        <p class="bento-desc">Set a ceiling. Buttons, links, and inputs survive. Wrappers and decoration get cut by priority.</p>
+                        <div class="code-block">
+                            <div class="code-header"><span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span><span class="code-filename">budget.ts</span></div>
+                            <pre><code><span class="tk-kw">const</span> state = <span class="tk-kw">await</span> browser.<span class="tk-fn">getState</span>({
+  maxTokens: <span class="tk-num">500</span>
 })</code></pre>
-                    </div>
-
-                    <!-- 05 MCP server -->
-                    <div class="feature-card reveal">
-                        <div class="feature-header">
-                            <span class="feature-num">05</span>
-                            <h3>MCP Server</h3>
                         </div>
-                        <p>Drop into Claude Code or any MCP client. One config line.</p>
-                        <pre><code>{
-  "mcpServers": {
-    "tidesurf": {
-      "command": "bunx",
-      "args": ["tidesurf", "mcp"]
+                    </div>
+                    <div class="bento-card">
+                        <h3 class="bento-title">Auto-connect</h3>
+                        <p class="bento-desc">Skip the login flows. Attach to your running Chrome — sessions, cookies, and auth carry over.</p>
+                        <div class="code-block">
+                            <div class="code-header"><span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span><span class="code-filename">connect.ts</span></div>
+                            <pre><code><span class="tk-kw">const</span> browser = <span class="tk-kw">await</span> TideSurf.<span class="tk-fn">connect</span>()</code></pre>
+                        </div>
+                    </div>
+                    <div class="bento-card bento-wide-card">
+                        <div class="bento-wide-text">
+                            <h3 class="bento-title">Plug in</h3>
+                            <p class="bento-desc">Drop into any MCP-compatible agent.</p>
+                        </div>
+                        <div class="bento-options">
+                            <div class="bento-opt">
+                                <svg class="bento-opt-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                                <span class="bento-opt-label">CLI</span>
+                                <code class="bento-opt-code">$ bunx tidesurf mcp</code>
+                            </div>
+                            <div class="bento-opt">
+                                <svg class="bento-opt-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+                                <span class="bento-opt-label">MCP Config</span>
+                                <code class="bento-opt-code">claude_desktop_config.json</code>
+                            </div>
+                        </div>
+                        <div class="bento-popup-extra" hidden>
+                            <div class="bento-extra-section">
+                                <h4 class="bento-extra-title">CLI Quick Start</h4>
+                                <p class="bento-extra-desc">Launch the MCP server with a single command. Any MCP-compatible agent can connect immediately.</p>
+                                <div class="code-block">
+                                    <div class="code-header"><span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span><span class="code-filename">terminal</span></div>
+                                    <pre><code><span class="tk-cm">$</span> <span class="tk-fn">bunx tidesurf</span> mcp</code></pre>
+                                </div>
+                            </div>
+                            <div class="bento-extra-section">
+                                <h4 class="bento-extra-title">MCP Configuration</h4>
+                                <p class="bento-extra-desc">Add to your claude_desktop_config.json:</p>
+                                <div class="code-block">
+                                    <div class="code-header"><span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span><span class="code-filename">claude_desktop_config.json</span></div>
+                                    <pre><code>{
+  <span class="tk-str">"mcpServers"</span>: {
+    <span class="tk-str">"tidesurf"</span>: {
+      <span class="tk-str">"command"</span>: <span class="tk-str">"bunx"</span>,
+      <span class="tk-str">"args"</span>: [<span class="tk-str">"tidesurf"</span>, <span class="tk-str">"mcp"</span>]
     }
   }
 }</code></pre>
-                    </div>
-
-                    <!-- 06 TypeScript-first -->
-                    <div class="feature-card reveal">
-                        <div class="feature-header">
-                            <span class="feature-num">06</span>
-                            <h3>TypeScript</h3>
+                                </div>
+                            </div>
                         </div>
-                        <p>Full types. Typed errors. Runs on Bun and Node.</p>
-                        <pre><code>import type { PageState } from "@tidesurf/core"
-const state: PageState = await browser.getState()</code></pre>
-                    </div>
-
-                    <!-- 07 Auto Connect -->
-                    <div class="feature-card reveal">
-                        <div class="feature-header">
-                            <span class="feature-num">07</span>
-                            <h3>Auto Connect</h3>
-                        </div>
-                        <p>Connect to existing Chrome. Keep logged-in sessions.</p>
-                        <pre><code>// Connect to your running Chrome
-const browser = await TideSurf.connect()
-
-// Or: bunx tidesurf mcp --auto-connect</code></pre>
                     </div>
                 </div>
             </section>
@@ -481,11 +383,18 @@ const browser = await TideSurf.connect()
                     <span class="section-label">Start</span>
                     <h2>Three lines</h2>
                 </div>
-                <div class="quickstart-simple reveal">
-                    <pre><code>npm install @tidesurf/core</code></pre>
-                    <pre><code>const browser = await TideSurf.launch()
-await browser.navigate("https://example.com")
-const state = await browser.getState()</code></pre>
+                <div class="qs-split reveal">
+                    <div class="qs-install">
+                        <pre><code><span class="tk-cm">$</span> <span class="tk-fn">npm install</span> @tidesurf/core</code></pre>
+                    </div>
+                    <div class="qs-code">
+                        <div class="code-block">
+                            <div class="code-header"><span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span><span class="code-filename">index.ts</span></div>
+                            <pre><code><span class="tk-kw">const</span> browser = <span class="tk-kw">await</span> TideSurf.<span class="tk-fn">launch</span>()
+<span class="tk-kw">await</span> browser.<span class="tk-fn">navigate</span>(<span class="tk-str">"https://example.com"</span>)
+<span class="tk-kw">const</span> state = <span class="tk-kw">await</span> browser.<span class="tk-fn">getState</span>()</code></pre>
+                        </div>
+                    </div>
                 </div>
             </section>
         </main>
@@ -513,6 +422,10 @@ const state = await browser.getState()</code></pre>
                 <div class="footer-copy"><!-- Thanks to SaltyAom --></div>
             </div>
         </footer>
+
+        <div class="bento-modal" id="bento-modal">
+            <div class="bento-modal-content" id="bento-modal-content"></div>
+        </div>
 
         <script type="module" src="/src/main.ts"></script>
     </body>

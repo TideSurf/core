@@ -25,8 +25,8 @@ const translations: Translations = {
     ko: "웹 페이지를 핵심만 남겨 압축합니다.",
   },
   "hero.scroll": { en: "Scroll", ja: "スクロール", ko: "아래로" },
-  "hero.tagline": { 
-    en: "DOM compression for LLMs. Navigate, interact, extract — without the bloat.",
+  "hero.tagline": {
+    en: "Your agent does not need eyes to browse.",
     ja: "LLM向けDOM圧縮。不要な要素を除去し、ナビゲート、操作、抽出を実現。",
     ko: "LLM을 위한 DOM 압축. 불필요한 요소를 제거하고 탐색, 상호작용, 추출을 수행합니다.",
   },
@@ -632,16 +632,15 @@ function initCodeWall(): void {
     content.className = "code-wall-content";
     
     const snippet = generateHTMLSnippet(startOffset, snippetLength);
-    content.innerHTML = snippet;
-    content.setAttribute("data-content", snippet);
+    content.innerHTML = snippet + "    " + snippet;
+
+    const y = Math.round(i * (100 / stripCount));
     
-    const y = i * 10;
-    
-    let baseOpacity = 0.2;
-    if (hasInteractive) baseOpacity = 0.4;
-    else if (hasSemantic) baseOpacity = 0.3;
-    
-    const opacity = baseOpacity + Math.random() * 0.1;
+    let baseOpacity = 0.12;
+    if (hasInteractive) baseOpacity = 0.22;
+    else if (hasSemantic) baseOpacity = 0.17;
+
+    const opacity = baseOpacity + Math.random() * 0.06;
     
     const duration = 600 + Math.random() * 400;
     const startOffsetPx = Math.random() * -2000;
@@ -662,6 +661,14 @@ function initCodeWall(): void {
     
     strip.appendChild(content);
     container.appendChild(strip);
+  }
+
+  // Pause animations when hero is not visible (huge perf win)
+  const heroEl = document.querySelector(".hero");
+  if (heroEl) {
+    new IntersectionObserver((entries) => {
+      container.classList.toggle("paused", !entries[0].isIntersecting);
+    }).observe(heroEl);
   }
 }
 
@@ -695,6 +702,123 @@ async function initGitHubStars(): Promise<void> {
   }
 }
 
+// ── Count Up Animation ──
+
+function initCountUp(): void {
+  if (prefersReducedMotion()) return;
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        const el = entry.target as HTMLElement;
+        if (el.dataset.counted) return;
+        el.dataset.counted = "true";
+
+        const unitEl = el.querySelector(".bench-stat-unit");
+        const unitText = unitEl?.textContent || "";
+        const numStr = (el.textContent || "").replace(unitText, "").trim();
+        const target = parseFloat(numStr);
+        if (isNaN(target)) return;
+
+        const hasDot = numStr.includes(".");
+        const decimals = hasDot ? (numStr.split(".")[1]?.length || 1) : 0;
+        const dur = 1600;
+        const t0 = performance.now();
+
+        function tick(now: number): void {
+          const p = Math.min((now - t0) / dur, 1);
+          const ease = 1 - Math.pow(1 - p, 4);
+          const val = target * ease;
+          const display = hasDot
+            ? val.toFixed(decimals)
+            : String(Math.round(val));
+          const tn = el.childNodes[0];
+          if (tn?.nodeType === Node.TEXT_NODE) tn.textContent = display;
+          if (p < 1) requestAnimationFrame(tick);
+        }
+
+        requestAnimationFrame(tick);
+        observer.unobserve(el);
+      });
+    },
+    { threshold: 0.5 },
+  );
+
+  document
+    .querySelectorAll(".bench-stat-value")
+    .forEach((el) => observer.observe(el));
+}
+
+// ── Bar Growth Animation ──
+
+function initBenchGraph(): void {
+  if (prefersReducedMotion()) return;
+
+  const bars = document.querySelectorAll(".bench-col-bar") as NodeListOf<HTMLElement>;
+  bars.forEach((bar) => {
+    bar.dataset.h = bar.style.height;
+    bar.style.height = "0";
+  });
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        const all = entry.target.querySelectorAll(".bench-col-bar") as NodeListOf<HTMLElement>;
+        all.forEach((bar, i) => {
+          setTimeout(() => {
+            bar.style.height = bar.dataset.h || "0";
+          }, i * 60);
+        });
+        observer.unobserve(entry.target);
+      });
+    },
+    { threshold: 0.1 },
+  );
+
+  const chart = document.querySelector(".bench-duo") || document.querySelector(".bench-chart");
+  if (chart) observer.observe(chart);
+}
+
+// ── Bento Popup ──
+
+function initBentoPopup(): void {
+  const modal = document.getElementById("bento-modal");
+  const content = document.getElementById("bento-modal-content");
+  if (!modal || !content) return;
+
+  function openModal(card: HTMLElement): void {
+    const clone = card.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll("[hidden]").forEach((el) => el.removeAttribute("hidden"));
+    content.innerHTML =
+      '<button class="bento-modal-close" aria-label="Close">\u00d7</button>' +
+      clone.innerHTML;
+    content.querySelector(".bento-modal-close")?.addEventListener("click", closeModal);
+    modal.classList.add("is-open");
+  }
+
+  function closeModal(): void {
+    modal!.classList.remove("is-open");
+  }
+
+  document.querySelectorAll(".bento-card").forEach((card) => {
+    (card as HTMLElement).style.cursor = "pointer";
+    card.addEventListener("click", (e) => {
+      if ((e.target as HTMLElement).closest("a")) return;
+      openModal(card as HTMLElement);
+    });
+  });
+
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) closeModal();
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && modal!.classList.contains("is-open")) closeModal();
+  });
+}
+
 async function init(): Promise<void> {
   initCodeWall();
   initScrollMorph();
@@ -703,21 +827,24 @@ async function init(): Promise<void> {
   initCopyButtons();
   initNavScroll();
   initScrollReveal();
+  initCountUp();
+  initBenchGraph();
+  initBentoPopup();
   updateLangButtons();
   await initGitHubStars();
 }
 
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => {
-  initSlotMachine();
+  initPkgCycle();
     void init();
   });
 } else {
   void init();
 }
 
-function initSlotMachine() {
-  const track = document.getElementById("install-slot-track");
+function initPkgCycle() {
+  const track = document.getElementById("pkg-track");
   const copyBtn = document.getElementById("install-copy-btn");
   if (!track || !copyBtn) return;
 

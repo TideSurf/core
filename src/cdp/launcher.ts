@@ -163,7 +163,7 @@ export async function discoverBrowser(
 
   try {
     const targets = await withTimeout(
-      CDP.List({ port, host }),
+      CDP.List({ port, host, useHostName: true }),
       timeout,
       "discoverBrowser"
     );
