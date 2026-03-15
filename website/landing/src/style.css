@@ -137,7 +137,6 @@ body {
   padding: 1.25rem max(env(safe-area-inset-left, 0px), 3rem) 1.25rem max(env(safe-area-inset-right, 0px), 3rem);
   padding-top: max(env(safe-area-inset-top, 0px), 1.25rem);
   background: var(--hero-nav);
-  border-bottom: 1px solid var(--border);
   transition: padding var(--duration) var(--ease), background var(--duration-slow) var(--ease), color var(--duration-slow) var(--ease), border-color var(--duration-slow) var(--ease);
 }
 
