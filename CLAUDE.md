@@ -28,7 +28,6 @@ src/
 │   ├── id-assigner.ts   # Assigns L/B/I/S IDs to interactive elements
 │   ├── serializer.ts     # OSNode → compact markdown-like text
 │   ├── url-compressor.ts # URL compression (strip tracking, relativize, truncate)
-│   ├── dedup.ts          # Sibling pattern deduplication
 │   └── token-budget.ts   # Token estimation + priority-based pruning
 ├── tools/
 │   ├── definitions.ts   # 18 tool definitions for LLM function calling

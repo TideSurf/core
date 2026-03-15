@@ -16,7 +16,6 @@ import { markVisibleElements, getScrollPosition } from "./viewport.js";
 import { pruneToFit } from "../parser/token-budget.js";
 import { filterViewportOnly } from "../parser/viewport-filter.js";
 import { filterInteractive, filterMinimal } from "../parser/mode-filter.js";
-import { deduplicateSiblings } from "../parser/dedup.js";
 import { ElementNotFoundError, ValidationError } from "../errors.js";
 import {
   validateUrl,
@@ -107,9 +106,6 @@ export class SurfingPage {
 
     // 6. Walk DOM
     let { nodes, nodeMap } = walkDOM(root);
-
-    // 6b. Deduplicate repeating sibling patterns
-    nodes = deduplicateSiblings(nodes);
 
     // 7. If viewport mode, filter to visible subtrees only
     let aboveSummary: OSNode | undefined;

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1 (2026-03-16)
+
+### Fixed
+
+- Remove sibling deduplication from the pipeline. The optimization was lossy — it collapsed repeated elements (product cards, search results) into summaries, preventing the agent from reading omitted items. All page content is now preserved losslessly.
+- Update benchmark numbers to reflect the lossless pipeline.
+
 ## 0.3.0 (2026-03-16)
 
 ### New output format
@@ -32,7 +39,6 @@ Key changes:
 
 - **URL compression** — strips tracking params (`utm_*`, `fbclid`, `gclid`), relativizes same-origin URLs, drops protocol, truncates long paths
 - **Text truncation** — body text outside interactive elements and headings is truncated to 60 chars at word boundaries
-- **Sibling deduplication** — runs of 4+ structurally identical siblings (e.g. product cards, search results) are collapsed to 3 examples + a summary like `...17 more (L4-L20)`
 - **Attribute reduction** — removes `name`, `data-testid`, `action` from output; elides `type="text"` (default), `method="get"` (default), and duplicate `aria-label`/`placeholder`
 - **Heading levels preserved** — H1-H6 now emit `h1`-`h6` instead of generic `heading`, enabling `#`/`##`/`###` in output
 - **Conditional structural collapse** — `<section>`, `<article>`, `<aside>` only kept when they have `aria-label` or `role`; `<header>`, `<footer>` only kept when they contain interactive children

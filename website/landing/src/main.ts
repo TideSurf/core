@@ -100,9 +100,9 @@ const translations: Translations = {
     ko: "왜 중요한가",
   },
   "bench.why.body": {
-    en: "Every token your agent reads costs money and eats into the context window. A GitHub page that takes 84,357 tokens raw fits in just 2,148 with TideSurf — that's 39x compression. Browse dozens of pages in a single session instead of one page filling your context.",
-    ja: "エージェントが読むトークンにはすべてコストが発生し、コンテキストウィンドウを消費します。生HTMLで84,357トークンのGitHubページがTideSurfではわずか2,148トークンに — 39倍の圧縮です。1ページでコンテキストが埋まるか、1セッションで数十ページを閲覧できるかの違いです。",
-    ko: "에이전트가 읽는 모든 토큰에는 비용이 발생하며 컨텍스트 윈도우를 소모합니다. 원본 HTML로 84,357 토큰인 GitHub 페이지가 TideSurf에서는 단 2,148 토큰으로 — 39배 압축됩니다. 한 페이지로 컨텍스트가 가득 차는 것이 아니라 수십 페이지를 탐색할 수 있습니다.",
+    en: "Every token your agent reads costs money and eats into the context window. A GitHub page that takes 84,236 tokens raw fits in just 2,593 with TideSurf — that's 32x compression. Browse dozens of pages in a single session instead of one page filling your context.",
+    ja: "エージェントが読むトークンにはすべてコストが発生し、コンテキストウィンドウを消費します。生HTMLで84,236トークンのGitHubページがTideSurfではわずか2,593トークンに — 32倍の圧縮です。1ページでコンテキストが埋まるか、1セッションで数十ページを閲覧できるかの違いです。",
+    ko: "에이전트가 읽는 모든 토큰에는 비용이 발생하며 컨텍스트 윈도우를 소모합니다. 원본 HTML로 84,236 토큰인 GitHub 페이지가 TideSurf에서는 단 2,593 토큰으로 — 32배 압축됩니다. 한 페이지로 컨텍스트가 가득 차는 것이 아니라 수십 페이지를 탐색할 수 있습니다.",
   },
   "bench.how.title": { en: "How we measure", ja: "測定方法", ko: "측정 방법" },
   "bench.how.body": {
@@ -116,9 +116,9 @@ const translations: Translations = {
     ko: "압축률은 사이트마다 다릅니다",
   },
   "bench.varies.body": {
-    en: "Heavy sites like GitHub (deep nesting, SVGs, generated classes) see 39x compression. Even lean sites like Hacker News still achieve 8.5x thanks to the compact output format, URL compression, and text truncation.",
-    ja: "GitHubのように重いサイト（深いネスト、SVG、自動生成クラス）は39倍の圧縮を実現します。Hacker Newsのような軽量なサイトでも、コンパクトな出力形式、URL圧縮、テキスト切り詰めにより8.5倍の圧縮を達成します。",
-    ko: "GitHub처럼 무거운 사이트(깊은 중첩, SVG, 자동 생성 클래스)는 39배 압축됩니다. Hacker News처럼 가벼운 사이트도 압축된 출력 형식, URL 압축, 텍스트 트렁케이션 덕분에 8.5배 압축을 달성합니다.",
+    en: "Heavy sites like GitHub (deep nesting, SVGs, generated classes) see 32x compression. Even lean sites like Hacker News still achieve 8x thanks to the compact output format, URL compression, and text truncation.",
+    ja: "GitHubのように重いサイト（深いネスト、SVG、自動生成クラス）は32倍の圧縮を実現します。Hacker Newsのような軽量なサイトでも、コンパクトな出力形式、URL圧縮、テキスト切り詰めにより8倍の圧縮を達成します。",
+    ko: "GitHub처럼 무거운 사이트(깊은 중첩, SVG, 자동 생성 클래스)는 32배 압축됩니다. Hacker News처럼 가벼운 사이트도 압축된 출력 형식, URL 압축, 텍스트 트렁케이션 덕분에 8배 압축을 달성합니다.",
   },
   "features.label": { en: "Features", ja: "機能", ko: "기능" },
   "features.title": {
