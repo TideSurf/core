@@ -2176,6 +2176,35 @@ footer::before {
   margin-bottom: 2rem;
 }
 
+.qs-cta {
+  text-align: center;
+  margin-top: 3.5rem;
+}
+
+.qs-cta-text {
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
+}
+
+.qs-cta-btn {
+  display: inline-block;
+  padding: 0.65rem 1.5rem;
+  background: var(--accent);
+  color: #fff;
+  font-family: var(--font);
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
+  border-radius: 3px;
+  transition: opacity 0.15s var(--ease);
+}
+
+.qs-cta-btn:hover {
+  opacity: 0.85;
+}
+
 .feat--center .feat-code {
   width: 100%;
   max-width: 420px;
