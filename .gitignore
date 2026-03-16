@@ -21,3 +21,5 @@ Thumbs.db
 *.swp
 *.swo
 *~
+opencode.jsonc
+opencode.json
