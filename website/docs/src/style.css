@@ -30,7 +30,7 @@
     --ease-out: cubic-bezier(0, 0, 0.2, 1);
     --duration: 0.15s;
     --duration-slow: 0.2s;
-    --font: "Inter", "Noto Sans JP", system-ui, -apple-system, sans-serif;
+    --font: "Inter", "Noto Sans JP", "Noto Sans KR", system-ui, -apple-system, sans-serif;
     --font-mono: "SF Mono", ui-monospace, monospace;
 
     --sidebar-w: 280px;
@@ -42,12 +42,12 @@
     --bg-secondary: #111111;
     --bg-elevated: #111111;
     --bg-surface: #111111;
-    --text-primary: #EDEDED;
-    --text-secondary: #888888;
-    --text-muted: #888888;
+    --text-primary: #E8E6E3;
+    --text-secondary: #908E8B;
+    --text-muted: #908E8B;
     --border: #222222;
     --code-bg: #111111;
-    --code-text: #EDEDED;
+    --code-text: #E8E6E3;
 }
 
 ::selection {

@@ -23,7 +23,7 @@
         <meta name="twitter:image" content="https://tidesurf.org/og.png">
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&family=Noto+Sans+JP:wght@400;500;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet" />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <script src="/theme-init.js"></script>
         <link rel="stylesheet" href="/src/style.css" />
@@ -179,8 +179,8 @@
             <!-- ── How it Works ── -->
             <section class="section comparison">
                 <div class="section-header reveal">
-                    <span class="section-label">How it works</span>
-                    <h2 class="compare-headline">HTML in, text out</h2>
+                    <span class="section-label" data-i18n="compare.label">How it works</span>
+                    <h2 class="compare-headline" data-i18n="compare.headline">HTML in, text out</h2>
                 </div>
 
                 <div class="transform-demo reveal">
@@ -211,13 +211,13 @@
             <!-- ── Benchmarks ── -->
             <section class="section benchmarks">
                 <div class="section-header reveal">
-                    <span class="section-label">Compression</span>
-                    <h2>Fewer tokens, less cost</h2>
+                    <span class="section-label" data-i18n="bench.label">Compression</span>
+                    <h2 data-i18n="bench.title">Fewer tokens, less cost</h2>
                 </div>
 
                 <div class="bench-duo reveal">
                     <div class="bench-chart">
-                        <span class="bench-chart-title">Tokens</span>
+                        <span class="bench-chart-title" data-i18n="bench.chart.tokens">Tokens</span>
                         <div class="bench-chart-wrap">
                             <div class="bench-y"><span>120K</span><span>60K</span><span>0</span></div>
                             <div class="bench-chart-area">
@@ -282,15 +282,15 @@
             <!-- ── Features ── -->
             <section class="section features">
                 <div class="section-header reveal">
-                    <span class="section-label">Features</span>
-                    <h2>What ships</h2>
+                    <span class="section-label" data-i18n="features.label">Features</span>
+                    <h2 data-i18n="features.title">What ships</h2>
                 </div>
 
                 <div class="feat-bento reveal">
                     <div class="bento-card bento-hero-card">
                         <div class="bento-hero-text">
-                            <h3 class="bento-title">Tools</h3>
-                            <p class="bento-desc">18 tool schemas that map directly to LLM function calling. Click elements, fill forms, scroll, extract data. Works with OpenAI, Claude, Gemini, or local models.</p>
+                            <h3 class="bento-title" data-i18n="bento.tools.title">Tools</h3>
+                            <p class="bento-desc" data-i18n="bento.tools.desc">18 tool schemas that map directly to LLM function calling. Click elements, fill forms, scroll, extract data. Works with OpenAI, Claude, Gemini, or local models.</p>
                         </div>
                         <div class="bento-hero-code">
                             <div class="code-block">
@@ -303,8 +303,8 @@
                         </div>
                     </div>
                     <div class="bento-card">
-                        <h3 class="bento-title">Token Budget</h3>
-                        <p class="bento-desc">Set a ceiling. Buttons, links, and inputs survive. Wrappers and decoration get cut by priority.</p>
+                        <h3 class="bento-title" data-i18n="bento.budget.title">Token Budget</h3>
+                        <p class="bento-desc" data-i18n="bento.budget.desc">Set a ceiling. Buttons, links, and inputs survive. Wrappers and decoration get cut by priority.</p>
                         <div class="code-block">
                             <div class="code-header"><span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span><span class="code-filename">budget.ts</span></div>
                             <pre><code><span class="tk-kw">const</span> state = <span class="tk-kw">await</span> browser.<span class="tk-fn">getState</span>({
@@ -313,8 +313,8 @@
                         </div>
                     </div>
                     <div class="bento-card">
-                        <h3 class="bento-title">Auto-connect</h3>
-                        <p class="bento-desc">Skip the login flows. Attach to your running Chrome — sessions, cookies, and auth carry over.</p>
+                        <h3 class="bento-title" data-i18n="bento.autoconnect.title">Auto-connect</h3>
+                        <p class="bento-desc" data-i18n="bento.autoconnect.desc">Skip the login flows. Attach to your running Chrome — sessions, cookies, and auth carry over.</p>
                         <div class="code-block">
                             <div class="code-header"><span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span><span class="code-filename">connect.ts</span></div>
                             <pre><code><span class="tk-kw">const</span> browser = <span class="tk-kw">await</span> TideSurf.<span class="tk-fn">connect</span>()</code></pre>
@@ -322,8 +322,8 @@
                     </div>
                     <div class="bento-card bento-wide-card">
                         <div class="bento-wide-text">
-                            <h3 class="bento-title">Plug in</h3>
-                            <p class="bento-desc">Drop into any MCP-compatible agent.</p>
+                            <h3 class="bento-title" data-i18n="bento.plugin.title">Plug in</h3>
+                            <p class="bento-desc" data-i18n="bento.plugin.desc">Drop into any MCP-compatible agent.</p>
                         </div>
                         <div class="bento-options">
                             <div class="bento-opt">
@@ -369,8 +369,8 @@
             <!-- ── Quick Start ── -->
             <section class="section quickstart">
                 <div class="section-header reveal">
-                    <span class="section-label">Start</span>
-                    <h2>Three lines</h2>
+                    <span class="section-label" data-i18n="quickstart.label">Start</span>
+                    <h2 data-i18n="quickstart.title">Three lines</h2>
                 </div>
                 <div class="qs-split reveal">
                     <div class="qs-install">
@@ -386,8 +386,8 @@
                     </div>
                 </div>
                 <div class="qs-cta reveal">
-                    <h2 class="qs-cta-text">Surf deeper?</h2>
-                    <a href="https://tidesurf.org/docs" class="qs-cta-btn">Read the docs</a>
+                    <h2 class="qs-cta-text" data-i18n="qs.cta.title">Surf deeper?</h2>
+                    <a href="https://tidesurf.org/docs" class="qs-cta-btn" data-i18n="qs.cta.btn">Read the docs</a>
                 </div>
             </section>
         </main>

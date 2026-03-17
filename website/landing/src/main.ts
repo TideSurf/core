@@ -32,9 +32,9 @@ const translations: Translations = {
   },
   "compare.label": { en: "How it works", ja: "仕組み", ko: "동작 원리" },
   "compare.headline": {
-    en: "Text is all you need.",
-    ja: "テキストさえあればいい。",
-    ko: "텍스트, 그것이면 충분합니다.",
+    en: "HTML in, text out",
+    ja: "HTMLを入れて、テキストを出す",
+    ko: "HTML을 넣으면, 텍스트가 나온다",
   },
   "compare.desc": {
     en: "TideSurf strips wrapper elements, classes, scripts and styles. What's left is clean, compact text that any LLM can consume.",
@@ -67,12 +67,13 @@ const translations: Translations = {
     ja: "TideSurf",
     ko: "TideSurf",
   },
-  "bench.label": { en: "Performance", ja: "パフォーマンス", ko: "성능" },
+  "bench.label": { en: "Compression", ja: "圧縮", ko: "압축" },
   "bench.title": {
-    en: "Real-world compression",
-    ja: "実サイトでの圧縮結果",
-    ko: "실제 사이트 압축 결과",
+    en: "Fewer tokens, less cost",
+    ja: "少ないトークン、低いコスト",
+    ko: "적은 토큰, 낮은 비용",
   },
+  "bench.chart.tokens": { en: "Tokens", ja: "トークン数", ko: "토큰 수" },
   "bench.stat.peak": {
     en: "Peak compression on GitHub",
     ja: "GitHubでの最高圧縮率",
@@ -122,9 +123,9 @@ const translations: Translations = {
   },
   "features.label": { en: "Features", ja: "機能", ko: "기능" },
   "features.title": {
-    en: "Built for agents",
-    ja: "エージェントのために構築",
-    ko: "AI 에이전트를 위한 설계",
+    en: "What ships",
+    ja: "搭載機能",
+    ko: "제공 기능",
   },
   "feature.compression.title": {
     en: "DOM compression",
@@ -189,14 +190,24 @@ const translations: Translations = {
     ko: "새 Chrome을 실행하는 대신 이미 실행 중인 Chrome에 연결합니다. 로그인된 세션 재사용, 라이브 페이지 디버깅, 수동 브라우징과 에이전트 제어 간의 원활한 전환",
   },
   "quickstart.label": {
-    en: "Quick Start",
-    ja: "クイックスタート",
-    ko: "빠른 시작",
+    en: "Start",
+    ja: "開始",
+    ko: "시작",
   },
   "quickstart.title": {
-    en: "Get started in seconds",
-    ja: "数秒で開始",
-    ko: "몇 초면 시작할 수 있습니다",
+    en: "Three lines",
+    ja: "たった3行",
+    ko: "단 3줄",
+  },
+  "qs.cta.title": {
+    en: "Surf deeper?",
+    ja: "もっと深く?",
+    ko: "더 깊이?",
+  },
+  "qs.cta.btn": {
+    en: "Read the docs",
+    ja: "ドキュメントを読む",
+    ko: "문서 보기",
   },
   "step1.title": { en: "Install", ja: "インストール", ko: "설치" },
   "step1.desc": {
@@ -215,6 +226,38 @@ const translations: Translations = {
     en: "Navigate and interact with pages",
     ja: "ページをナビゲートして操作",
     ko: "페이지를 탐색하고 상호작용합니다",
+  },
+  "bento.tools.title": { en: "Tools", ja: "ツール", ko: "도구" },
+  "bento.tools.desc": {
+    en: "18 tool schemas that map directly to LLM function calling. Click elements, fill forms, scroll, extract data. Works with OpenAI, Claude, Gemini, or local models.",
+    ja: "LLMの関数呼び出しに直接マッピングされる18のツールスキーマ。要素のクリック、フォーム入力、スクロール、データ抽出。OpenAI、Claude、Gemini、ローカルモデルに対応。",
+    ko: "LLM 함수 호출에 직접 매핑되는 18가지 도구 스키마. 요소 클릭, 폼 작성, 스크롤, 데이터 추출. OpenAI, Claude, Gemini, 로컬 모델과 호환.",
+  },
+  "bento.budget.title": {
+    en: "Token Budget",
+    ja: "トークン予算",
+    ko: "토큰 예산",
+  },
+  "bento.budget.desc": {
+    en: "Set a ceiling. Buttons, links, and inputs survive. Wrappers and decoration get cut by priority.",
+    ja: "上限を設定。ボタン、リンク、入力は維持。ラッパーや装飾は優先度に基づいて削除。",
+    ko: "상한을 설정하면 버튼, 링크, 입력은 유지되고 래퍼와 장식은 우선순위에 따라 제거됩니다.",
+  },
+  "bento.autoconnect.title": {
+    en: "Auto-connect",
+    ja: "オートコネクト",
+    ko: "자동 연결",
+  },
+  "bento.autoconnect.desc": {
+    en: "Skip the login flows. Attach to your running Chrome \u2014 sessions, cookies, and auth carry over.",
+    ja: "ログインフローをスキップ。実行中のChromeに接続 \u2014 セッション、Cookie、認証はそのまま引き継ぎ。",
+    ko: "로그인 과정을 건너뛰세요. 실행 중인 Chrome에 연결 \u2014 세션, 쿠키, 인증이 그대로 유지됩니다.",
+  },
+  "bento.plugin.title": { en: "Plug in", ja: "プラグイン", ko: "플러그인" },
+  "bento.plugin.desc": {
+    en: "Drop into any MCP-compatible agent.",
+    ja: "任意のMCP対応エージェントに導入。",
+    ko: "모든 MCP 호환 에이전트에 바로 연결.",
   },
   "hero.shortline": {
     en: "In the modern web era, the tide is strong. Let's surf.",
