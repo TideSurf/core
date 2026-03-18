@@ -80,6 +80,7 @@ body {
 .control-btn:focus-visible,
 .lang-btn:focus-visible,
 .github-star:focus-visible,
+.ph-badge:focus-visible,
 .sidebar-link:focus-visible,
 .search-result:focus-visible,
 .toc-link:focus-visible,
@@ -316,6 +317,23 @@ body.mobile-menu-open .mobile-overlay {
 
 .github-star .gh-stars:has(.star-count:empty) {
     display: none;
+}
+
+/* ── Product Hunt Badge ── */
+
+.ph-badge {
+    display: inline-flex;
+    align-items: center;
+    transition: opacity var(--duration) var(--ease);
+}
+
+.ph-badge:hover {
+    opacity: 0.8;
+}
+
+.ph-badge img {
+    display: block;
+    border-radius: 5px;
 }
 
 /* ── Search Results ── */
