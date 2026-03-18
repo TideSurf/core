@@ -17,6 +17,10 @@
 </p>
 
 <p align="center">
+  <a href="https://www.producthunt.com/products/tidesurf?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-tidesurf" target="_blank" rel="noopener noreferrer"><img alt="TideSurf - Ultra-token-efficient CDP library for AI agents | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1101853&theme=neutral&t=1773855834160" /></a>
+</p>
+
+<p align="center">
   사실, 웹 탐색에는 옴니모달도 비전 모델도 필요하지 않습니다.<br>
   TideSurf는 DOM을 전달함으로서 최적의 Agentic 웹 탐색을 가능하게 합니다.
 </p>

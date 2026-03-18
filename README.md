@@ -17,6 +17,10 @@
 </p>
 
 <p align="center">
+  <a href="https://www.producthunt.com/products/tidesurf?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-tidesurf" target="_blank" rel="noopener noreferrer"><img alt="TideSurf - Ultra-token-efficient CDP library for AI agents | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1101853&theme=neutral&t=1773855834160" /></a>
+</p>
+
+<p align="center">
   Web browsing does not require omnimodal vision models.<br>
   TideSurf converts the live DOM into a compressed structured representation optimized for LLMs.
 </p>
