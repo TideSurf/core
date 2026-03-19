@@ -3,7 +3,7 @@
     "tidesurf": {
       "type": "stdio",
       "command": "bun",
-      "args": ["mcp/index.ts", "--headful"]
+      "args": ["mcp/index.ts", "--port", "9223"]
     }
   }
 }

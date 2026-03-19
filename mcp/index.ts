@@ -6,13 +6,15 @@
  * Exposes all browser tools as native MCP tools over stdio.
  *
  * Usage:
- *   bun mcp/index.ts [--headful] [--auto-connect] [--port 9222] [--read-only]
+ *   bun mcp/index.ts [--auto-connect] [--port 9222] [--read-only]
  *
  * Configure in .mcp.json:
- *   { "mcpServers": { "tidesurf": { "command": "bun", "args": ["mcp/index.ts", "--headful"] } } }
+ *   { "mcpServers": { "tidesurf": { "command": "bun", "args": ["mcp/index.ts"] } } }
  *
  * To connect to an already-running Chrome instance:
  *   { "mcpServers": { "tidesurf": { "command": "bun", "args": ["mcp/index.ts", "--auto-connect"] } } }
+ *
+ * Headless by default. The model can call launch_browser({ headless: false }) for a visible window.
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -21,7 +23,6 @@ import { z } from "zod";
 import { TideSurf } from "../src/index.js";
 import { VERSION } from "../src/version.js";
 
-const headful = process.argv.includes("--headful");
 const autoConnect = process.argv.includes("--auto-connect");
 const readOnly = process.argv.includes("--read-only");
 
@@ -42,12 +43,9 @@ function parsePort(): number | undefined {
 }
 const port = parsePort();
 
-if (autoConnect && headful) {
-  console.error("[tidesurf-mcp] Warning: --headful is ignored with --auto-connect (connecting to existing browser)");
-}
-
 // Lazy browser launch — only starts on first tool call
 let surfing: TideSurf | null = null;
+let headless = true; // default headless, model can override via launch_browser
 
 async function browser(): Promise<TideSurf> {
   if (!surfing) {
@@ -56,8 +54,8 @@ async function browser(): Promise<TideSurf> {
       surfing = await TideSurf.connect({ port, readOnly });
       console.error("[tidesurf-mcp] Connected to existing browser.");
     } else {
-      console.error(`[tidesurf-mcp] Launching browser (${headful ? "headful" : "headless"})...`);
-      surfing = await TideSurf.launch({ headless: !headful, port, readOnly });
+      console.error(`[tidesurf-mcp] Launching browser (${headless ? "headless" : "headful"})...`);
+      surfing = await TideSurf.launch({ headless, port, readOnly });
       console.error("[tidesurf-mcp] Browser ready.");
     }
   }
@@ -74,6 +72,27 @@ const server = new McpServer({
   name: "tidesurf",
   version: VERSION,
 });
+
+// --- Browser lifecycle ---
+
+server.registerTool(
+  "launch_browser",
+  {
+    description:
+      "Launch the browser. Call this before other tools if you need headful mode (visible browser window). If not called, the browser launches headless automatically on the first tool call.",
+    inputSchema: {
+      headless: z.boolean().optional().describe("Run headless (default: true). Set false to show the browser window."),
+    },
+  },
+  async ({ headless: hl }) => {
+    if (surfing) {
+      return text("Browser is already running.");
+    }
+    if (hl !== undefined) headless = hl;
+    await browser();
+    return text(`Browser launched (${headless ? "headless" : "headful"}).`);
+  }
+);
 
 // --- Page tools ---
 
