@@ -119,7 +119,19 @@ export async function launchChrome(options: LaunchOptions = {}): Promise<LaunchR
     );
   }
 
-  const wsUrl = await waitForDevTools(proc);
+  let wsUrl: string;
+  try {
+    wsUrl = await waitForDevTools(proc, port);
+  } catch (err) {
+    // Kill leaked Chrome process before propagating — prevents zombie
+    // processes from hogging the port on subsequent retry attempts.
+    try {
+      proc.kill();
+    } catch {
+      // ignore
+    }
+    throw err;
+  }
 
   return {
     process: proc,
@@ -189,23 +201,34 @@ export async function discoverBrowser(
   }
 }
 
-function waitForDevTools(proc: ChildProcess): Promise<string> {
+function waitForDevTools(proc: ChildProcess, port: number): Promise<string> {
   return new Promise((resolve, reject) => {
     const stderr = proc.stderr;
+    const stdout = proc.stdout;
     if (!stderr) {
       reject(new ChromeLaunchError("No stderr stream from Chrome process"));
       return;
     }
 
-    // Capture in a const so TypeScript knows it's non-null inside closures
     const stderrStream = stderr;
-    let accumulated = "";
+    let accumulatedErr = "";
+    let accumulatedOut = "";
     let settled = false;
     const timeoutMs = 15_000;
+    const DEVTOOLS_RE = /DevTools listening on (ws:\/\/[^\s]+)/;
+
+    function finish(wsUrl: string) {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(wsUrl);
+    }
 
     function cleanup() {
       clearTimeout(timer);
+      clearInterval(pollTimer);
       stderrStream.removeAllListeners("data");
+      if (stdout) stdout.removeAllListeners("data");
       proc.removeListener("error", onError);
       proc.removeListener("exit", onExit);
     }
@@ -216,6 +239,21 @@ function waitForDevTools(proc: ChildProcess): Promise<string> {
       cleanup();
       reject(new ChromeLaunchError("Timed out waiting for Chrome DevTools"));
     }, timeoutMs);
+
+    // Fallback: poll the debugging port every 1s in case Chrome
+    // doesn't write the DevTools URL to stdout/stderr (common on macOS
+    // when another Chrome instance is already running).
+    const pollTimer = setInterval(async () => {
+      if (settled) return;
+      try {
+        const targets = await CDP.List({ port, host: "localhost" });
+        if (targets && targets.length > 0) {
+          finish(`ws://localhost:${port}/devtools/browser`);
+        }
+      } catch {
+        // Port not ready yet — keep polling
+      }
+    }, 1_000);
 
     const onError = (err: Error) => {
       if (settled) return;
@@ -231,17 +269,23 @@ function waitForDevTools(proc: ChildProcess): Promise<string> {
       reject(new ChromeLaunchError(`Chrome exited with code ${code} before DevTools was ready`));
     };
 
+    // Parse stderr for DevTools URL
     stderrStream.setEncoding("utf-8");
     stderrStream.on("data", (chunk: string) => {
-      accumulated += chunk;
-      const match = accumulated.match(/DevTools listening on (ws:\/\/[^\s]+)/);
-      if (match) {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        resolve(match[1]);
-      }
+      accumulatedErr += chunk;
+      const match = accumulatedErr.match(DEVTOOLS_RE);
+      if (match) finish(match[1]);
     });
+
+    // Also parse stdout — some Chrome versions/platforms write there instead
+    if (stdout) {
+      stdout.setEncoding("utf-8");
+      stdout.on("data", (chunk: string) => {
+        accumulatedOut += chunk;
+        const match = accumulatedOut.match(DEVTOOLS_RE);
+        if (match) finish(match[1]);
+      });
+    }
 
     proc.on("error", onError);
     proc.on("exit", onExit);
