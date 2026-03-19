@@ -50,9 +50,15 @@ let headless = true; // default headless, model can override via launch_browser
 async function browser(): Promise<TideSurf> {
   if (!surfing) {
     if (autoConnect) {
-      console.error(`[tidesurf-mcp] Connecting to running Chrome (port ${port ?? 9222})...`);
-      surfing = await TideSurf.connect({ port, readOnly });
-      console.error("[tidesurf-mcp] Connected to existing browser.");
+      try {
+        console.error(`[tidesurf-mcp] Connecting to running Chrome (port ${port ?? 9222})...`);
+        surfing = await TideSurf.connect({ port, readOnly });
+        console.error("[tidesurf-mcp] Connected to existing browser.");
+      } catch {
+        console.error("[tidesurf-mcp] No running Chrome found, launching a new instance...");
+        surfing = await TideSurf.launch({ headless, port, readOnly });
+        console.error("[tidesurf-mcp] Browser launched.");
+      }
     } else {
       console.error(`[tidesurf-mcp] Launching browser (${headless ? "headless" : "headful"})...`);
       surfing = await TideSurf.launch({ headless, port, readOnly });
