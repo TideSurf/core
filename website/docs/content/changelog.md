@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.3.3 (2026-03-21)
+
+### Fixed
+
+- Robust Chrome launch with port-polling fallback. Chrome on macOS may not write the DevTools URL to stderr when another instance is already running — CDP port polling is now used as a fallback detection method, and leaked Chrome processes are killed on timeout to prevent zombie processes from blocking retries.
+
+### Chore
+
+- Upgrade GitHub Actions to Node.js 24-compatible versions (`actions/checkout` v4 → v5, `actions/setup-node` v4 → v5, `node-version` 20 → 22).
+
+## 0.3.2 (2026-03-19)
+
+### New tools
+
+- **launch_browser** — Launch a new Chrome instance from the agent. Uses port 9223 by default to avoid conflicts with user's running Chrome on 9222. Defaults to headless; the model can choose headful via the tool.
+
+### Fixed
+
+- Auto-launch browser when `--auto-connect` fails. When no running Chrome is found, TideSurf now falls back to launching a new instance instead of erroring out.
+
 ## 0.3.1 (2026-03-16)
 
 ### Fixed
