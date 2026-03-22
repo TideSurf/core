@@ -30,6 +30,11 @@ const translations: Translations = {
     ja: "LLM向けDOM圧縮。不要な要素を除去し、ナビゲート、操作、抽出を実現。",
     ko: "LLM을 위한 DOM 압축. 불필요한 요소를 제거하고 탐색, 상호작용, 추출을 수행합니다.",
   },
+  "hero.oneliner": {
+    en: "DOM compression that keeps token costs 10\u2013100\u00d7 lower than screenshots.",
+    ja: "スクリーンショットよりトークンコストを10〜100倍削減するDOM圧縮。",
+    ko: "스크린샷 대비 토큰 비용을 10\u2013100배 절감하는 DOM 압축.",
+  },
   "compare.label": { en: "How it works", ja: "仕組み", ko: "동작 원리" },
   "compare.headline": {
     en: "HTML in, text out",
@@ -189,6 +194,7 @@ const translations: Translations = {
     ja: "新しいChromeを起動する代わりに、既に実行中のChromeに接続。ログイン済みセッションの再利用、ライブページのデバッグ、手動ブラウジングとエージェント制御のシームレスな切り替え",
     ko: "새 Chrome을 실행하는 대신 이미 실행 중인 Chrome에 연결합니다. 로그인된 세션 재사용, 라이브 페이지 디버깅, 수동 브라우징과 에이전트 제어 간의 원활한 전환",
   },
+  "patterns.label": { en: "Patterns", ja: "パターン", ko: "패턴" },
   "patterns.title": {
     en: "Built for agents",
     ja: "エージェントのために",
@@ -217,6 +223,7 @@ const translations: Translations = {
     ja: "あらゆるLLMに対応",
     ko: "모든 LLM과 호환",
   },
+  "security.label": { en: "Security", ja: "セキュリティ", ko: "보안" },
   "security.title": {
     en: "Safe by default",
     ja: "デフォルトで安全",
