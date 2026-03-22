@@ -7,6 +7,7 @@ dist/
 .env.*
 coverage/
 .claude
+.tmp-npm-cache/
 
 # Chrome user data from TideSurf sessions
 tidesurf-*
