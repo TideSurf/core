@@ -23,16 +23,13 @@
 <p align="center"><strong>
   Web browsing should not require omnimodal vision models.<br>
   TideSurf converts the live DOM into a compressed structured representation optimized for LLMs.
-</strong></p>
-
+</strong><br>
 TideSurf is a TypeScript library that connects Chromium to LLM agents via the Chrome DevTools Protocol, *(a.k.a. [CDP](https://chromedevtools.github.io/devtools-protocol))*. It walks the live DOM, compresses it into a token-efficient structured representation (50-200 tokens per page), and exposes 18 tool definitions for LLM function calling. In a short, ***a DOM compression that keeps token costs 10-100x lower than screenshot-based approaches.***
-
-- **[Getting started](https://tidesurf.org/docs#getting-started)**
-- **[Page format](https://tidesurf.org/docs#page-format)**
-- **[Token budget](https://tidesurf.org/docs#token-budget)**
-- **[Agent patterns](https://tidesurf.org/docs#agent-patterns)**
-- **[Security](https://tidesurf.org/docs#security)**
-- **[API reference](https://tidesurf.org/docs#api-reference)**
+</p><br>
+    
+<p align="center">
+    **[Getting started](https://tidesurf.org/docs#getting-started)** **[Page format](https://tidesurf.org/docs#page-format)** **[Token budget](https://tidesurf.org/docs#token-budget)** **[Agent patterns](https://tidesurf.org/docs#agent-patterns)** **[Security](https://tidesurf.org/docs#security)** **[API reference](https://tidesurf.org/docs#api-reference)**
+</p>
 
 <p align="center">
   <img src="https://tidesurf.org/og.png" alt="TideSurf Social Preview">
