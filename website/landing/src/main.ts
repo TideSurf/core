@@ -189,6 +189,84 @@ const translations: Translations = {
     ja: "新しいChromeを起動する代わりに、既に実行中のChromeに接続。ログイン済みセッションの再利用、ライブページのデバッグ、手動ブラウジングとエージェント制御のシームレスな切り替え",
     ko: "새 Chrome을 실행하는 대신 이미 실행 중인 Chrome에 연결합니다. 로그인된 세션 재사용, 라이브 페이지 디버깅, 수동 브라우징과 에이전트 제어 간의 원활한 전환",
   },
+  "patterns.title": {
+    en: "Built for agents",
+    ja: "エージェントのために",
+    ko: "에이전트를 위해",
+  },
+  "patterns.sub": {
+    en: "Three lines to browse. One tool call to act.",
+    ja: "3行でブラウジング。1回のツール呼び出しで操作。",
+    ko: "세 줄로 브라우징. 한 번의 도구 호출로 동작.",
+  },
+  "patterns.observe.label": { en: "Observe", ja: "観察", ko: "관찰" },
+  "patterns.observe.title": {
+    en: "Read any page in 50 tokens",
+    ja: "50トークンでどんなページも読む",
+    ko: "50토큰으로 어떤 페이지든 읽기",
+  },
+  "patterns.act.label": { en: "Act", ja: "操作", ko: "실행" },
+  "patterns.act.title": {
+    en: "One tool call per action",
+    ja: "1アクション1ツール呼び出し",
+    ko: "동작 하나에 도구 호출 하나",
+  },
+  "patterns.integrate.label": { en: "Integrate", ja: "統合", ko: "통합" },
+  "patterns.integrate.title": {
+    en: "Works with any LLM",
+    ja: "あらゆるLLMに対応",
+    ko: "모든 LLM과 호환",
+  },
+  "security.title": {
+    en: "Safe by default",
+    ja: "デフォルトで安全",
+    ko: "기본부터 안전",
+  },
+  "security.sub": {
+    en: "Production-grade guardrails for autonomous agents.",
+    ja: "自律エージェントのための本番品質ガードレール。",
+    ko: "자율 에이전트를 위한 프로덕션 수준의 가드레일.",
+  },
+  "security.readonly.title": {
+    en: "Read-only mode",
+    ja: "読み取り専用モード",
+    ko: "읽기 전용 모드",
+  },
+  "security.readonly.desc": {
+    en: "Restrict agents to observation only. No clicks, no typing, no navigation — just compressed page state.",
+    ja: "エージェントを観察のみに制限。クリック、入力、ナビゲーション不可 — 圧縮されたページ状態のみ。",
+    ko: "에이전트를 관찰 전용으로 제한. 클릭, 입력, 내비게이션 불가 — 압축된 페이지 상태만.",
+  },
+  "security.filesystem.title": {
+    en: "Filesystem confinement",
+    ja: "ファイルシステム制限",
+    ko: "파일시스템 격리",
+  },
+  "security.filesystem.desc": {
+    en: "Upload and download paths are locked to explicit roots. No access outside your working directory by default.",
+    ja: "アップロードとダウンロードパスは明示的なルートに制限。デフォルトでは作業ディレクトリ外にアクセス不可。",
+    ko: "업로드 및 다운로드 경로는 명시적 루트로 제한. 기본적으로 작업 디렉토리 외부 접근 불가.",
+  },
+  "security.validation.title": {
+    en: "Input validation",
+    ja: "入力検証",
+    ko: "입력 검증",
+  },
+  "security.validation.desc": {
+    en: "URLs, selectors, expressions, and file paths are validated before execution. Blocked patterns prevent common injection vectors.",
+    ja: "URL、セレクター、式、ファイルパスは実行前に検証。ブロックパターンが一般的なインジェクションを防止。",
+    ko: "URL, 선택자, 표현식, 파일 경로는 실행 전 검증. 차단 패턴으로 일반적인 인젝션 방지.",
+  },
+  "security.local.title": {
+    en: "Local CDP only",
+    ja: "ローカルCDPのみ",
+    ko: "로컬 CDP 전용",
+  },
+  "security.local.desc": {
+    en: "Chrome DevTools Protocol runs over local WebSocket. No remote connections, no cloud dependencies, no data leaves your machine.",
+    ja: "Chrome DevTools ProtocolはローカルWebSocketで実行。リモート接続なし、クラウド依存なし、データ漏洩なし。",
+    ko: "Chrome DevTools Protocol은 로컬 WebSocket으로 실행. 원격 연결 없음, 클라우드 의존 없음, 데이터 유출 없음.",
+  },
   "quickstart.label": {
     en: "Start",
     ja: "開始",

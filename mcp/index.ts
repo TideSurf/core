@@ -117,7 +117,7 @@ server.registerTool(
     const s = await browser();
     const state = await s.getState({
       ...(maxTokens ? { maxTokens } : {}),
-      ...(viewport ? { viewport } : {}),
+      ...(viewport !== undefined ? { viewport } : {}),
       ...(mode ? { mode } : {}),
     });
     return text(state.content);

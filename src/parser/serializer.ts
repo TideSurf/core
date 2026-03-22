@@ -70,7 +70,7 @@ export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string)
     if (node.tag === "link") {
       const id = node.id ?? "";
       const href = node.attributes["href"];
-      const text = collectText(node).trim();
+      const text = collectText(node).trim() || node.attributes["aria-label"] || node.attributes["title"] || "";
       const compHref = href ? compressUrl(href, pageUrl) : undefined;
       if (compHref) {
         parts.push(`${pad}[${id}](${compHref})${text ? " " + text : ""}`);
@@ -83,7 +83,7 @@ export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string)
     // Buttons: [ID] text
     if (node.tag === "button") {
       const id = node.id ?? "";
-      const text = collectText(node).trim();
+      const text = collectText(node).trim() || node.attributes["aria-label"] || node.attributes["title"] || "";
       parts.push(`${pad}[${id}]${text ? " " + text : ""}`);
       continue;
     }
@@ -247,7 +247,7 @@ function serializeItem(node: OSNode, pageUrl?: string): string {
       if (child.text?.trim()) inlineParts.push(child.text);
     } else if (child.tag === "link") {
       const href = child.attributes["href"];
-      const text = collectText(child).trim();
+      const text = collectText(child).trim() || child.attributes["aria-label"] || child.attributes["title"] || "";
       const compHref = href ? compressUrl(href, pageUrl) : undefined;
       const id = child.id ?? "";
       if (compHref) {
@@ -257,7 +257,7 @@ function serializeItem(node: OSNode, pageUrl?: string): string {
       }
     } else if (child.tag === "button") {
       const id = child.id ?? "";
-      const text = collectText(child).trim();
+      const text = collectText(child).trim() || child.attributes["aria-label"] || child.attributes["title"] || "";
       inlineParts.push(`[${id}]${text ? " " + text : ""}`);
     } else {
       const text = collectText(child).trim();

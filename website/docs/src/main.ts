@@ -57,6 +57,16 @@ const translations: Translations = {
     ja: "トラブルシューティング",
     ko: "문제 해결",
   },
+  "sidebar.security": {
+    en: "Security",
+    ja: "セキュリティ",
+    ko: "보안",
+  },
+  "sidebar.agentpatterns": {
+    en: "Agent patterns",
+    ja: "エージェントパターン",
+    ko: "에이전트 패턴",
+  },
   "sidebar.reference": {
     en: "Reference",
     ja: "リファレンス",
@@ -101,6 +111,11 @@ const translations: Translations = {
     en: "Go to Introduction",
     ja: "導入へ移動",
     ko: "소개로 이동",
+  },
+  "content.lang-notice": {
+    en: "",
+    ja: "コンテンツは英語で提供されています。UIラベルは翻訳されています。",
+    ko: "콘텐츠는 영어로 제공됩니다. UI 라벨은 번역되어 있습니다.",
   },
 };
 
@@ -181,6 +196,7 @@ const TAG_ALLOWED_ATTRS: Record<string, Set<string>> = {
 
 let currentLang: Language = "en";
 let currentTheme: Theme = "dark";
+let currentPageName: string = DEFAULT_PAGE;
 let pages: Record<string, string> = {};
 let pageMap: Record<string, string> = {};
 let tocObserver: IntersectionObserver | null = null;
@@ -411,9 +427,18 @@ function renderPage(pageName: string): void {
     return;
   }
 
+  currentPageName = pageName;
+
   const html = marked.parse(md, { async: false }) as string;
   const fragment = sanitizeHtmlFragment(html);
   contentEl.replaceChildren(fragment);
+
+  if (currentLang !== "en") {
+    const notice = document.createElement("div");
+    notice.className = "lang-notice";
+    notice.textContent = translate("content.lang-notice");
+    contentEl.insertBefore(notice, contentEl.firstChild);
+  }
 
   addCodeCopyButtons();
   highlightCode();
@@ -432,11 +457,27 @@ function renderPage(pageName: string): void {
 
 function navigate(): void {
   const hash = decodeURIComponent(window.location.hash.slice(1) || DEFAULT_PAGE);
-  renderPage(hash);
-  window.scrollTo({
-    top: 0,
-    behavior: prefersReducedMotion() ? "auto" : "smooth",
-  });
+
+  if (hash.includes(":")) {
+    const colonIndex = hash.indexOf(":");
+    const pagePart = hash.slice(0, colonIndex);
+    const headingPart = hash.slice(colonIndex + 1);
+    renderPage(pagePart);
+    const target = document.getElementById(headingPart);
+    if (target) {
+      target.scrollIntoView({
+        behavior: prefersReducedMotion() ? "auto" : "smooth",
+        block: "start",
+      });
+    }
+  } else {
+    renderPage(hash);
+    window.scrollTo({
+      top: 0,
+      behavior: prefersReducedMotion() ? "auto" : "smooth",
+    });
+  }
+
   closeMobileMenu();
 }
 
@@ -462,7 +503,7 @@ function buildTOC(): void {
     heading.id = id;
 
     const link = document.createElement("a");
-    link.href = `#${id}`;
+    link.href = `#${currentPageName}:${id}`;
     link.className = heading.tagName === "H3" ? "toc-link toc-h3" : "toc-link";
     link.dataset.target = id;
     link.textContent = heading.textContent ?? "";

@@ -32,8 +32,60 @@ function scoreSubtree(node: OSNode): number {
 }
 
 /**
+ * Prune children of a single container node to fit a budget.
+ * Used when top-level pruning can't help because the page is
+ * dominated by one large container (e.g. a single <main>).
+ */
+function pruneChildren(node: OSNode, maxTokens: number, charsPerToken: number): OSNode {
+  if (node.children.length === 0) return node;
+
+  interface Scored {
+    node: OSNode;
+    score: number;
+    originalIndex: number;
+  }
+
+  const scored: Scored[] = node.children.map((child, i) => ({
+    node: child,
+    score: scoreSubtree(child),
+    originalIndex: i,
+  }));
+
+  scored.sort((a, b) => b.score - a.score);
+
+  const kept: Scored[] = [];
+  let removedCount = 0;
+
+  for (const item of scored) {
+    const tentative = [...kept, item].sort((a, b) => a.originalIndex - b.originalIndex);
+    const tentativeNode = { ...node, children: tentative.map((s) => s.node) };
+    const tentativeXml = serialize([tentativeNode], 1);
+
+    if (estimateTokens(tentativeXml, charsPerToken) <= maxTokens) {
+      kept.push(item);
+    } else {
+      removedCount++;
+    }
+  }
+
+  kept.sort((a, b) => a.originalIndex - b.originalIndex);
+  const children = kept.map((s) => s.node);
+
+  if (removedCount > 0) {
+    children.push({
+      tag: "truncated",
+      attributes: { count: String(removedCount) },
+      children: [],
+    });
+  }
+
+  return { ...node, children };
+}
+
+/**
  * Prune a list of OSNodes to fit within a token budget.
- * Removes lowest-priority top-level subtrees first.
+ * Removes lowest-priority top-level subtrees first,
+ * then recurses into large containers if needed.
  * Returns a new array (does not mutate input).
  */
 export function pruneToFit(
@@ -49,7 +101,7 @@ export function pruneToFit(
   }
 
   // Deep clone so we don't mutate input
-  let remaining: OSNode[] = structuredClone(nodes);
+  const remaining: OSNode[] = structuredClone(nodes);
 
   // Score each top-level subtree
   interface Scored {
@@ -58,7 +110,7 @@ export function pruneToFit(
     originalIndex: number;
   }
 
-  let scored: Scored[] = remaining.map((node, i) => ({
+  const scored: Scored[] = remaining.map((node, i) => ({
     node,
     score: scoreSubtree(node),
     originalIndex: i,
@@ -85,7 +137,7 @@ export function pruneToFit(
 
   // Restore original order
   kept.sort((a, b) => a.originalIndex - b.originalIndex);
-  const result = kept.map((s) => s.node);
+  let result = kept.map((s) => s.node);
 
   if (removedCount > 0) {
     result.push({
@@ -93,6 +145,27 @@ export function pruneToFit(
       attributes: { count: String(removedCount) },
       children: [],
     });
+  }
+
+  // If still over budget after top-level pruning (e.g. one dominant container),
+  // recurse into the largest remaining container's children
+  const resultXml = serialize(result, 1);
+  if (estimateTokens(resultXml, charsPerToken) > maxTokens) {
+    // Find the container with the most children to prune into
+    let largestIdx = -1;
+    let largestChildCount = 0;
+    for (let i = 0; i < result.length; i++) {
+      if (result[i].children.length > largestChildCount) {
+        largestChildCount = result[i].children.length;
+        largestIdx = i;
+      }
+    }
+
+    if (largestIdx >= 0 && largestChildCount > 1) {
+      result = result.map((node, i) =>
+        i === largestIdx ? pruneChildren(node, maxTokens, charsPerToken) : node
+      );
+    }
   }
 
   return result;

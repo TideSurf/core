@@ -10,6 +10,7 @@ import { withRetry } from "./cdp/retry.js";
 import { rmSync } from "node:fs";
 import { applyViewport } from "./cdp/viewport.js";
 import { resolveFileAccessRoots } from "./validation.js";
+import { ReadOnlyError } from "./errors.js";
 
 /**
  * Main entry point for TideSurf.
@@ -172,8 +173,12 @@ export class TideSurf {
   /**
    * Navigate the active page to a URL.
    * @param url - Target URL
+   * @throws {ReadOnlyError} if this instance is in read-only mode
    */
   async navigate(url: string): Promise<void> {
+    if (this.readOnly) {
+      throw new ReadOnlyError("navigate");
+    }
     await this.activePage.navigate(url);
   }
 

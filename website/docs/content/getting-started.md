@@ -176,17 +176,20 @@ Once configured, all 18 TideSurf tools become available as MCP tools that your A
 `getState` accepts a `mode` parameter for different levels of detail:
 
 ```typescript
-// Full page (default)
+// Full mode, viewport only (default)
 const full = await browser.getState();
 
-// Only interactive elements (buttons, links, inputs)
+// Only interactive elements visible in viewport
 const interactive = await browser.getState({ mode: "interactive" });
 
 // Landmarks and summaries only
 const minimal = await browser.getState({ mode: "minimal" });
 
-// Only what's visible in the viewport (this is now the default)
-const viewport = await browser.getState(); // viewport defaults to true
+// Full page content (all content, not just viewport)
+const fullPage = await browser.getState({ viewport: false });
+
+// Viewport mode is on by default — set viewport: false for the entire page
+const viewport = await browser.getState(); // equivalent to { viewport: true }
 ```
 
 Modes compose with each other and `maxTokens`.

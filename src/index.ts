@@ -13,6 +13,7 @@ export {
   ElementNotFoundError,
   NavigationError,
   ValidationError,
+  ReadOnlyError,
 } from "./errors.js";
 
 export {

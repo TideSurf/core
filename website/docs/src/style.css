@@ -713,6 +713,15 @@ main code {
     background: rgba(37, 99, 235, 0.12);
 }
 
+.lang-notice {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  border-left: 3px solid var(--accent);
+  padding: 0.5rem 1rem;
+  margin-bottom: 1.5rem;
+  opacity: 0.7;
+}
+
 @media (prefers-reduced-motion: reduce) {
     html {
         scroll-behavior: auto;

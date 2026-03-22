@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.3.4 (2026-03-22)
+
+### Fixed
+
+- Enforce read-only mode on `TideSurf.navigate()` at the SDK level. Previously, `readOnly` was only checked in the tool executor — direct SDK callers could still navigate. A new `ReadOnlyError` is thrown when `navigate()` is called in read-only sessions.
+- `viewport: false` now works in both MCP servers. A truthiness bug silently dropped `false`, making full-page state unreachable via `get_state`. Both `src/cli.ts` and `mcp/index.ts` now forward the parameter correctly.
+- Icon-only buttons and links (e.g. SVG-only controls) now render their `aria-label` or `title` instead of producing blank `[B1]` / `[L1]` entries.
+- `type()` and `select()` now call `waitForStable()` after the action, matching `click()` and `scroll()`. This prevents race conditions with reactive forms, validation messages, and dependent dropdowns.
+- `selectOption()` now dispatches both `input` and `change` events (was `change` only), improving compatibility with framework-controlled inputs.
+- Add `launch_browser` tool and auto-connect fallback to the packaged `tidesurf mcp` server, matching the repo-only MCP adapter. Remove the broken `bun mcp/index.ts` suggestion from the error message.
+- Docs TOC links are now shareable — hash format changed from `#heading-N` (which collided with page routing) to `#page-name:heading-N`.
+- Docs language switcher now shows a notice when viewing in Japanese/Korean that content is in English.
+- Fix misleading "Full page (default)" comment in getting-started docs — now accurately reflects that viewport defaults to `true`.
+
+### Removed
+
+- Dead `searchPage()` function from `src/cdp/connection.ts` (superseded by `SurfingPage.search()`).
+- Dead `deduplicateSiblings` module (`src/parser/dedup.ts`) removed from the pipeline in v0.3.1 but never deleted.
+
+### Improved
+
+- Token budget pruning (`pruneToFit`) now recurses into large container children when top-level pruning alone cannot meet the budget. Pages dominated by a single `<main>` wrapper are now prunable.
+
+### Docs
+
+- Rewrote `README.md` with installation, quick start, CLI usage, MCP integration, and read-only examples.
+- Added **Security model** documentation page (read-only enforcement, filesystem confinement, input validation, CDP security).
+- Added **Agent patterns** documentation page (basic agent loop, authenticated sessions, token-efficient browsing, multi-tab workflows, form filling).
+
+### Landing page
+
+- Added "Built for agents" section with Observe / Act / Integrate pattern cards.
+- Added "Safe by default" section showcasing security features.
+
 ## 0.3.3 (2026-03-21)
 
 ### Fixed

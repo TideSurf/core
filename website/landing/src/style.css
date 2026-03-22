@@ -2210,6 +2210,148 @@ footer::before {
   margin-bottom: 2.5rem;
 }
 
+/* --- Patterns --- */
+
+.patterns {
+  padding: 6rem 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.patterns h2 {
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 0.75rem;
+}
+
+.patterns-sub {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  margin-bottom: 3rem;
+}
+
+.patterns-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .patterns-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .pattern-card--hero {
+    grid-column: 1 / -1;
+  }
+}
+
+.pattern-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 2rem;
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+
+.pattern-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+.pattern-card-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+
+.pattern-card-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 1.25rem;
+}
+
+.pattern-code {
+  background: var(--code-bg);
+  border-radius: 8px;
+  padding: 1.25rem;
+  overflow-x: auto;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.pattern-code code {
+  font-family: var(--font-mono);
+}
+
+/* --- Security --- */
+
+.security {
+  padding: 6rem 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.security h2 {
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 0.75rem;
+}
+
+.security-sub {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+  margin-bottom: 3rem;
+}
+
+.security-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+}
+
+.security-item {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 2rem;
+  transition: border-color 0.2s ease;
+}
+
+.security-item:hover {
+  border-color: var(--accent);
+}
+
+.security-icon {
+  font-size: 1.75rem;
+  margin-bottom: 1rem;
+  filter: grayscale(1) brightness(1.2);
+}
+
+[data-theme="light"] .security-icon {
+  filter: none;
+}
+
+.security-item h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.security-item p {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
 .quickstart {
   padding-top: 2rem;
 }

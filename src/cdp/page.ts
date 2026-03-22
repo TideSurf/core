@@ -182,6 +182,7 @@ export class SurfingPage {
     validateElementId(id);
     const backendNodeId = this.resolveId(id);
     await cdp.typeText(this.conn, backendNodeId, text, clear);
+    await cdp.waitForStable(this.conn);
   }
 
   /**
@@ -193,6 +194,7 @@ export class SurfingPage {
     validateElementId(id);
     const backendNodeId = this.resolveId(id);
     await cdp.selectOption(this.conn, backendNodeId, value);
+    await cdp.waitForStable(this.conn);
   }
 
   /**

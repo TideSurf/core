@@ -367,6 +367,67 @@
                 </div>
             </section>
 
+            <!-- ── Agent Patterns ── -->
+            <section class="patterns" id="patterns">
+                <h2 data-i18n="patterns.title">Built for agents</h2>
+                <p class="patterns-sub" data-i18n="patterns.sub">Three lines to browse. One tool call to act.</p>
+
+                <div class="patterns-grid">
+                    <div class="pattern-card pattern-card--hero">
+                        <div class="pattern-card-label" data-i18n="patterns.observe.label">Observe</div>
+                        <div class="pattern-card-title" data-i18n="patterns.observe.title">Read any page in 50 tokens</div>
+                        <pre class="pattern-code"><code><span class="tk-kw">const</span> state = <span class="tk-kw">await</span> browser.<span class="tk-fn">getState</span>();
+<span class="tk-cm">// Feed state.content to your LLM</span>
+<span class="tk-cm">// 50–200 tokens instead of 5,000–50,000</span></code></pre>
+                    </div>
+
+                    <div class="pattern-card">
+                        <div class="pattern-card-label" data-i18n="patterns.act.label">Act</div>
+                        <div class="pattern-card-title" data-i18n="patterns.act.title">One tool call per action</div>
+                        <pre class="pattern-code"><code><span class="tk-kw">await</span> page.<span class="tk-fn">click</span>(<span class="tk-str">"B1"</span>);      <span class="tk-cm">// Click button</span>
+<span class="tk-kw">await</span> page.<span class="tk-fn">type</span>(<span class="tk-str">"I1"</span>, <span class="tk-str">"query"</span>); <span class="tk-cm">// Type text</span>
+<span class="tk-kw">await</span> page.<span class="tk-fn">select</span>(<span class="tk-str">"S1"</span>, <span class="tk-str">"opt"</span>); <span class="tk-cm">// Select option</span></code></pre>
+                    </div>
+
+                    <div class="pattern-card">
+                        <div class="pattern-card-label" data-i18n="patterns.integrate.label">Integrate</div>
+                        <div class="pattern-card-title" data-i18n="patterns.integrate.title">Works with any LLM</div>
+                        <pre class="pattern-code"><code><span class="tk-kw">const</span> tools = <span class="tk-fn">getToolDefinitions</span>();
+<span class="tk-cm">// 18 standard tool schemas</span>
+<span class="tk-cm">// Anthropic, OpenAI, or MCP — your choice</span></code></pre>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ── Security ── -->
+            <section class="security" id="security">
+                <h2 data-i18n="security.title">Safe by default</h2>
+                <p class="security-sub" data-i18n="security.sub">Production-grade guardrails for autonomous agents.</p>
+
+                <div class="security-grid">
+                    <div class="security-item">
+                        <div class="security-icon">🔒</div>
+                        <h3 data-i18n="security.readonly.title">Read-only mode</h3>
+                        <p data-i18n="security.readonly.desc">Restrict agents to observation only. No clicks, no typing, no navigation — just compressed page state.</p>
+                    </div>
+                    <div class="security-item">
+                        <div class="security-icon">📁</div>
+                        <h3 data-i18n="security.filesystem.title">Filesystem confinement</h3>
+                        <p data-i18n="security.filesystem.desc">Upload and download paths are locked to explicit roots. No access outside your working directory by default.</p>
+                    </div>
+                    <div class="security-item">
+                        <div class="security-icon">🛡️</div>
+                        <h3 data-i18n="security.validation.title">Input validation</h3>
+                        <p data-i18n="security.validation.desc">URLs, selectors, expressions, and file paths are validated before execution. Blocked patterns prevent common injection vectors.</p>
+                    </div>
+                    <div class="security-item">
+                        <div class="security-icon">🔌</div>
+                        <h3 data-i18n="security.local.title">Local CDP only</h3>
+                        <p data-i18n="security.local.desc">Chrome DevTools Protocol runs over local WebSocket. No remote connections, no cloud dependencies, no data leaves your machine.</p>
+                    </div>
+                </div>
+            </section>
+
             <!-- ── Quick Start ── -->
             <section class="section quickstart">
                 <div class="section-header reveal">

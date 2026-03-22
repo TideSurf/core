@@ -120,9 +120,7 @@ async function mcp() {
     console.error(
       "Error: MCP dependencies not found.\n\n" +
       "Install them with:\n" +
-      "  npm install @modelcontextprotocol/sdk zod\n\n" +
-      "Or use the standalone MCP adapter:\n" +
-      "  bun mcp/index.ts"
+      "  npm install @modelcontextprotocol/sdk zod"
     );
     process.exit(1);
   }
@@ -132,16 +130,23 @@ async function mcp() {
   const z = zodMod.z;
 
   let surfing: TideSurf | null = null;
+  let headless = !headful;
 
   async function browser(): Promise<TideSurf> {
     if (!surfing) {
       if (autoConnect) {
-        console.error(`[tidesurf] Connecting to running Chrome (port ${port ?? 9222})...`);
-        surfing = await TideSurf.connect({ port, readOnly });
-        console.error("[tidesurf] Connected to existing browser.");
+        try {
+          console.error(`[tidesurf] Connecting to running Chrome (port ${port ?? 9222})...`);
+          surfing = await TideSurf.connect({ port, readOnly });
+          console.error("[tidesurf] Connected to existing browser.");
+        } catch {
+          console.error("[tidesurf] No running Chrome found, launching a new instance...");
+          surfing = await TideSurf.launch({ headless, port, readOnly });
+          console.error("[tidesurf] Browser launched.");
+        }
       } else {
-        console.error(`[tidesurf] Launching browser (${headful ? "headful" : "headless"})...`);
-        surfing = await TideSurf.launch({ headless: !headful, port, readOnly });
+        console.error(`[tidesurf] Launching browser (${headless ? "headless" : "headful"})...`);
+        surfing = await TideSurf.launch({ headless, port, readOnly });
         console.error("[tidesurf] Browser ready.");
       }
     }
@@ -153,6 +158,22 @@ async function mcp() {
   }
 
   const server = new McpServer({ name: "tidesurf", version: VERSION });
+
+  // --- Browser lifecycle ---
+
+  server.registerTool("launch_browser", {
+    description: "Launch the browser. Call this before other tools if you need headful mode (visible browser window). If not called, the browser launches headless automatically on the first tool call.",
+    inputSchema: {
+      headless: z.boolean().optional().describe("Run headless (default: true). Set false to show the browser window."),
+    },
+  }, async ({ headless: hl }: { headless?: boolean }) => {
+    if (surfing) {
+      return text("Browser is already running.");
+    }
+    if (hl !== undefined) headless = hl;
+    await browser();
+    return text(`Browser launched (${headless ? "headless" : "headful"}).`);
+  });
 
   // --- Page tools ---
 
@@ -167,7 +188,7 @@ async function mcp() {
     const s = await browser();
     const state = await s.getState({
       ...(maxTokens ? { maxTokens } : {}),
-      ...(viewport ? { viewport } : {}),
+      ...(viewport !== undefined ? { viewport } : {}),
       ...(mode ? { mode } : {}),
     });
     return text(state.content);

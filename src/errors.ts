@@ -69,3 +69,16 @@ export class ValidationError extends TideSurfError {
     this.name = "ValidationError";
   }
 }
+
+/**
+ * Operation blocked by read-only mode
+ */
+export class ReadOnlyError extends TideSurfError {
+  constructor(operation: string) {
+    super(
+      `"${operation}" is not allowed in read-only mode. ` +
+      `Launch or connect without readOnly to enable mutating operations.`
+    );
+    this.name = "ReadOnlyError";
+  }
+}

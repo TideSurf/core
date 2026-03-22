@@ -194,6 +194,7 @@ export async function selectOption(
       objectId: object.objectId,
       functionDeclaration: `function() {
         this.value = ${JSON.stringify(value)};
+        this.dispatchEvent(new Event('input', {bubbles: true}));
         this.dispatchEvent(new Event('change', {bubbles: true}));
       }`,
       returnByValue: true,
@@ -366,56 +367,6 @@ export async function clipboardWrite(
       `Clipboard write failed: ${result.exceptionDetails.text ?? "unknown error"}`
     );
   }
-}
-
-/**
- * Search the page for text matching a query.
- * Returns matching text contexts with tag names.
- */
-export async function searchPage(
-  conn: CDPConnection,
-  query: string,
-  maxResults: number = 10
-): Promise<Array<{ text: string; tag: string; index: number }>> {
-  const result = await conn.Runtime.evaluate({
-    expression: `(() => {
-  const query = ${JSON.stringify(query)}.toLowerCase();
-  const max = ${maxResults};
-  const results = [];
-  const walker = document.createTreeWalker(
-    document.body || document.documentElement,
-    NodeFilter.SHOW_TEXT,
-    null
-  );
-  let index = 1;
-  let node;
-  while ((node = walker.nextNode()) && results.length < max) {
-    const text = node.textContent || "";
-    if (text.toLowerCase().includes(query)) {
-      const parent = node.parentElement;
-      if (parent) {
-        const context = text.trim().substring(0, 100);
-        if (context) {
-          results.push({
-            text: context,
-            tag: parent.tagName.toLowerCase(),
-            index: index++,
-          });
-        }
-      }
-    }
-  }
-  return results;
-})()`,
-    returnByValue: true,
-    awaitPromise: false,
-  });
-  if (result.exceptionDetails) {
-    throw new Error(
-      `Search failed: ${result.exceptionDetails.text ?? "unknown error"}`
-    );
-  }
-  return (result.result.value as Array<{ text: string; tag: string; index: number }>) ?? [];
 }
 
 /**
