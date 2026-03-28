@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.0 (2026-03-28)
+
+### Improved
+
+- **Detailed tool responses** — Action tools (`click`, `scroll`, `switch_tab`) now return the resulting page state so models can see what their actions caused. No more blind `"Clicked B1"` — the model immediately knows whether the page navigated, a modal opened, or content changed.
+- **Actionable error messages** — Errors now include guidance on what to do next. Element not found → "call get_state to see current IDs". Timeout → "page may still be loading, call get_state". Chrome connection errors → step-by-step setup instructions.
+- **CLI executor parity** — `executor.ts` (used by CLI and direct SDK) now returns the same level of detail as the MCP adapter.
+
 ## 0.3.4 (2026-03-22)
 
 ### Fixed
