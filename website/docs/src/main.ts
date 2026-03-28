@@ -352,13 +352,41 @@ function sanitizeHtmlFragment(html: string): DocumentFragment {
   return fragment;
 }
 
-function addCodeCopyButtons(): void {
+function addCodeHeaders(): void {
   contentEl.querySelectorAll("pre").forEach((pre) => {
+    // Skip if already wrapped or has header
+    if (pre.parentElement?.classList.contains("code-wrapper")) {
+      return;
+    }
+    
     const wrapper = document.createElement("div");
     wrapper.className = "code-wrapper";
+    
+    // Create header with dots
+    const header = document.createElement("div");
+    header.className = "code-header";
+    header.innerHTML = `
+      <span class="dot dot-red"></span>
+      <span class="dot dot-yellow"></span>
+      <span class="dot dot-green"></span>
+    `;
+    
     pre.parentNode?.insertBefore(wrapper, pre);
+    wrapper.appendChild(header);
     wrapper.appendChild(pre);
+  });
+}
 
+function addCodeCopyButtons(): void {
+  contentEl.querySelectorAll(".code-wrapper").forEach((wrapper) => {
+    // Skip if button already exists
+    if (wrapper.querySelector(".copy-code-btn")) {
+      return;
+    }
+    
+    const pre = wrapper.querySelector("pre");
+    if (!pre) return;
+    
     const copyBtn = document.createElement("button");
     copyBtn.className = "copy-code-btn";
     copyBtn.type = "button";
@@ -450,6 +478,7 @@ function renderPage(pageName: string): void {
     }
   });
 
+  addCodeHeaders();
   addCodeCopyButtons();
   highlightCode();
 
