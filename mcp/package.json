@@ -1,6 +1,6 @@
 {
   "name": "tidesurf-mcp",
-  "version": "0.3.4",
+  "version": "0.4.0",
   "private": true,
   "description": "MCP adapter for TideSurf — exposes browser tools as MCP tools for Claude Code and other MCP clients",
   "type": "module",
