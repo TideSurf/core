@@ -26,6 +26,8 @@ yarn add @tidesurf/core
 pnpm add @tidesurf/core
 ```
 
+> **Enable remote debugging:** Before using TideSurf, visit `chrome://inspect#remote-debugging` in your Chrome browser and turn on **"Allow remote debugging for this browser instance"**. This is required for TideSurf to connect to Chrome via CDP.
+
 ## Quick start
 
 The simplest way to use TideSurf is to launch a browser, navigate somewhere, and read the compressed page state:

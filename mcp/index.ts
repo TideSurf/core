@@ -68,6 +68,7 @@ async function browser(): Promise<TideSurf> {
   return surfing;
 }
 
+
 function text(t: string) {
   return { content: [{ type: "text" as const, text: t }] };
 }
@@ -92,11 +93,23 @@ server.registerTool(
   },
   async ({ headless: hl }) => {
     if (surfing) {
-      return text("Browser is already running.");
+      return text("Browser is already running. You can call navigate to go to a URL, or get_state to see the current page.");
     }
     if (hl !== undefined) headless = hl;
-    await browser();
-    return text(`Browser launched (${headless ? "headless" : "headful"}).`);
+    try {
+      await browser();
+      return text(`Browser launched (${headless ? "headless" : "headful"}). You can now call navigate to go to a URL.`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return text(
+        `Failed to launch browser: ${message}\n\n` +
+        `To fix this:\n` +
+        `1. Make sure Chrome or Chromium is installed on this machine\n` +
+        `2. If using --auto-connect, open chrome://inspect#remote-debugging in Chrome and enable "Allow remote debugging for this browser instance"\n` +
+        `3. If Chrome is in a non-standard location, set the CHROME_PATH environment variable\n` +
+        `4. Try again — transient port conflicts can sometimes cause launch failures`
+      );
+    }
   }
 );
 
@@ -145,22 +158,24 @@ if (!readOnly) {
     "click",
     {
       description:
-        "Click an interactive element by its ID (e.g. B1 for button, L3 for link). Call get_state first to see available IDs.",
+        "Click an interactive element by its ID (e.g. B1 for button, L3 for link). Returns the updated page state after clicking so you can see what changed. Call get_state first to see available IDs.",
       inputSchema: {
         id: z.string().describe("Element ID from get_state (e.g. B1, L3, I2)"),
       },
     },
     async ({ id }) => {
-      const page = (await browser()).getPage();
+      const s = await browser();
+      const page = s.getPage();
       await page.click(id);
-      return text(`Clicked ${id}`);
+      const state = await s.getState();
+      return text(`Clicked ${id}. Page state after click:\n\n${state.content}`);
     }
   );
 
   server.registerTool(
     "type",
     {
-      description: "Type text into an input field by its ID.",
+      description: "Type text into an input field by its ID. Returns confirmation with the text that was typed.",
       inputSchema: {
         id: z.string().describe("Input element ID (e.g. I1)"),
         text: z.string().describe("Text to type"),
@@ -170,14 +185,14 @@ if (!readOnly) {
     async ({ id, text: t, clear }) => {
       const page = (await browser()).getPage();
       await page.type(id, t, clear ?? false);
-      return text(`Typed into ${id}`);
+      return text(`Typed "${t}" into ${id}${clear ? " (field cleared first)" : ""}. Call get_state to see the updated page, or call click on a submit button to proceed.`);
     }
   );
 
   server.registerTool(
     "select",
     {
-      description: "Select an option in a dropdown by its ID and value.",
+      description: "Select an option in a dropdown by its ID and value. Returns confirmation of the selection.",
       inputSchema: {
         id: z.string().describe("Select element ID (e.g. S1)"),
         value: z.string().describe("Option value to select"),
@@ -186,23 +201,25 @@ if (!readOnly) {
     async ({ id, value }) => {
       const page = (await browser()).getPage();
       await page.select(id, value);
-      return text(`Selected ${value} in ${id}`);
+      return text(`Selected "${value}" in ${id}. Call get_state to see the updated page if the selection triggers a change.`);
     }
   );
 
   server.registerTool(
     "scroll",
     {
-      description: "Scroll the page up or down.",
+      description: "Scroll the page up or down. Returns the updated page state showing what is now visible after scrolling.",
       inputSchema: {
         direction: z.enum(["up", "down"]).describe("Scroll direction"),
         amount: z.number().optional().describe("Pixels to scroll (default: 500)"),
       },
     },
     async ({ direction, amount }) => {
-      const page = (await browser()).getPage();
+      const s = await browser();
+      const page = s.getPage();
       await page.scroll(direction, amount);
-      return text(`Scrolled ${direction}`);
+      const state = await s.getState();
+      return text(`Scrolled ${direction}. Page state after scroll:\n\n${state.content}`);
     }
   );
 }
@@ -272,14 +289,16 @@ if (!readOnly) {
 server.registerTool(
   "switch_tab",
   {
-    description: "Switch to a different browser tab by its ID.",
+    description: "Switch to a different browser tab by its ID. Returns the page state of the tab you switched to.",
     inputSchema: {
       tabId: z.string().describe("Tab ID from list_tabs"),
     },
   },
   async ({ tabId }) => {
-    await (await browser()).switchTab(tabId);
-    return text(`Switched to tab ${tabId}`);
+    const s = await browser();
+    await s.switchTab(tabId);
+    const state = await s.getState();
+    return text(`Switched to tab ${tabId}. Page state:\n\n${state.content}`);
   }
 );
 
@@ -287,14 +306,16 @@ if (!readOnly) {
   server.registerTool(
     "close_tab",
     {
-      description: "Close a browser tab by its ID.",
+      description: "Close a browser tab by its ID. Returns the remaining open tabs.",
       inputSchema: {
         tabId: z.string().describe("Tab ID from list_tabs"),
       },
     },
     async ({ tabId }) => {
-      await (await browser()).closeTab(tabId);
-      return text(`Closed tab ${tabId}`);
+      const s = await browser();
+      await s.closeTab(tabId);
+      const tabs = await s.listTabs();
+      return text(`Closed tab ${tabId}. Remaining tabs:\n${JSON.stringify(tabs, null, 2)}`);
     }
   );
 }
@@ -352,7 +373,7 @@ if (!readOnly) {
   server.registerTool(
     "upload",
     {
-      description: "Upload a file to a file input element.",
+      description: "Upload a file to a file input element. Returns confirmation with the file path that was uploaded.",
       inputSchema: {
         id: z.string().describe("File input element ID (e.g. I1)"),
         filePath: z.string().describe("Path to the file to upload"),
@@ -361,14 +382,14 @@ if (!readOnly) {
     async ({ id, filePath }) => {
       const page = (await browser()).getPage();
       await page.upload(id, [filePath]);
-      return text(`Uploaded to ${id}`);
+      return text(`Uploaded file "${filePath}" to ${id}. Call get_state to see the updated page.`);
     }
   );
 
   server.registerTool(
     "clipboard_write",
     {
-      description: "Write text to the clipboard.",
+      description: "Write text to the clipboard. Returns confirmation with the text that was written.",
       inputSchema: {
         text: z.string().describe("Text to write to clipboard"),
       },
@@ -376,7 +397,7 @@ if (!readOnly) {
     async ({ text: t }) => {
       const page = (await browser()).getPage();
       await page.clipboardWrite(t);
-      return text("Clipboard updated");
+      return text(`Clipboard updated with: "${t.length > 200 ? t.slice(0, 200) + '...' : t}"`);
     }
   );
 

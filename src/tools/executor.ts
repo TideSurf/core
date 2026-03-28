@@ -61,26 +61,40 @@ export function createToolExecutor(
         case "click": {
           const id = tool.input["id"] as string;
           await page.click(id);
-          return { success: true, data: `Clicked ${id}` };
+          const state = await instance.getState();
+          return {
+            success: true,
+            data: `Clicked ${id}. Page state after click:\n\n${state.content}`,
+          };
         }
         case "type": {
           const id = tool.input["id"] as string;
           const text = tool.input["text"] as string;
           const clear = (tool.input["clear"] as boolean) ?? false;
           await page.type(id, text, clear);
-          return { success: true, data: `Typed into ${id}` };
+          return {
+            success: true,
+            data: `Typed "${text}" into ${id}${clear ? " (field cleared first)" : ""}. Call get_state to see the updated page, or call click on a submit button to proceed.`,
+          };
         }
         case "select": {
           const id = tool.input["id"] as string;
           const value = tool.input["value"] as string;
           await page.select(id, value);
-          return { success: true, data: `Selected ${value} in ${id}` };
+          return {
+            success: true,
+            data: `Selected "${value}" in ${id}. Call get_state to see the updated page if the selection triggers a change.`,
+          };
         }
         case "scroll": {
           const direction = tool.input["direction"] as "up" | "down";
           const amount = tool.input["amount"] as number | undefined;
           await page.scroll(direction, amount);
-          return { success: true, data: `Scrolled ${direction}` };
+          const state = await instance.getState();
+          return {
+            success: true,
+            data: `Scrolled ${direction}. Page state after scroll:\n\n${state.content}`,
+          };
         }
         case "extract": {
           const selector = tool.input["selector"] as string;
@@ -105,12 +119,20 @@ export function createToolExecutor(
         case "switch_tab": {
           const tabId = tool.input["tabId"] as string;
           await instance.switchTab(tabId);
-          return { success: true, data: `Switched to tab ${tabId}` };
+          const state = await instance.getState();
+          return {
+            success: true,
+            data: `Switched to tab ${tabId}. Page state:\n\n${state.content}`,
+          };
         }
         case "close_tab": {
           const tabId = tool.input["tabId"] as string;
           await instance.closeTab(tabId);
-          return { success: true, data: `Closed tab ${tabId}` };
+          const tabs = await instance.listTabs();
+          return {
+            success: true,
+            data: `Closed tab ${tabId}. Remaining tabs:\n${JSON.stringify(tabs, null, 2)}`,
+          };
         }
         // New tools
         case "search": {
@@ -129,7 +151,10 @@ export function createToolExecutor(
           const id = tool.input["id"] as string;
           const filePath = tool.input["filePath"] as string;
           await page.upload(id, [filePath]);
-          return { success: true, data: `Uploaded to ${id}` };
+          return {
+            success: true,
+            data: `Uploaded file "${filePath}" to ${id}. Call get_state to see the updated page.`,
+          };
         }
         case "clipboard_read": {
           const text = await page.clipboardRead();
@@ -138,7 +163,10 @@ export function createToolExecutor(
         case "clipboard_write": {
           const text = tool.input["text"] as string;
           await page.clipboardWrite(text);
-          return { success: true, data: "Clipboard updated" };
+          return {
+            success: true,
+            data: `Clipboard updated with: "${text.length > 200 ? text.slice(0, 200) + "..." : text}"`,
+          };
         }
         case "download": {
           const id = tool.input["id"] as string;
@@ -148,11 +176,34 @@ export function createToolExecutor(
           return { success: true, data: result };
         }
         default:
-          return { success: false, error: `Unknown tool: ${tool.name}` };
+          return { success: false, error: `Unknown tool: ${tool.name}. Available tools: get_state, navigate, click, type, select, scroll, extract, evaluate, list_tabs, new_tab, switch_tab, close_tab, search, screenshot, upload, clipboard_read, clipboard_write, download.` };
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      return { success: false, error: message };
+
+      // Provide actionable error guidance
+      if (/element.*not found|no element|invalid.*id/i.test(message)) {
+        return {
+          success: false,
+          error: `${message}. The element ID may have changed — call get_state to see the current page and its available element IDs (L=link, B=button, I=input, S=select), then retry with the correct ID.`,
+        };
+      }
+
+      if (/timeout|timed out/i.test(message)) {
+        return {
+          success: false,
+          error: `${message}. The page may still be loading. Call get_state to check the current state, or retry the operation.`,
+        };
+      }
+
+      if (/chrome|browser|connect|ECONNREFUSED|CDP|launch/i.test(message)) {
+        return {
+          success: false,
+          error: `${message}. Make sure Chrome is installed and, if using auto-connect, that remote debugging is enabled at chrome://inspect#remote-debugging.`,
+        };
+      }
+
+      return { success: false, error: `${message}. Call get_state to see the current page state and determine how to proceed.` };
     }
   };
 }

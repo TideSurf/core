@@ -440,6 +440,16 @@ function renderPage(pageName: string): void {
     contentEl.insertBefore(notice, contentEl.firstChild);
   }
 
+  // Wrap tables for horizontal scroll on mobile
+  contentEl.querySelectorAll("table").forEach((table) => {
+    if (!table.parentElement?.classList.contains("table-wrapper")) {
+      const wrapper = document.createElement("div");
+      wrapper.className = "table-wrapper";
+      table.parentNode?.insertBefore(wrapper, table);
+      wrapper.appendChild(table);
+    }
+  });
+
   addCodeCopyButtons();
   highlightCode();
 

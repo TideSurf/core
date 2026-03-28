@@ -88,6 +88,8 @@ body {
   -moz-osx-font-smoothing: grayscale;
   font-variant-numeric: tabular-nums;
   overflow-x: clip;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 main {
@@ -306,19 +308,7 @@ main {
 }
 
 /* ── Hero ── */
-
-.hero {
-  position: relative;
-  min-height: 100vh;
-  min-height: 100dvh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 8rem 2rem 4rem;
-  background: var(--hero-bg);
-  overflow: hidden;
-}
+/* Main hero styles in "Hero Updates" section below */
 
 .hero-bg-pattern {
   position: absolute;
@@ -368,23 +358,6 @@ main {
   color: var(--accent);
 }
 
-
-.hero-content {
-  position: relative;
-  z-index: 10;
-  max-width: 1100px;
-  width: 100%;
-  margin: 0 auto;
-  padding: 8rem max(env(safe-area-inset-left, 0px), 3.5rem) 6rem max(env(safe-area-inset-right, 0px), 3.5rem);
-  will-change: transform, opacity;
-  transform-origin: center left;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  align-items: flex-start;
-  text-align: left;
-  min-height: 80vh;
-}
 
 /* ── Floating Tags ── */
 
@@ -497,72 +470,7 @@ main {
 [data-theme="dark"] .wm-layer:nth-child(9)  { -webkit-text-stroke-color: rgba(40, 100, 235, 0.12); }
 [data-theme="dark"] .wm-layer:nth-child(10) { -webkit-text-stroke-color: rgba(37, 99, 235, 0.14); }
 
-/* ── Hero Title ── */
-
-.hero-title {
-  line-height: 1;
-  margin-bottom: 2rem;
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: flex-start;
-  text-align: left;
-  gap: 0.3em;
-}
-
-.hero-word {
-  display: inline-block;
-  color: var(--text-hero);
-  font-size: clamp(4.5rem, 11vw, 8.5rem);
-  font-weight: 800;
-  letter-spacing: -0.03em;
-}
-
-.hero-word:empty { display: none; }
-
-/* ── Hero Shortline ── */
-
-.hero-shortline {
-  font-size: clamp(0.82rem, 1.3vw, 0.95rem);
-  font-weight: 400;
-  font-style: italic;
-  color: var(--text-hero-muted);
-  letter-spacing: 0.02em;
-  margin-bottom: 2rem;
-  text-align: left;
-}
-
-/* ── Hero Tagline ── */
-
-.hero-tagline {
-  max-width: 480px;
-  margin: 0 0 2.5rem 0;
-  text-align: left;
-}
-
-.tagline-line {
-  font-size: clamp(0.95rem, 1.6vw, 1.1rem);
-  font-weight: 400;
-  color: var(--text-hero-muted);
-  line-height: 1.8;
-}
-
-.tagline-line:nth-child(1) {
-  color: var(--hero-dim);
-}
-
-.tagline-line:nth-child(2) {
-  color: var(--accent-sky);
-  font-weight: 500;
-}
-
-/* ── Hero CTA ── */
-
-.hero-cta {
-  display: flex;
-  justify-content: flex-start;
-}
+/* Stale hero title/word/tagline/cta — active definitions in "Hero Updates" below */
 
 .install-box {
   display: inline-flex;
@@ -697,10 +605,39 @@ main {
   transition: background var(--duration-slow) var(--ease);
 }
 
+/* Render below-fold sections lazily for faster initial paint */
+.benchmarks,
+.features,
+.patterns,
+.security,
+.quickstart {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 600px;
+}
+
 .section {
   max-width: 1100px;
   margin: 0 auto;
   padding: 6rem max(env(safe-area-inset-right, 0px), 3.5rem) 6rem max(env(safe-area-inset-left, 0px), 3.5rem);
+}
+
+/* Section spacing rhythm — vary padding to create visual beat */
+.comparison { padding-top: 7rem; padding-bottom: 4rem; }
+.benchmarks { padding-top: 3rem; padding-bottom: 5rem; }
+.features   { padding-top: 7rem; }
+.patterns   { padding-top: 5rem; padding-bottom: 4rem; }
+.security   { padding-top: 5rem; padding-bottom: 5rem; }
+.quickstart { padding-top: 4rem; padding-bottom: 5rem; }
+
+/* Subtle separator between thematic blocks */
+.features::before,
+.security::before {
+  content: '';
+  display: block;
+  width: 3rem;
+  height: 1px;
+  background: var(--border);
+  margin: 0 auto 3.5rem;
 }
 
 .section-header {
@@ -727,6 +664,7 @@ main {
   letter-spacing: -0.025em;
   margin-bottom: 1rem;
   color: var(--text-primary);
+  text-wrap: balance;
 }
 
 .section-desc {
@@ -734,6 +672,7 @@ main {
   font-weight: 400;
   color: var(--text-secondary);
   line-height: 1.65;
+  text-wrap: balance;
 }
 
 /* ── Comparison Headline ── */
@@ -876,10 +815,6 @@ main {
 }
 
 /* ── Benchmarks ── */
-
-.benchmarks {
-  padding-bottom: 4rem;
-}
 
 /* Hero stats row */
 .bench-hero {
@@ -1298,6 +1233,29 @@ main {
   color: var(--code-text);
 }
 
+/* Scrollbar styling for code blocks */
+.code-block pre::-webkit-scrollbar,
+.pattern-code::-webkit-scrollbar {
+  height: 4px;
+}
+
+.code-block pre::-webkit-scrollbar-track,
+.pattern-code::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.code-block pre::-webkit-scrollbar-thumb,
+.pattern-code::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
+}
+
+.code-block pre,
+.pattern-code {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
 /* ── Footer ── */
 
 footer {
@@ -1305,19 +1263,12 @@ footer {
   z-index: 10;
   background: var(--bg-primary);
   color: var(--text-hero-muted);
-  padding: 3.5rem max(env(safe-area-inset-right, 0px), 3.5rem) max(env(safe-area-inset-bottom, 0px), 3.5rem) max(env(safe-area-inset-left, 0px), 3.5rem);
+  padding: 4rem max(env(safe-area-inset-right, 0px), 3.5rem) max(env(safe-area-inset-bottom, 0px), 3.5rem) max(env(safe-area-inset-left, 0px), 3.5rem);
+  border-top: 1px solid var(--border);
 }
 
 footer::before {
-  content: '';
-  position: absolute;
-  bottom: 100%;
-  left: 0;
-  right: 0;
-  height: 8rem;
-  background: linear-gradient(to top, var(--bg-primary) 0%, transparent 100%);
-  pointer-events: none;
-  z-index: 10;
+  display: none;
 }
 
 .footer-inner {
@@ -1387,6 +1338,12 @@ footer::before {
   .section {
     padding: 5rem max(env(safe-area-inset-right, 0px), 2.25rem) 5rem max(env(safe-area-inset-left, 0px), 2.25rem);
   }
+  .comparison { padding-top: 5rem; padding-bottom: 3rem; }
+  .benchmarks { padding-top: 2.5rem; padding-bottom: 4rem; }
+  .features   { padding-top: 5rem; }
+  .patterns   { padding-top: 4rem; padding-bottom: 3rem; }
+  .security   { padding-top: 4rem; padding-bottom: 4rem; }
+  .quickstart { padding-top: 3rem; padding-bottom: 4rem; }
   .hero-content {
     padding: 6rem max(env(safe-area-inset-left, 0px), 2.25rem) 5rem max(env(safe-area-inset-right, 0px), 2.25rem);
   }
@@ -1415,6 +1372,12 @@ footer::before {
   .section {
     padding: 4rem max(env(safe-area-inset-right, 0px), 1.75rem) 4rem max(env(safe-area-inset-left, 0px), 1.75rem);
   }
+  .comparison { padding-top: 4.5rem; padding-bottom: 2.5rem; }
+  .benchmarks { padding-top: 2rem; padding-bottom: 3rem; }
+  .features   { padding-top: 4.5rem; }
+  .patterns   { padding-top: 3.5rem; padding-bottom: 2.5rem; }
+  .security   { padding-top: 3.5rem; padding-bottom: 3.5rem; }
+  .quickstart { padding-top: 2.5rem; padding-bottom: 3rem; }
   .transform-pair {
     grid-template-columns: 1fr;
     gap: 1rem;
@@ -1816,7 +1779,7 @@ footer::before {
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: auto auto auto;
-  gap: 1rem;
+  gap: 1.25rem;
 }
 
 .bento-card {
@@ -2226,10 +2189,6 @@ footer::before {
   margin-bottom: 1.5rem;
 }
 
-.features {
-  padding-bottom: 2rem;
-}
-
 .features .section-header {
   margin-bottom: 2.5rem;
 }
@@ -2239,7 +2198,7 @@ footer::before {
 .patterns-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1rem;
+  gap: 1.25rem;
 }
 
 .pattern-card {
@@ -2300,7 +2259,7 @@ footer::before {
 .security-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1rem;
+  gap: 1.25rem;
 }
 
 .security-item {
@@ -2336,41 +2295,41 @@ footer::before {
   line-height: 1.65;
 }
 
-.quickstart {
-  padding-top: 2rem;
-}
-
 .quickstart .section-header {
   margin-bottom: 2rem;
 }
 
 .qs-cta {
   text-align: center;
-  margin-top: 3.5rem;
+  margin-top: 4rem;
+  padding-top: 3rem;
+  border-top: 1px solid var(--border);
 }
 
 .qs-cta-text {
-  font-size: 1.1rem;
-  font-weight: 500;
-  color: var(--text-secondary);
-  margin-bottom: 1rem;
+  font-size: clamp(1.3rem, 2.5vw, 1.8rem);
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+  margin-bottom: 1.25rem;
 }
 
 .qs-cta-btn {
   display: inline-block;
-  padding: 0.65rem 1.5rem;
+  padding: 0.75rem 2rem;
   background: var(--accent);
   color: #fff;
   font-family: var(--font);
-  font-size: 0.9rem;
+  font-size: 1rem;
   font-weight: 600;
   text-decoration: none;
   border-radius: 3px;
-  transition: opacity 0.15s var(--ease);
+  transition: opacity 0.2s var(--ease), transform 0.2s var(--ease);
 }
 
 .qs-cta-btn:hover {
-  opacity: 0.85;
+  opacity: 0.9;
+  transform: translateY(-1px);
 }
 
 .feat--center .feat-code {
