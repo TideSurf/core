@@ -530,22 +530,46 @@ function buildTOC(): void {
   tocObserver = null;
   tocNav.replaceChildren();
 
-  const headings = Array.from(contentEl.querySelectorAll("h2, h3"));
+  const headings = Array.from(contentEl.querySelectorAll("h2, h3, h4"));
   if (headings.length === 0) {
     return;
   }
 
   const fragment = document.createDocumentFragment();
 
-  headings.forEach((heading, index) => {
-    const id = `heading-${index}`;
+  headings.forEach((heading) => {
+    // Generate slug from heading text for better URLs
+    const text = heading.textContent ?? "";
+    const slug = text
+      .toLowerCase()
+      .replace(/[^\w\s-]/g, "")
+      .replace(/\s+/g, "-")
+      .substring(0, 50);
+    
+    // Add unique suffix if needed
+    const id = heading.id || slug || `heading-${Math.random().toString(36).substr(2, 9)}`;
     heading.id = id;
+
+    // Add anchor link
+    if (!heading.querySelector('.anchor-link')) {
+      const anchor = document.createElement("a");
+      anchor.href = `#${currentPageName}:${id}`;
+      anchor.className = "anchor-link";
+      anchor.setAttribute("aria-label", `Link to ${text}`);
+      anchor.innerHTML = "#";
+      heading.appendChild(anchor);
+    }
 
     const link = document.createElement("a");
     link.href = `#${currentPageName}:${id}`;
-    link.className = heading.tagName === "H3" ? "toc-link toc-h3" : "toc-link";
+    
+    // Set class based on heading level
+    const level = heading.tagName.toLowerCase();
+    link.className = level === "h4" ? "toc-link toc-h4" : 
+                     level === "h3" ? "toc-link toc-h3" : 
+                     "toc-link toc-h2";
     link.dataset.target = id;
-    link.textContent = heading.textContent ?? "";
+    link.textContent = text;
     link.addEventListener("click", (event) => {
       event.preventDefault();
       document.getElementById(id)?.scrollIntoView({
@@ -576,7 +600,7 @@ function buildTOC(): void {
         active?.classList.add("active");
       }
     },
-    { rootMargin: "-80px 0px -70% 0px" }
+    { rootMargin: "-100px 0px -60% 0px" }
   );
 
   headings.forEach((heading) => tocObserver?.observe(heading));

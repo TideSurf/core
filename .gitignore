@@ -8,6 +8,7 @@ dist/
 coverage/
 .claude
 .tmp-npm-cache/
+.impeccable.md
 
 # Chrome user data from TideSurf sessions
 tidesurf-*
