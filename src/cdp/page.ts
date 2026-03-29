@@ -98,7 +98,7 @@ export class SurfingPage {
     const title = await this.getTitle();
 
     let scrollPosition: ScrollPosition | undefined;
-    if (useViewport) {
+    if (useViewport && !includeHidden) {
       scrollPosition = await getScrollPosition(this.conn);
     }
 

@@ -49,7 +49,8 @@ export function createToolExecutor(
             | "minimal"
             | "interactive"
             | undefined;
-          const state = await instance.getState({ maxTokens, viewport, mode });
+          const includeHidden = tool.input["includeHidden"] as boolean | undefined;
+          const state = await instance.getState({ maxTokens, viewport, mode, includeHidden });
           return { success: true, data: state.content };
         }
         case "navigate": {

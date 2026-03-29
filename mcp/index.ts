@@ -124,14 +124,16 @@ server.registerTool(
       maxTokens: z.number().optional().describe("Token budget — prunes low-priority elements to fit"),
       viewport: z.boolean().optional().describe("Only include visible viewport elements"),
       mode: z.enum(["full", "minimal", "interactive"]).optional().describe("Output mode"),
+      includeHidden: z.boolean().optional().describe("Include elements hidden by CSS (opacity:0, visibility:hidden, display:none). Useful for debugging. Default: false."),
     },
   },
-  async ({ maxTokens, viewport, mode }) => {
+  async ({ maxTokens, viewport, mode, includeHidden }) => {
     const s = await browser();
     const state = await s.getState({
       ...(maxTokens ? { maxTokens } : {}),
       ...(viewport !== undefined ? { viewport } : {}),
       ...(mode ? { mode } : {}),
+      ...(includeHidden !== undefined ? { includeHidden } : {}),
     });
     return text(state.content);
   }

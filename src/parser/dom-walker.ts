@@ -2,6 +2,8 @@ import type { CDPNode, OSNode, NodeMap } from "../types.js";
 import { classify, parseAttributes } from "./element-classifier.js";
 import { IDAssigner } from "./id-assigner.js";
 
+const KNOWN_STATE_FLAGS = new Set(["disabled", "inert", "obscured"]);
+
 /**
  * Attributes worth preserving in output
  */
@@ -31,6 +33,7 @@ const PASS_THROUGH_ATTRS = new Set([
   "aria-selected",
   "aria-checked",
   "aria-disabled",
+  "label",
 ]);
 
 export interface WalkResult {
@@ -121,7 +124,8 @@ function walkNode(
   if (tag === "iframe") {
     const visible = attrs["data-os-visible"] === "1" ? true : undefined;
     const stateAttr = attrs["data-os-state"];
-    const state = stateAttr ? stateAttr.split(",") : undefined;
+    const rawState = stateAttr ? stateAttr.split(",").filter(f => KNOWN_STATE_FLAGS.has(f)) : undefined;
+    const state = rawState && rawState.length > 0 ? rawState : undefined;
     const filteredAttrs: Record<string, string> = {};
     for (const key of PASS_THROUGH_ATTRS) {
       if (attrs[key] !== undefined) {
@@ -213,7 +217,8 @@ function walkNode(
   // Check for visibility attribute (set by viewport marking)
   const visible = attrs["data-os-visible"] === "1" ? true : undefined;
   const stateAttr = attrs["data-os-state"];
-  const state = stateAttr ? stateAttr.split(",") : undefined;
+  const rawState = stateAttr ? stateAttr.split(",").filter(f => KNOWN_STATE_FLAGS.has(f)) : undefined;
+  const state = rawState && rawState.length > 0 ? rawState : undefined;
 
   const osNode: OSNode = {
     tag,
