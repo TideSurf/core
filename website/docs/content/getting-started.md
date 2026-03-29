@@ -50,7 +50,7 @@ await page.type("I1", "hello world");  // Type into the first input
 await browser.close();
 ```
 
-The `state.content` output is compact text that strips away all CSS classes, wrapper divs, scripts, and styles — keeping only interactive elements (buttons, links, inputs), semantic structure (nav, form, headings), and visible text content, with short IDs like `B1`, `L3`, or `I2` that your agent can reference when performing actions.
+The `state.content` output is compact text that strips away all CSS classes, wrapper divs, scripts, and styles — keeping only interactive elements (buttons, links, inputs), semantic structure (nav, form, headings), and visible text content, with short IDs like `B1`, `L3`, or `I2` that your agent can reference when performing actions. Elements that are disabled or inert appear in `~~strikethrough~~` to signal that the agent should not interact with them. See [Page format](#page-format) for the full output specification.
 
 ## Connecting to an existing browser
 

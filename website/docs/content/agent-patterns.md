@@ -134,7 +134,7 @@ const page = browser.getPage();
 
 // Get form state
 const state = await browser.getState({ mode: "interactive" });
-// state.content shows: I1 ~"First name"  I2 ~"Email"  S1:select  [B1] Submit
+// state.content shows: I1 ~First name  I2 ~Email  S1:select  [B1] Submit
 
 await page.type("I1", "Alice", true);
 await page.type("I2", "alice@example.com", true);

@@ -75,7 +75,7 @@ Returns the compressed text representation of the active tab's DOM. The returned
 
 Modes compose: `getState({ viewport: true, mode: "interactive", maxTokens: 200 })` filters to visible interactive elements, then prunes to 200 tokens.
 
-The internal `OSNode` tree used during serialization includes a `state` field on each node. This field carries the element's runtime state flags (e.g. `disabled`, `expanded`, `collapsed`, `obscured`, `inert`, `checked`, `required`, `readonly`) which are serialized inline in the compressed output. See the [page format](/docs/page-format) documentation for details on how state flags appear in the text representation.
+The internal `OSNode` tree used during serialization includes a `state` field on each node. This field carries the element's runtime state flags (e.g. `disabled`, `inert`, `obscured`, `checked`, `required`, `readonly`) and toggle state (`expanded`/`collapsed` from `aria-expanded`), which are serialized inline in the compressed output — disabled/inert as `~~strikethrough~~`, toggle as `open`/`closed` keywords. See the [page format](#page-format) documentation for details on how state flags appear in the text representation.
 
 ### `getPage()`
 
@@ -227,11 +227,13 @@ Clicks a download link/button and waits for the file to download. Returns the fi
 
 ## Tool definitions
 
-These 18 tools are returned by `getToolDefinitions()` and can be used with any LLM that supports function calling. They map directly to the methods above:
+These 18 tools are returned by `getToolDefinitions()` and can be used with any LLM that supports function calling. They map directly to the methods above.
+
+The `get_state` tool description informs the LLM that elements in `~~strikethrough~~` are disabled or inert and should not be passed to interaction tools like `click`, `type`, or `select`.
 
 | Tool | Parameters | Description |
 |---|---|---|
-| `get_state` | `maxTokens?`, `viewport?`, `mode?` | Get the compressed page state |
+| `get_state` | `maxTokens?`, `viewport?`, `mode?`, `includeHidden?` | Get the compressed page state |
 | `navigate` | `url` | Navigate to a URL |
 | `click` | `id` | Click an element by its TideSurf ID |
 | `type` | `id`, `text`, `clear?` | Type text into an input field |

@@ -84,19 +84,31 @@ TideSurf applies a clear set of rules to decide what stays and what goes:
 
 TideSurf serializes element state directly into the compressed output using conventions that LLMs understand natively from markdown pre-training.
 
+### Quick reference
+
+| Format | Meaning |
+|---|---|
+| `[B1] Submit` | Normal, clickable button |
+| `~~[B1] Submit~~` | Disabled or inert — do not interact |
+| `[B1] Submit obscured` | Behind an overlay — dismiss blocker first |
+| `[B1] Menu open` | Toggle is expanded |
+| `[B1] Menu closed` | Toggle is collapsed |
+| `[L1](/url →) text` | Link opens in new tab |
+| `> Option` | Currently selected option in a select |
+
 ### Disabled and inert elements — `~~strikethrough~~`
 
-Elements that are not actionable are wrapped in markdown strikethrough. Do not pass their IDs to interaction tools.
+Elements that cannot receive interaction are wrapped in markdown `~~strikethrough~~`. An agent should never pass a struck-through element's ID to `click`, `type`, or `select` — the browser will either ignore the action or throw an error.
 
 ```
-~~[B1] Submit~~              # button is disabled
-~~[L1](/url) Click here~~    # link is disabled (aria-disabled)
+~~[B1] Submit~~              # button has disabled attribute
+~~[L1](/url) Click here~~    # link has aria-disabled="true"
 ~~I1 ~Email~~                # input is disabled
 ~~S1:select~~                # select is disabled
 ~~[B2] Save~~                # inert (pointer-events:none or HTML inert)
 ```
 
-Strikethrough covers both HTML `disabled` attribute, `aria-disabled="true"`, `<fieldset disabled>` inheritance, CSS `pointer-events: none`, and the HTML `inert` attribute.
+The strikethrough convention covers multiple underlying causes — the HTML `disabled` attribute, `aria-disabled="true"`, inherited disabled state from a `<fieldset disabled>` ancestor, CSS `pointer-events: none`, and the HTML `inert` attribute. From the agent's perspective, the reason doesn't matter: `~~` means "don't touch it."
 
 ### Toggle state — `open` / `closed`
 
@@ -154,6 +166,16 @@ S2:select multiple
 
 ## Computed visibility
 
-TideSurf inspects computed CSS styles to filter invisible elements before they reach the output. Elements hidden by `display: none`, `visibility: hidden`, `opacity: 0`, or `clip-path` hiding patterns are automatically removed. This prevents agents from interacting with honeypot fields, off-screen traps, or CSS-hidden elements.
+Before serializing the DOM, TideSurf inspects each element's computed CSS styles to filter out anything that isn't actually visible or usable on the page. The following properties are checked:
 
-Use `getState({ includeHidden: true })` to bypass this filtering for debugging.
+| CSS property | Filtered when |
+|---|---|
+| `display` | `none` |
+| `visibility` | `hidden` or `collapse` |
+| `opacity` | `0` |
+| `clip-path` | Element is clipped to zero area |
+| `pointer-events` | `none` (element is marked as inert/`~~strikethrough~~` instead of removed) |
+
+This filtering prevents agents from interacting with honeypot fields, off-screen traps, or CSS-hidden elements that are present in the DOM but not visible to a real user.
+
+Use `getState({ includeHidden: true })` to bypass this filtering for debugging — for example, to inspect hidden menus, lazy-loaded content, or off-screen elements before they become visible.

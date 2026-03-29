@@ -24,10 +24,10 @@ TideSurf provides two connection modes:
 
 The information flows through TideSurf in two directions, each with a distinct transformation step:
 
-**Reading (browser → agent):** When the agent requests the page state, TideSurf fetches the live DOM via CDP, walks the tree to strip presentational attributes, collapses redundant nesting, assigns short IDs to interactive elements, and emits compact text. The raw DOM might contain tens of thousands of tokens; the compressed output typically lands between 100 and 800.
+**Reading (browser → agent):** When the agent requests the page state, TideSurf fetches the live DOM via CDP, walks the tree to strip presentational attributes, checks computed CSS visibility to filter out hidden elements, detects element state (disabled, inert, obscured, expanded/collapsed), collapses redundant nesting, assigns short IDs to interactive elements, and emits compact text. The raw DOM might contain tens of thousands of tokens; the compressed output typically lands between 100 and 800.
 
 ```
-Raw web page → Chromium renders → Live DOM → TideSurf compresses → Agent-ready text
+Raw web page → Chromium renders → Live DOM → Computed visibility check → State detection → TideSurf compresses → Agent-ready text
 ```
 
 **Writing (agent → browser):** When the agent calls a tool like `click("B1")` or `type("I1", "hello")`, TideSurf resolves the short ID to a real DOM node using its internal node map, then executes the corresponding CDP command (dispatching click events, injecting keystrokes, triggering form submissions, etc.).
@@ -40,7 +40,7 @@ Agent tool call → TideSurf resolves ID → CDP command → Browser executes ac
 
 ### DOM Compressor
 
-The core of TideSurf — a recursive tree walker that traverses the rendered DOM and makes keep/strip decisions for every node. It applies heuristics to identify interactive elements (inputs, buttons, links), semantic containers (nav, form, headings), and visible text, while discarding CSS classes, inline styles, wrapper divs, script/style tags, hidden elements, and other presentational noise.
+The core of TideSurf — a recursive tree walker that traverses the rendered DOM and makes keep/strip decisions for every node. It applies heuristics to identify interactive elements (inputs, buttons, links), semantic containers (nav, form, headings), and visible text, while discarding CSS classes, inline styles, wrapper divs, script/style tags, hidden elements, and other presentational noise. Before serialization, a computed visibility pass inspects each element's CSS styles (`display`, `visibility`, `opacity`, `clip-path`, `pointer-events`) to filter out invisible elements and detect disabled/inert state. Surviving elements carry state flags (disabled, expanded, obscured) that the serializer encodes as `~~strikethrough~~` or keyword suffixes.
 
 When a token budget is set via `maxTokens`, the compressor runs a second pass that prioritizes interactive elements over passive content and prunes from the bottom of the priority stack until the output fits within the budget.
 

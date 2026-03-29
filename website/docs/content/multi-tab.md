@@ -48,7 +48,7 @@ When a tab is closed, its state is discarded and its tab ID becomes invalid. Att
 
 ## Tool definitions for multi-tab
 
-When using TideSurf's tool definitions with an LLM, three tab-related tools are available:
+When using TideSurf's tool definitions with an LLM, four tab-related tools are available:
 
 | Tool | Parameters | What it does |
 |---|---|---|
