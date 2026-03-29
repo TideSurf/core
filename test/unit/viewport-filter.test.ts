@@ -1,4 +1,3 @@
-import { describe, it, expect } from "vitest";
 import { filterViewportOnly } from "../../src/parser/viewport-filter.js";
 import type { OSNode } from "../../src/types.js";
 

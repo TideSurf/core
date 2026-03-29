@@ -4,7 +4,6 @@
  *
  * Run: bun run test:bench
  */
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";

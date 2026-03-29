@@ -1,4 +1,3 @@
-import { describe, it, expect } from "vitest";
 import { compressUrl } from "../../src/parser/url-compressor.js";
 
 describe("compressUrl", () => {

@@ -24,10 +24,10 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "typecheck:mcp": "bunx tsc --noEmit -p mcp/tsconfig.json",
-    "test": "bun vitest run test/unit",
-    "test:integration": "bun vitest run test/integration",
-    "test:bench": "bun vitest run test/bench --reporter=verbose",
-    "test:all": "bun vitest run",
+    "test": "bun test test/unit",
+    "test:integration": "bun test test/integration",
+    "test:bench": "bun test test/bench",
+    "test:all": "bun test",
     "build:web:landing": "bun run --cwd website/landing build",
     "build:web:docs": "bun run --cwd website/docs build",
     "verify:release": "bun run typecheck && bun run typecheck:mcp && bun run test:all && bun run build && bun run build:web:landing && bun run build:web:docs && npm_config_cache=.tmp-npm-cache npm pack --dry-run",
@@ -67,8 +67,7 @@
     "@types/bun": "^1.3.10",
     "@types/node": "^22.0.0",
     "elysia": "^1.4.27",
-    "typescript": "^5.7.0",
-    "vitest": "^3.0.0"
+    "typescript": "^5.7.0"
   },
   "engines": {
     "node": ">=18",

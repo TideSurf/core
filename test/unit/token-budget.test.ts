@@ -1,4 +1,3 @@
-import { describe, it, expect } from "vitest";
 import { estimateTokens, pruneToFit } from "../../src/parser/token-budget.js";
 import type { OSNode } from "../../src/types.js";
 

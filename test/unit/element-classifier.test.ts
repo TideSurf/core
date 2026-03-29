@@ -1,4 +1,3 @@
-import { describe, it, expect } from "vitest";
 import { classify, parseAttributes } from "../../src/parser/element-classifier.js";
 
 describe("parseAttributes", () => {

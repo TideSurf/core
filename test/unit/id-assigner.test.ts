@@ -1,4 +1,3 @@
-import { describe, it, expect } from "vitest";
 import { IDAssigner } from "../../src/parser/id-assigner.js";
 
 describe("IDAssigner", () => {

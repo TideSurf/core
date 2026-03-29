@@ -1,4 +1,3 @@
-import { describe, it, expect } from "vitest";
 import { withTimeout } from "../../src/cdp/timeout.js";
 import { CDPTimeoutError } from "../../src/errors.js";
 

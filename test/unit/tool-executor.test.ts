@@ -1,10 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
 import { createToolExecutor } from "../../src/tools/executor.js";
 
 describe("createToolExecutor", () => {
   it("blocks evaluate in read-only mode", async () => {
     const page = {
-      evaluate: vi.fn(),
+      evaluate: jest.fn(),
     };
     const instance = {
       getPage: () => page,
@@ -25,7 +24,7 @@ describe("createToolExecutor", () => {
 
   it("blocks clipboard_read in read-only mode", async () => {
     const page = {
-      clipboardRead: vi.fn(),
+      clipboardRead: jest.fn(),
     };
     const instance = {
       getPage: () => page,

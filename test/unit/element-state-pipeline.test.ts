@@ -1,4 +1,3 @@
-import { describe, it, expect } from "vitest";
 import { walkDOM } from "../../src/parser/dom-walker.js";
 import { serialize } from "../../src/parser/serializer.js";
 import { filterViewportOnly } from "../../src/parser/viewport-filter.js";

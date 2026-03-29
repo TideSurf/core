@@ -1,4 +1,3 @@
-import { describe, it, expect } from "vitest";
 import { walkDOM } from "../../src/parser/dom-walker.js";
 import type { CDPNode } from "../../src/types.js";
 

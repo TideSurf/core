@@ -2,7 +2,6 @@ import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, it, expect } from "vitest";
 import {
   resolveFileAccessRoots,
   validateUrl,

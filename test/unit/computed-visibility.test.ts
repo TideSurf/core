@@ -1,4 +1,3 @@
-import { describe, it, expect } from "vitest";
 
 // ---------------------------------------------------------------------------
 // Since markVisibleElements runs as injected JS inside the browser, we cannot

@@ -1,4 +1,3 @@
-import { describe, it, expect } from "vitest";
 import { walkDOM } from "../../src/parser/dom-walker.js";
 import { hasComputedState } from "../../src/parser/element-classifier.js";
 import type { CDPNode, OSNode, GetStateOptions } from "../../src/types.js";

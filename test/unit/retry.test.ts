@@ -1,17 +1,16 @@
-import { describe, it, expect, vi } from "vitest";
 import { withRetry } from "../../src/cdp/retry.js";
 import { CDPConnectionError, CDPTimeoutError } from "../../src/errors.js";
 
 describe("withRetry", () => {
   it("returns result on first success", async () => {
-    const fn = vi.fn().mockResolvedValue("ok");
+    const fn = jest.fn().mockResolvedValue("ok");
     const result = await withRetry(fn);
     expect(result).toBe("ok");
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
   it("retries on failure and succeeds", async () => {
-    const fn = vi
+    const fn = jest
       .fn()
       .mockRejectedValueOnce(new CDPConnectionError("fail"))
       .mockResolvedValue("ok");
@@ -25,7 +24,7 @@ describe("withRetry", () => {
   });
 
   it("throws after max attempts", async () => {
-    const fn = vi.fn().mockRejectedValue(new CDPConnectionError("fail"));
+    const fn = jest.fn().mockRejectedValue(new CDPConnectionError("fail"));
 
     await expect(
       withRetry(fn, { maxAttempts: 3, initialDelayMs: 10 })
@@ -34,7 +33,7 @@ describe("withRetry", () => {
   });
 
   it("does NOT retry CDPTimeoutError by default", async () => {
-    const fn = vi.fn().mockRejectedValue(new CDPTimeoutError("op", 1000));
+    const fn = jest.fn().mockRejectedValue(new CDPTimeoutError("op", 1000));
 
     await expect(
       withRetry(fn, { maxAttempts: 3, initialDelayMs: 10 })
@@ -43,7 +42,7 @@ describe("withRetry", () => {
   });
 
   it("respects custom retryable predicate", async () => {
-    const fn = vi.fn().mockRejectedValue(new Error("custom"));
+    const fn = jest.fn().mockRejectedValue(new Error("custom"));
 
     await expect(
       withRetry(fn, {
@@ -57,7 +56,7 @@ describe("withRetry", () => {
 
   it("applies exponential backoff", async () => {
     const timestamps: number[] = [];
-    const fn = vi.fn().mockImplementation(async () => {
+    const fn = jest.fn().mockImplementation(async () => {
       timestamps.push(Date.now());
       if (timestamps.length < 3) throw new CDPConnectionError("fail");
       return "ok";

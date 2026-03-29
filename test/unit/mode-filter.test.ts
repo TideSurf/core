@@ -1,4 +1,3 @@
-import { describe, it, expect } from "vitest";
 import { filterInteractive, filterMinimal } from "../../src/parser/mode-filter.js";
 import type { OSNode } from "../../src/types.js";
 

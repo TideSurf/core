@@ -1,4 +1,3 @@
-import { describe, it, expect } from "vitest";
 import { getToolDefinitions } from "../../src/tools/definitions.js";
 
 describe("getToolDefinitions", () => {
