@@ -59,17 +59,17 @@ function walk(body: CDPNode[]): OSNode[] {
 // ---------------------------------------------------------------------------
 
 describe("pipeline — disabled button", () => {
-  it("button with disabled attribute serializes with disabled flag", () => {
+  it("button with disabled attribute serializes with ~~strikethrough~~", () => {
     const result = pipeline([
       makeElement("BUTTON", 10, [makeText("Submit", 11)], [
         "disabled",
         "",
       ]),
     ]);
-    // New feature: disabled flag should appear in serialized output
+    // Disabled elements are wrapped in ~~strikethrough~~
     // This tests the full CDPNode → OSNode → text pipeline
     expect(result).toContain("Submit");
-    expect(result).toContain("disabled");
+    expect(result).toContain("~~");
   });
 
   it("button without disabled produces clean output", () => {
@@ -86,7 +86,7 @@ describe("pipeline — disabled button", () => {
 // ---------------------------------------------------------------------------
 
 describe("pipeline — aria-expanded button", () => {
-  it("button with aria-expanded='true' serializes with expanded flag", () => {
+  it("button with aria-expanded='true' serializes with open flag", () => {
     const result = pipeline([
       makeElement("BUTTON", 10, [makeText("Menu", 11)], [
         "aria-expanded",
@@ -94,11 +94,11 @@ describe("pipeline — aria-expanded button", () => {
       ]),
     ]);
     expect(result).toContain("Menu");
-    // New feature: expanded flag from aria-expanded
-    expect(result).toContain("expanded");
+    // aria-expanded="true" → "open" flag
+    expect(result).toContain("open");
   });
 
-  it("button with aria-expanded='false' serializes with collapsed flag", () => {
+  it("button with aria-expanded='false' serializes with closed flag", () => {
     const result = pipeline([
       makeElement("BUTTON", 10, [makeText("Menu", 11)], [
         "aria-expanded",
@@ -106,8 +106,8 @@ describe("pipeline — aria-expanded button", () => {
       ]),
     ]);
     expect(result).toContain("Menu");
-    // New feature: collapsed flag from aria-expanded="false"
-    expect(result).toContain("collapsed");
+    // aria-expanded="false" → "closed" flag
+    expect(result).toContain("closed");
   });
 });
 
@@ -274,7 +274,7 @@ describe("pipeline — combined viewport visibility and state", () => {
     expect(buttonNode!.attributes["disabled"]).toBe("");
   });
 
-  it("disabled button that is also data-os-visible serializes both indicators", () => {
+  it("disabled button that is also data-os-visible serializes with ~~strikethrough~~", () => {
     const btn = makeElement("BUTTON", 10, [makeText("Submit", 11)], [
       "data-os-visible",
       "1",
@@ -285,7 +285,7 @@ describe("pipeline — combined viewport visibility and state", () => {
     const { nodes } = walkDOM(root);
     const result = serialize(nodes);
     expect(result).toContain("Submit");
-    expect(result).toContain("disabled");
+    expect(result).toContain("~~");
   });
 });
 
@@ -317,7 +317,7 @@ describe("pipeline — input attributes", () => {
       makeElement("INPUT", 10, [], ["disabled", ""]),
     ]);
     expect(result).toContain("I1");
-    expect(result).toContain("disabled");
+    expect(result).toContain("~~");
   });
 
   it("input readonly attribute passes through the pipeline", () => {

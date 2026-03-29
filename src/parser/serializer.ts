@@ -2,19 +2,28 @@ import type { OSNode, ScrollPosition } from "../types.js";
 import { compressUrl } from "./url-compressor.js";
 import { hasComputedState } from "./element-classifier.js";
 
+interface ElementState {
+  /** Element is not actionable — wrap in ~~ */
+  struck: boolean;
+  /** Keyword flags to append (obscured, open, closed) */
+  flags: string;
+}
+
 /**
- * Build state flags string for an interactive element.
- * Checks both HTML attributes and computed state, deduplicating disabled.
+ * Compute element state for serialization.
+ * Disabled/inert → struck through (~~). Obscured → keyword. Expanded/collapsed → open/closed.
  */
-function buildStateFlags(node: OSNode, hasAttrDisabled: boolean): string {
+function getElementState(node: OSNode, hasAttrDisabled: boolean): ElementState {
+  const isDisabled = hasAttrDisabled || hasComputedState(node.state, "disabled");
+  const isInert = hasComputedState(node.state, "inert");
+  const struck = isDisabled || isInert;
+
   let flags = "";
-  if (hasAttrDisabled) flags += " disabled";
-  if (!hasAttrDisabled && hasComputedState(node.state, "disabled")) flags += " disabled";
-  if (hasComputedState(node.state, "obscured")) flags += " obscured";
-  if (hasComputedState(node.state, "inert")) flags += " inert";
-  if (node.attributes["aria-expanded"] === "true") flags += " expanded";
-  else if (node.attributes["aria-expanded"] === "false") flags += " collapsed";
-  return flags;
+  // Only show obscured if not already struck (disabled subsumes obscured)
+  if (!struck && hasComputedState(node.state, "obscured")) flags += " obscured";
+  if (node.attributes["aria-expanded"] === "true") flags += " open";
+  else if (node.attributes["aria-expanded"] === "false") flags += " closed";
+  return { struck, flags };
 }
 
 /**
@@ -89,12 +98,14 @@ export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string)
       const text = collectText(node).trim() || node.attributes["aria-label"] || node.attributes["title"] || "";
       const compHref = href ? compressUrl(href, pageUrl) : undefined;
       const newTab = node.attributes["target"] === "_blank" ? " →" : "";
-      const flags = buildStateFlags(node, node.attributes["aria-disabled"] === "true");
+      const { struck, flags } = getElementState(node, node.attributes["aria-disabled"] === "true");
+      let line: string;
       if (compHref) {
-        parts.push(`${pad}[${id}](${compHref}${newTab})${text ? " " + text : ""}${flags}`);
+        line = `[${id}](${compHref}${newTab})${text ? " " + text : ""}${flags}`;
       } else {
-        parts.push(`${pad}[${id}]${text ? " " + text : ""}${flags}`);
+        line = `[${id}]${text ? " " + text : ""}${flags}`;
       }
+      parts.push(struck ? `${pad}~~${line.trim()}~~` : `${pad}${line}`);
       continue;
     }
 
@@ -102,8 +113,9 @@ export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string)
     if (node.tag === "button") {
       const id = node.id ?? "";
       const text = collectText(node).trim() || node.attributes["aria-label"] || node.attributes["title"] || "";
-      const flags = buildStateFlags(node, node.attributes["disabled"] !== undefined || node.attributes["aria-disabled"] === "true");
-      parts.push(`${pad}[${id}]${text ? " " + text : ""}${flags}`);
+      const { struck, flags } = getElementState(node, node.attributes["disabled"] !== undefined || node.attributes["aria-disabled"] === "true");
+      const line = `[${id}]${text ? " " + text : ""}${flags}`;
+      parts.push(struck ? `${pad}~~${line.trim()}~~` : `${pad}${line}`);
       continue;
     }
 
@@ -120,24 +132,26 @@ export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string)
       const max = node.attributes["max"] !== undefined ? ` max=${node.attributes["max"]}` : "";
       const step = node.attributes["step"] !== undefined ? ` step=${node.attributes["step"]}` : "";
       const pattern = node.attributes["pattern"] !== undefined ? ` pattern=${node.attributes["pattern"]}` : "";
-      const stateFlags = buildStateFlags(node, node.attributes["disabled"] !== undefined || node.attributes["aria-disabled"] === "true");
+      const { struck, flags } = getElementState(node, node.attributes["disabled"] !== undefined || node.attributes["aria-disabled"] === "true");
 
       let line = id;
       if (type && type !== "text") line += `:${type}`;
       if (placeholder) line += ` ~${placeholder}`;
       if (value) line += ` ="${value}"`;
-      line += min + max + step + pattern + stateFlags + readonly + required + checked;
-      parts.push(`${pad}${line.trim()}`);
+      line += min + max + step + pattern + flags + readonly + required + checked;
+      parts.push(struck ? `${pad}~~${line.trim()}~~` : `${pad}${line.trim()}`);
       continue;
     }
 
     // Selects: ID:select with children
     if (node.tag === "select") {
       const id = node.id ?? "";
-      let flags = buildStateFlags(node, node.attributes["disabled"] !== undefined || node.attributes["aria-disabled"] === "true");
+      const { struck, flags: stateFlags } = getElementState(node, node.attributes["disabled"] !== undefined || node.attributes["aria-disabled"] === "true");
+      let flags = stateFlags;
       if (node.attributes["required"] !== undefined) flags += " required";
       if (node.attributes["multiple"] !== undefined) flags += " multiple";
-      parts.push(`${pad}${id}:select${flags}`);
+      const header = `${id}:select${flags}`;
+      parts.push(struck ? `${pad}~~${header.trim()}~~` : `${pad}${header}`);
       if (node.children.length > 0) {
         parts.push(serializeSelectChildren(node.children, indent + 1, pageUrl));
       }

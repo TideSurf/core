@@ -74,34 +74,32 @@ describe("serializer — button state flags", () => {
 
   it("serializes button with disabled attribute", () => {
     const result = serialize([button("B1", "Submit", { disabled: "" })]);
-    // New feature: serializer should append "disabled" flag to button output
-    // Expected format: "[B1] Submit disabled"
-    // Current behavior: buttons don't emit disabled flags; this test documents the new spec
-    expect(result).toBe("[B1] Submit disabled");
+    // Disabled elements are wrapped in ~~strikethrough~~
+    expect(result).toBe("~~[B1] Submit~~");
   });
 
   it("serializes button with aria-disabled='true'", () => {
     const result = serialize([
       button("B1", "Submit", { "aria-disabled": "true" }),
     ]);
-    // New feature: aria-disabled should also result in "disabled" flag on buttons
-    expect(result).toBe("[B1] Submit disabled");
+    // aria-disabled also wraps in ~~strikethrough~~
+    expect(result).toBe("~~[B1] Submit~~");
   });
 
   it("serializes button with aria-expanded='true'", () => {
     const result = serialize([
       button("B1", "Menu", { "aria-expanded": "true" }),
     ]);
-    // New feature: aria-expanded="true" → "expanded" flag
-    expect(result).toBe("[B1] Menu expanded");
+    // aria-expanded="true" → "open" flag
+    expect(result).toBe("[B1] Menu open");
   });
 
   it("serializes button with aria-expanded='false'", () => {
     const result = serialize([
       button("B1", "Menu", { "aria-expanded": "false" }),
     ]);
-    // New feature: aria-expanded="false" → "collapsed" flag
-    expect(result).toBe("[B1] Menu collapsed");
+    // aria-expanded="false" → "closed" flag
+    expect(result).toBe("[B1] Menu closed");
   });
 
   it("serializes button with multiple flags", () => {
@@ -111,8 +109,8 @@ describe("serializer — button state flags", () => {
         "aria-expanded": "true",
       }),
     ]);
-    // New feature: multiple flags appended in order
-    expect(result).toBe("[B1] Submit disabled expanded");
+    // Disabled wraps in ~~, aria-expanded="true" → "open" inside the ~~
+    expect(result).toBe("~~[B1] Submit open~~");
   });
 
   it("serializes button with no text but aria-label", () => {
@@ -151,8 +149,8 @@ describe("serializer — link state flags", () => {
     const result = serialize([
       link("L1", "/about", "About", { "aria-disabled": "true" }),
     ]);
-    // New feature: aria-disabled on links → "disabled" flag appended
-    expect(result).toBe("[L1](/about) About disabled");
+    // aria-disabled on links → ~~strikethrough~~
+    expect(result).toBe("~~[L1](/about) About~~");
   });
 
   it("serializes link with target='_blank' and aria-disabled", () => {
@@ -162,8 +160,8 @@ describe("serializer — link state flags", () => {
         "aria-disabled": "true",
       }),
     ]);
-    // New feature: both flags present
-    expect(result).toBe("[L1](/about →) About disabled");
+    // Disabled wraps in ~~, arrow marker still appears inside
+    expect(result).toBe("~~[L1](/about →) About~~");
   });
 
   it("serializes link with target='_self' (no arrow)", () => {
@@ -197,8 +195,8 @@ describe("serializer — select state flags", () => {
 
   it("serializes select with disabled flag", () => {
     const result = serialize([select("S1", [], { disabled: "" })]);
-    // New feature: disabled flag appended to select
-    expect(result).toBe("S1:select disabled");
+    // Disabled wraps select in ~~strikethrough~~
+    expect(result).toBe("~~S1:select~~");
   });
 
   it("serializes select with required flag", () => {
@@ -217,8 +215,8 @@ describe("serializer — select state flags", () => {
     const result = serialize([
       select("S1", [], { disabled: "", required: "", multiple: "" }),
     ]);
-    // New feature: all flags in consistent order
-    expect(result).toBe("S1:select disabled required multiple");
+    // Disabled wraps in ~~, required and multiple still appear inside
+    expect(result).toBe("~~S1:select required multiple~~");
   });
 
   it("serializes select with selected option marker", () => {
@@ -268,8 +266,8 @@ describe("serializer — input state enhancements", () => {
     const result = serialize([
       input("I1", { "aria-disabled": "true" }),
     ]);
-    // New feature: aria-disabled on input → same as disabled
-    expect(result).toBe("I1 disabled");
+    // aria-disabled on input → ~~strikethrough~~
+    expect(result).toBe("~~I1~~");
   });
 
   it("serializes input with min, max, and step combined", () => {
@@ -281,9 +279,9 @@ describe("serializer — input state enhancements", () => {
   });
 
   it("preserves existing input behavior — disabled attribute", () => {
-    // Baseline: disabled already works for inputs in current code
+    // Disabled input wrapped in ~~strikethrough~~
     const result = serialize([input("I1", { disabled: "" })]);
-    expect(result).toBe("I1 disabled");
+    expect(result).toBe("~~I1~~");
   });
 
   it("preserves existing input behavior — readonly attribute", () => {
@@ -328,18 +326,18 @@ describe("serializer — input state enhancements", () => {
 // ---------------------------------------------------------------------------
 
 describe("serializer — link aria-expanded flags", () => {
-  it("serializes link with aria-expanded='true' as expanded", () => {
+  it("serializes link with aria-expanded='true' as open", () => {
     const result = serialize([
       link("L1", "/menu", "Menu", { "aria-expanded": "true" }),
     ]);
-    expect(result).toContain("expanded");
+    expect(result).toContain("open");
   });
 
-  it("serializes link with aria-expanded='false' as collapsed", () => {
+  it("serializes link with aria-expanded='false' as closed", () => {
     const result = serialize([
       link("L1", "/menu", "Menu", { "aria-expanded": "false" }),
     ]);
-    expect(result).toContain("collapsed");
+    expect(result).toContain("closed");
   });
 });
 
@@ -385,7 +383,7 @@ describe("serializer — select with optgroup", () => {
 // ---------------------------------------------------------------------------
 
 describe("serializer — node.state flag output", () => {
-  it("button with state: ['disabled'] outputs disabled even without HTML attr", () => {
+  it("button with state: ['disabled'] outputs ~~strikethrough~~ even without HTML attr", () => {
     const btn: OSNode = {
       tag: "button",
       id: "B1",
@@ -394,7 +392,7 @@ describe("serializer — node.state flag output", () => {
       state: ["disabled"],
     };
     const result = serialize([btn]);
-    expect(result).toContain("disabled");
+    expect(result).toBe("~~[B1] Submit~~");
   });
 
   it("button with state: ['obscured'] outputs obscured", () => {
@@ -409,7 +407,7 @@ describe("serializer — node.state flag output", () => {
     expect(result).toContain("obscured");
   });
 
-  it("button with state: ['inert'] outputs inert", () => {
+  it("button with state: ['inert'] outputs ~~strikethrough~~", () => {
     const btn: OSNode = {
       tag: "button",
       id: "B1",
@@ -418,10 +416,10 @@ describe("serializer — node.state flag output", () => {
       state: ["inert"],
     };
     const result = serialize([btn]);
-    expect(result).toContain("inert");
+    expect(result).toBe("~~[B1] Submit~~");
   });
 
-  it("link with state: ['disabled', 'obscured'] outputs both flags", () => {
+  it("link with state: ['disabled', 'obscured'] outputs ~~strikethrough~~ (disabled subsumes obscured)", () => {
     const lnk: OSNode = {
       tag: "link",
       id: "L1",
@@ -430,11 +428,11 @@ describe("serializer — node.state flag output", () => {
       state: ["disabled", "obscured"],
     };
     const result = serialize([lnk]);
-    expect(result).toContain("disabled");
-    expect(result).toContain("obscured");
+    expect(result).toBe("~~[L1](/about) About~~");
+    expect(result).not.toContain("obscured");
   });
 
-  it("input with state: ['disabled'] outputs disabled", () => {
+  it("input with state: ['disabled'] outputs ~~strikethrough~~", () => {
     const inp: OSNode = {
       tag: "input",
       id: "I1",
@@ -443,6 +441,6 @@ describe("serializer — node.state flag output", () => {
       state: ["disabled"],
     };
     const result = serialize([inp]);
-    expect(result).toContain("disabled");
+    expect(result).toBe("~~I1~~");
   });
 });
