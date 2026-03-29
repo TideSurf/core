@@ -3,6 +3,21 @@ import { compressUrl } from "./url-compressor.js";
 import { hasComputedState } from "./element-classifier.js";
 
 /**
+ * Build state flags string for an interactive element.
+ * Checks both HTML attributes and computed state, deduplicating disabled.
+ */
+function buildStateFlags(node: OSNode, hasAttrDisabled: boolean): string {
+  let flags = "";
+  if (hasAttrDisabled) flags += " disabled";
+  if (!hasAttrDisabled && hasComputedState(node.state, "disabled")) flags += " disabled";
+  if (hasComputedState(node.state, "obscured")) flags += " obscured";
+  if (hasComputedState(node.state, "inert")) flags += " inert";
+  if (node.attributes["aria-expanded"] === "true") flags += " expanded";
+  else if (node.attributes["aria-expanded"] === "false") flags += " collapsed";
+  return flags;
+}
+
+/**
  * Container tags that get their own line and indented children.
  */
 const STRUCTURAL_CONTAINERS = new Set([
@@ -74,13 +89,7 @@ export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string)
       const text = collectText(node).trim() || node.attributes["aria-label"] || node.attributes["title"] || "";
       const compHref = href ? compressUrl(href, pageUrl) : undefined;
       const newTab = node.attributes["target"] === "_blank" ? " →" : "";
-      let flags = "";
-      if (node.attributes["aria-disabled"] === "true") flags += " disabled";
-      if (!flags.includes("disabled") && hasComputedState(node.state, "disabled")) flags += " disabled";
-      if (hasComputedState(node.state, "obscured")) flags += " obscured";
-      if (hasComputedState(node.state, "inert")) flags += " inert";
-      if (node.attributes["aria-expanded"] === "true") flags += " expanded";
-      else if (node.attributes["aria-expanded"] === "false") flags += " collapsed";
+      const flags = buildStateFlags(node, node.attributes["aria-disabled"] === "true");
       if (compHref) {
         parts.push(`${pad}[${id}](${compHref}${newTab})${text ? " " + text : ""}${flags}`);
       } else {
@@ -93,13 +102,7 @@ export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string)
     if (node.tag === "button") {
       const id = node.id ?? "";
       const text = collectText(node).trim() || node.attributes["aria-label"] || node.attributes["title"] || "";
-      let flags = "";
-      if (node.attributes["disabled"] !== undefined || node.attributes["aria-disabled"] === "true") flags += " disabled";
-      if (!flags.includes("disabled") && hasComputedState(node.state, "disabled")) flags += " disabled";
-      if (hasComputedState(node.state, "obscured")) flags += " obscured";
-      if (hasComputedState(node.state, "inert")) flags += " inert";
-      if (node.attributes["aria-expanded"] === "true") flags += " expanded";
-      else if (node.attributes["aria-expanded"] === "false") flags += " collapsed";
+      const flags = buildStateFlags(node, node.attributes["disabled"] !== undefined || node.attributes["aria-disabled"] === "true");
       parts.push(`${pad}[${id}]${text ? " " + text : ""}${flags}`);
       continue;
     }
@@ -110,8 +113,6 @@ export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string)
       const type = node.attributes["type"];
       const placeholder = node.attributes["placeholder"];
       const value = node.attributes["value"];
-      let disabled = node.attributes["disabled"] !== undefined || node.attributes["aria-disabled"] === "true" ? " disabled" : "";
-      if (!disabled && hasComputedState(node.state, "disabled")) disabled = " disabled";
       const readonly = node.attributes["readonly"] !== undefined ? " readonly" : "";
       const required = node.attributes["required"] !== undefined ? " required" : "";
       const checked = node.attributes["checked"] !== undefined ? " checked" : "";
@@ -119,17 +120,13 @@ export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string)
       const max = node.attributes["max"] !== undefined ? ` max=${node.attributes["max"]}` : "";
       const step = node.attributes["step"] !== undefined ? ` step=${node.attributes["step"]}` : "";
       const pattern = node.attributes["pattern"] !== undefined ? ` pattern=${node.attributes["pattern"]}` : "";
-      const obscured = hasComputedState(node.state, "obscured") ? " obscured" : "";
-      const inert = hasComputedState(node.state, "inert") ? " inert" : "";
-      let expanded = "";
-      if (node.attributes["aria-expanded"] === "true") expanded = " expanded";
-      else if (node.attributes["aria-expanded"] === "false") expanded = " collapsed";
+      const stateFlags = buildStateFlags(node, node.attributes["disabled"] !== undefined || node.attributes["aria-disabled"] === "true");
 
       let line = id;
       if (type && type !== "text") line += `:${type}`;
       if (placeholder) line += ` ~${placeholder}`;
       if (value) line += ` ="${value}"`;
-      line += min + max + step + pattern + disabled + readonly + required + checked + obscured + inert + expanded;
+      line += min + max + step + pattern + stateFlags + readonly + required + checked;
       parts.push(`${pad}${line.trim()}`);
       continue;
     }
@@ -137,11 +134,7 @@ export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string)
     // Selects: ID:select with children
     if (node.tag === "select") {
       const id = node.id ?? "";
-      let flags = "";
-      if (node.attributes["disabled"] !== undefined || node.attributes["aria-disabled"] === "true") flags += " disabled";
-      if (!flags.includes("disabled") && hasComputedState(node.state, "disabled")) flags += " disabled";
-      if (hasComputedState(node.state, "obscured")) flags += " obscured";
-      if (hasComputedState(node.state, "inert")) flags += " inert";
+      let flags = buildStateFlags(node, node.attributes["disabled"] !== undefined || node.attributes["aria-disabled"] === "true");
       if (node.attributes["required"] !== undefined) flags += " required";
       if (node.attributes["multiple"] !== undefined) flags += " multiple";
       parts.push(`${pad}${id}:select${flags}`);
