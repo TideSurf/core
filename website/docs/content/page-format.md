@@ -80,77 +80,80 @@ TideSurf applies a clear set of rules to decide what stays and what goes:
 
 **Headings** maintain their hierarchy using markdown heading markers (`#`, `##`, `###`) to give the LLM a sense of page structure and content organization.
 
-## Element state flags
+## Element state
 
-TideSurf serializes the runtime state of interactive elements directly into the compressed output, so the agent knows which elements are actionable and which are not. State flags appear inline after the element ID.
+TideSurf serializes element state directly into the compressed output using conventions that LLMs understand natively from markdown pre-training.
 
-### Buttons
+### Disabled and inert elements — `~~strikethrough~~`
 
-Buttons include state flags after the closing bracket:
-
-```
-[B1] Submit disabled
-[B2] Menu expanded
-[B3] Menu collapsed
-```
-
-- `disabled` — the button cannot be clicked (HTML `disabled` attribute or computed disabled state)
-- `expanded` — the button controls an expanded region (from `aria-expanded="true"`)
-- `collapsed` — the button controls a collapsed region (from `aria-expanded="false"`)
-
-### Links
-
-Links show state flags after the text content:
+Elements that are not actionable are wrapped in markdown strikethrough. Do not pass their IDs to interaction tools.
 
 ```
-[L1](/url →) text           # target="_blank" (opens in new tab)
-[L2](/url) text disabled    # link is disabled
-[L3](/url) text expanded    # link controls an expanded region
-[L4](/url) text collapsed   # link controls a collapsed region
+~~[B1] Submit~~              # button is disabled
+~~[L1](/url) Click here~~    # link is disabled (aria-disabled)
+~~I1 ~Email~~                # input is disabled
+~~S1:select~~                # select is disabled
+~~[B2] Save~~                # inert (pointer-events:none or HTML inert)
 ```
 
-The `→` suffix inside the parentheses indicates `target="_blank"`.
+Strikethrough covers both HTML `disabled` attribute, `aria-disabled="true"`, `<fieldset disabled>` inheritance, CSS `pointer-events: none`, and the HTML `inert` attribute.
 
-### Inputs
+### Toggle state — `open` / `closed`
 
-Inputs display constraint attributes as inline flags:
+Buttons and links that control expandable regions show their toggle state:
+
+```
+[B1] Menu open               # aria-expanded="true"
+[B2] Settings closed          # aria-expanded="false"
+~~[B3] Options closed~~       # disabled AND collapsed
+```
+
+### Obscured elements — `obscured`
+
+Elements behind overlays (modals, cookie banners) are still actionable but blocked. The agent should dismiss the overlay first:
+
+```
+[B1] Submit obscured          # behind an overlay
+```
+
+### Links with target
+
+Links that open in a new tab show `→` inside the href:
+
+```
+[L1](/docs →) Documentation   # target="_blank"
+```
+
+### Input constraints
+
+Inputs display their validation constraints inline:
 
 ```
 I1 ~Placeholder ="value"
 I2:number ~Amount ="10" min=0 max=100 step=5
 I3:text ~Code ="" pattern=[A-Z]{3}
-I4 ~Name ="Alice" disabled
-I5 ~Notes ="..." readonly
-I6 ~Email ="" required
-I7:checkbox checked
+I4 ~Notes ="..." readonly
+I5 ~Email ="" required
+I6:checkbox checked
 ```
 
-Flags include `disabled`, `readonly`, `required`, `checked` (for checkboxes/radios), and the constraint attributes `min=X`, `max=X`, `step=X`, and `pattern=X` when present.
+### Select options
 
-### Selects
-
-Select dropdowns show their state and selected option:
+Select dropdowns show `>` for the selected option, plus `required`/`multiple` flags:
 
 ```
-S1
+S1:select required
   > Option A
   Option B
   Option C
+S2:select multiple
+  > Apple
+  > Banana
+  Cherry
 ```
 
-- `disabled` — the select cannot be interacted with
-- `required` — a selection is required
-- `multiple` — multiple options can be selected
-- `>` prefix marks the currently selected option(s)
+## Computed visibility
 
-Option groups are preserved with their labels, and individual options within a group can also be disabled.
+TideSurf inspects computed CSS styles to filter invisible elements before they reach the output. Elements hidden by `display: none`, `visibility: hidden`, `opacity: 0`, or `clip-path` hiding patterns are automatically removed. This prevents agents from interacting with honeypot fields, off-screen traps, or CSS-hidden elements.
 
-## Computed state flags
-
-In addition to HTML attribute-based state, TideSurf inspects computed CSS styles and DOM structure to detect elements that appear interactive but are not actually usable. These computed states appear as flags in the serialized output:
-
-- **`disabled`** (computed) — The element is inside a disabled `<fieldset>` or has been disabled via JavaScript even though the HTML attribute is not set. TideSurf resolves the effective disabled state by walking the DOM ancestry.
-- **`obscured`** — The element is behind an overlay (modal backdrop, cookie banner, etc.). TideSurf checks whether another element at the same coordinates would receive the click via `elementFromPoint` logic.
-- **`inert`** — The element has `pointer-events: none` in computed CSS, or is inside an HTML `inert` subtree. The element is visible but non-interactive.
-
-These flags help agents avoid wasting actions on elements that will not respond to clicks or input.
+Use `getState({ includeHidden: true })` to bypass this filtering for debugging.
