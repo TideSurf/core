@@ -112,6 +112,26 @@ const translations: Translations = {
     ja: "導入へ移動",
     ko: "소개로 이동",
   },
+  "content.share.title": {
+    en: "Share",
+    ja: "共有",
+    ko: "공유",
+  },
+  "content.share.copy": {
+    en: "Copy link",
+    ja: "リンクをコピー",
+    ko: "링크 복사",
+  },
+  "content.share.copied": {
+    en: "Copied!",
+    ja: "コピーしました",
+    ko: "복사됨",
+  },
+  "content.share.llms": {
+    en: "Open llms.txt",
+    ja: "llms.txtを開く",
+    ko: "llms.txt 열기",
+  },
   "content.lang-notice": {
     en: "",
     ja: "コンテンツは英語で提供されています。UIラベルは翻訳されています。",
@@ -430,6 +450,71 @@ function highlightCode(): void {
   });
 }
 
+function generateLlmsTxt(pageName: string, content: string): string {
+  const titleMatch = content.match(/^#\s+(.+)/m);
+  const title = titleMatch ? titleMatch[1] : pageName;
+  
+  // Extract all headings for structure
+  const headings: string[] = [];
+  const headingRegex = /^(#{2,4})\s+(.+)$/gm;
+  let match;
+  while ((match = headingRegex.exec(content)) !== null) {
+    const level = match[1].length;
+    const text = match[2];
+    headings.push(`${"  ".repeat(level - 2)}- ${text}`);
+  }
+  
+  // Clean up markdown for llms.txt format
+  const cleanContent = content
+    .replace(/```[\s\S]*?```/g, "[code block]")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "[$1]")
+    .replace(/>\s+/g, "")
+    .replace(/\*{2,}/g, "")
+    .replace(/^#{1,4}\s+/gm, "")
+    .replace(/\n{3,}/g, "\n\n");
+  
+  return `# ${title}
+
+URL: https://tidesurf.org/docs#${pageName}
+
+## Overview
+
+${cleanContent.slice(0, 800).trim()}...
+
+## Structure
+
+${headings.length > 0 ? headings.join("\n") : "- Main content"}
+
+## Full Content
+
+${cleanContent.trim()}
+
+---
+Generated from TideSurf documentation (https://tidesurf.org/docs)
+For LLM context: This is a technical documentation page for TideSurf, a TypeScript library that connects Chromium to LLM agents via CDP with token-efficient DOM compression.
+`;
+}
+
+function openLlmsTxt(pageName: string): void {
+  const content = pageMap[pageName];
+  if (!content) return;
+  
+  const llmsContent = generateLlmsTxt(pageName, content);
+  const blob = new Blob([llmsContent], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+  
+  // Open in new tab
+  const newTab = window.open(url, "_blank");
+  if (newTab) {
+    newTab.document.title = `llms.txt - ${pageName}`;
+  }
+  
+  // Clean up blob URL after a delay
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
 function renderMissingPage(): void {
   const wrapper = document.createElement("div");
   wrapper.className = "error-page";
@@ -506,6 +591,92 @@ function renderPage(pageName: string): void {
       });
     });
     h1.insertAdjacentElement("afterend", pathEl);
+  }
+
+  // Add share button after page path
+  const pagePath = contentEl.querySelector(".page-path");
+  if (pagePath && !contentEl.querySelector(".share-container")) {
+    const shareContainer = document.createElement("div");
+    shareContainer.className = "share-container";
+    
+    const shareBtn = document.createElement("button");
+    shareBtn.className = "share-btn";
+    shareBtn.setAttribute("aria-label", translate("content.share.title"));
+    shareBtn.setAttribute("aria-haspopup", "true");
+    shareBtn.setAttribute("aria-expanded", "false");
+    shareBtn.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="18" cy="5" r="3"/>
+        <circle cx="6" cy="12" r="3"/>
+        <circle cx="18" cy="19" r="3"/>
+        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+      </svg>
+      <span>${translate("content.share.title")}</span>
+    `;
+    
+    const shareDropdown = document.createElement("div");
+    shareDropdown.className = "share-dropdown";
+    shareDropdown.setAttribute("role", "menu");
+    shareDropdown.innerHTML = `
+      <button class="share-option" role="menuitem" data-action="copy">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+        </svg>
+        <span>${translate("content.share.copy")}</span>
+      </button>
+      <button class="share-option" role="menuitem" data-action="llms">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <polyline points="14 2 14 8 20 8"/>
+          <line x1="16" y1="13" x2="8" y2="13"/>
+          <line x1="16" y1="17" x2="8" y2="17"/>
+          <polyline points="10 9 9 9 8 9"/>
+        </svg>
+        <span>${translate("content.share.llms")}</span>
+      </button>
+    `;
+    
+    shareContainer.appendChild(shareBtn);
+    shareContainer.appendChild(shareDropdown);
+    pagePath.insertAdjacentElement("afterend", shareContainer);
+    
+    // Toggle dropdown
+    shareBtn.addEventListener("click", () => {
+      const isExpanded = shareBtn.getAttribute("aria-expanded") === "true";
+      shareBtn.setAttribute("aria-expanded", String(!isExpanded));
+      shareDropdown.classList.toggle("open", !isExpanded);
+    });
+    
+    // Close dropdown when clicking outside
+    document.addEventListener("click", (e) => {
+      if (!shareContainer.contains(e.target as Node)) {
+        shareBtn.setAttribute("aria-expanded", "false");
+        shareDropdown.classList.remove("open");
+      }
+    });
+    
+    // Handle share actions
+    shareDropdown.querySelectorAll(".share-option").forEach((option) => {
+      option.addEventListener("click", () => {
+        const action = (option as HTMLElement).dataset.action;
+        if (action === "copy") {
+          const url = `${window.location.origin}${window.location.pathname}#${pageName}`;
+          navigator.clipboard.writeText(url).then(() => {
+            const span = option.querySelector("span");
+            if (span) span.textContent = translate("content.share.copied");
+            setTimeout(() => {
+              if (span) span.textContent = translate("content.share.copy");
+            }, 1500);
+          });
+        } else if (action === "llms") {
+          openLlmsTxt(pageName);
+        }
+        shareBtn.setAttribute("aria-expanded", "false");
+        shareDropdown.classList.remove("open");
+      });
+    });
   }
 
   buildTOC();
