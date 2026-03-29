@@ -58,7 +58,7 @@ bun run test:all         # All tests
 - **No screenshots/vision** — DOM compression only. This keeps token costs 10–100× lower than screenshot-based approaches.
 - **CDP, not Playwright** — Direct CDP over `chrome-remote-interface` avoids the Playwright dependency tree. Tradeoff: no Firefox/Safari.
 - **Lazy browser launch** — Chrome starts on first tool call, not on import.
-- **ID scheme** — Interactive elements get prefix-based IDs: `L` (links), `B` (buttons), `I` (inputs), `S` (selects). These are stable within a single getState() call.
+- **ID scheme** — Interactive elements get prefix-based IDs: `L` (links), `B` (buttons), `I` (inputs), `S` (selects), `F` (forms), `T` (tables), `D` (dialogs). These are stable within a single getState() call.
 - **Token budgeting** — `getState({ maxTokens })` prunes low-priority elements to fit a budget. Priority: interactive > visible text > structural.
 - **Auto-connect** — `TideSurf.connect()` attaches to an already-running Chrome instead of spawning one. Uses `discoverBrowser()` to probe CDP on a given port. When auto-connected, `close()` only disconnects CDP — it never kills the external process.
 - **Output modes** — `getState({ mode })` supports `"full"`, `"minimal"` (landmarks + summaries), and `"interactive"` (only elements with IDs). Viewport mode is on by default (`viewport: false` for full page).

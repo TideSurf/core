@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.0 (2026-03-29)
+
+### New
+
+- **Element state awareness** — Interactive elements now serialize their runtime state directly into the compressed output. Buttons, links, inputs, and selects display flags like `disabled`, `expanded`, `collapsed`, `checked`, `required`, `readonly`, and constraint attributes (`min`, `max`, `step`, `pattern`).
+- **Computed CSS visibility checks** — `getState()` now inspects computed styles (`opacity`, `visibility`, `display`, `clip-path`, `pointer-events`) to filter out elements that are present in the DOM but not visible or usable on the page.
+- **Interaction state detection** — TideSurf detects elements disabled via `<fieldset>`, obscured by overlays (modal backdrops, cookie banners), and inert elements (`pointer-events: none`, HTML `inert` attribute). These states appear as `disabled`, `obscured`, and `inert` flags in the output.
+- **`includeHidden` option** — `getState({ includeHidden: true })` bypasses CSS visibility filtering to include all DOM elements regardless of computed style. Useful for debugging hidden menus, lazy-loaded content, and off-screen elements.
+- **OPTION/OPTGROUP handling** — Select dropdowns now serialize their options with group labels and a `>` prefix for the currently selected option(s). Disabled options and `multiple` selects are represented.
+- **Dialog element support** — `<dialog>` elements receive `D` prefix IDs (e.g. `D1`), joining the existing L/B/I/S/F/T prefix scheme.
+
+### Tests
+
+- 107 new unit tests covering element state serialization, computed visibility checks, interaction state detection, select/option handling, and edge cases.
+
 ## 0.4.0 (2026-03-28)
 
 ### Improved
