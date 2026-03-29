@@ -651,8 +651,24 @@ function renderPage(pageName: string): void {
     shareWrapper.appendChild(shareBtn);
     shareWrapper.appendChild(shareDropdown);
 
+    // Copy link button (inline, no dropdown)
+    const copyLinkBtn = document.createElement("button");
+    copyLinkBtn.className = "doc-action-btn";
+    copyLinkBtn.setAttribute("aria-label", translate("content.share.copy"));
+    copyLinkBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+    copyLinkBtn.addEventListener("click", () => {
+      const url = `${window.location.origin}/docs#${pageName}`;
+      navigator.clipboard.writeText(url).then(() => {
+        copyLinkBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+        setTimeout(() => {
+          copyLinkBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+        }, 1500);
+      });
+    });
+
     actions.appendChild(copyWrapper);
     actions.appendChild(shareWrapper);
+    actions.appendChild(copyLinkBtn);
     docMeta.appendChild(pathEl);
     docMeta.appendChild(actions);
     h1.insertAdjacentElement("afterend", docMeta);
@@ -759,6 +775,7 @@ function buildTOC(): void {
   }
 
   const fragment = document.createDocumentFragment();
+  let currentGroup: HTMLElement | null = null;
 
   headings.forEach((heading) => {
     // Generate slug from heading text for better URLs
@@ -768,7 +785,7 @@ function buildTOC(): void {
       .replace(/[^\w\s-]/g, "")
       .replace(/\s+/g, "-")
       .substring(0, 50);
-    
+
     // Add unique suffix if needed
     const id = heading.id || slug || `heading-${Math.random().toString(36).substr(2, 9)}`;
     heading.id = id;
@@ -797,11 +814,11 @@ function buildTOC(): void {
 
     const link = document.createElement("a");
     link.href = `#${currentPageName}:${id}`;
-    
+
     // Set class based on heading level
     const level = heading.tagName.toLowerCase();
-    link.className = level === "h4" ? "toc-link toc-h4" : 
-                     level === "h3" ? "toc-link toc-h3" : 
+    link.className = level === "h4" ? "toc-link toc-h4" :
+                     level === "h3" ? "toc-link toc-h3" :
                      "toc-link toc-h2";
     link.dataset.target = id;
     link.textContent = text;
@@ -813,7 +830,36 @@ function buildTOC(): void {
       });
     });
 
-    fragment.appendChild(link);
+    if (level === "h2") {
+      // Start a new group for this h2
+      currentGroup = document.createElement("div");
+      currentGroup.className = "toc-group";
+      currentGroup.dataset.collapsed = "true";
+      fragment.appendChild(link);
+      fragment.appendChild(currentGroup);
+
+      // Toggle collapse on h2 click
+      link.addEventListener("click", () => {
+        const group = link.nextElementSibling as HTMLElement;
+        if (group?.classList.contains("toc-group")) {
+          const wasCollapsed = group.dataset.collapsed === "true";
+          // Collapse all groups first
+          tocNav.querySelectorAll(".toc-group").forEach((g) => {
+            (g as HTMLElement).dataset.collapsed = "true";
+          });
+          if (wasCollapsed) {
+            group.dataset.collapsed = "false";
+          }
+        }
+      });
+    } else {
+      // h3/h4 go into the current group
+      if (currentGroup) {
+        currentGroup.appendChild(link);
+      } else {
+        fragment.appendChild(link);
+      }
+    }
   });
 
   tocNav.appendChild(fragment);
@@ -833,6 +879,18 @@ function buildTOC(): void {
 
     tocNav.querySelectorAll(".toc-link").forEach((link) => {
       link.classList.toggle("active", (link as HTMLElement).dataset.target === activeId);
+    });
+
+    // Auto-expand the group containing the active heading
+    tocNav.querySelectorAll(".toc-group").forEach((group) => {
+      const hasActive = group.querySelector(".toc-link.active");
+      const h2Link = group.previousElementSibling;
+      const h2Active = h2Link?.classList.contains("active");
+      if (hasActive || h2Active) {
+        (group as HTMLElement).dataset.collapsed = "false";
+      } else {
+        (group as HTMLElement).dataset.collapsed = "true";
+      }
     });
   };
 
