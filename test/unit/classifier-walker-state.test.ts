@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { walkDOM } from "../../src/parser/dom-walker.js";
+import { hasComputedState } from "../../src/parser/element-classifier.js";
 import type { CDPNode, OSNode, GetStateOptions } from "../../src/types.js";
 
 // ---------------------------------------------------------------------------
@@ -153,6 +154,62 @@ describe("DOM walker — data-os-state reading", () => {
       "obscured",
     ]);
   });
+
+  it("data-os-state='' (empty string) results in state=undefined", () => {
+    const btn = makeElement("BUTTON", 10, [makeText("Click", 11)], [
+      "data-os-state",
+      "",
+    ]);
+    const root = makeElement("BODY", 1, [btn]);
+    const { nodes } = walkDOM(root);
+
+    const buttonNode = nodes.find((n) => n.tag === "button");
+    expect(buttonNode).toBeDefined();
+    expect((buttonNode as OSNode & { state?: string[] }).state).toBeUndefined();
+  });
+
+  it("data-os-state='disabled,' (trailing comma) results in state=['disabled']", () => {
+    const btn = makeElement("BUTTON", 10, [makeText("Click", 11)], [
+      "data-os-state",
+      "disabled,",
+    ]);
+    const root = makeElement("BODY", 1, [btn]);
+    const { nodes } = walkDOM(root);
+
+    const buttonNode = nodes.find((n) => n.tag === "button");
+    expect(buttonNode).toBeDefined();
+    expect((buttonNode as OSNode & { state?: string[] }).state).toEqual([
+      "disabled",
+    ]);
+  });
+
+  it("data-os-state=',disabled' (leading comma) results in state=['disabled']", () => {
+    const btn = makeElement("BUTTON", 10, [makeText("Click", 11)], [
+      "data-os-state",
+      ",disabled",
+    ]);
+    const root = makeElement("BODY", 1, [btn]);
+    const { nodes } = walkDOM(root);
+
+    const buttonNode = nodes.find((n) => n.tag === "button");
+    expect(buttonNode).toBeDefined();
+    expect((buttonNode as OSNode & { state?: string[] }).state).toEqual([
+      "disabled",
+    ]);
+  });
+
+  it("data-os-state='unknown_flag' results in state=undefined (filtered by whitelist)", () => {
+    const btn = makeElement("BUTTON", 10, [makeText("Click", 11)], [
+      "data-os-state",
+      "unknown_flag",
+    ]);
+    const root = makeElement("BODY", 1, [btn]);
+    const { nodes } = walkDOM(root);
+
+    const buttonNode = nodes.find((n) => n.tag === "button");
+    expect(buttonNode).toBeDefined();
+    expect((buttonNode as OSNode & { state?: string[] }).state).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -163,18 +220,6 @@ describe("DOM walker — data-os-state reading", () => {
 // ---------------------------------------------------------------------------
 
 describe("hasComputedState utility", () => {
-  // Since hasComputedState may not exist yet, we define the expected behavior
-  // and implement a local version matching the spec for testing.
-  // The parallel branch will export this from element-classifier.ts.
-
-  function hasComputedState(
-    state: string[] | undefined,
-    flag: string
-  ): boolean {
-    if (!state) return false;
-    return state.includes(flag);
-  }
-
   it("returns true when flag is present", () => {
     expect(hasComputedState(["disabled", "obscured"], "disabled")).toBe(true);
   });
