@@ -81,14 +81,15 @@ export class SurfingPage {
     // 1. Clear stale visibility markers to prevent carryover from prior calls
     await cdp.evaluate(
       this.conn,
-      "document.querySelectorAll('[data-os-visible]').forEach(el => el.removeAttribute('data-os-visible'))"
+      "document.querySelectorAll('[data-os-visible],[data-os-state]').forEach(el => { el.removeAttribute('data-os-visible'); el.removeAttribute('data-os-state'); })"
     );
 
     // 2. Viewport defaults to true
     const useViewport = options?.viewport !== false;
+    const includeHidden = options?.includeHidden === true;
 
-    // 3. Mark visible elements if viewport mode or maxTokens is set
-    if (useViewport || options?.maxTokens) {
+    // 3. Mark visible elements if viewport mode or maxTokens is set (skip if includeHidden)
+    if ((useViewport || options?.maxTokens) && !includeHidden) {
       await markVisibleElements(this.conn);
     }
 
@@ -107,10 +108,10 @@ export class SurfingPage {
     // 6. Walk DOM
     let { nodes, nodeMap } = walkDOM(root);
 
-    // 7. If viewport mode, filter to visible subtrees only
+    // 7. If viewport mode, filter to visible subtrees only (skip if includeHidden)
     let aboveSummary: OSNode | undefined;
     let belowSummary: OSNode | undefined;
-    if (useViewport) {
+    if (useViewport && !includeHidden) {
       const filtered = filterViewportOnly(nodes);
       nodes = filtered.nodes;
       aboveSummary = filtered.aboveSummary;

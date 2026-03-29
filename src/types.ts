@@ -36,6 +36,8 @@ export interface OSNode {
   children: OSNode[];
   text?: string;
   visible?: boolean;
+  /** Computed interaction state flags (disabled, obscured, inert) */
+  state?: string[];
 }
 
 /**
@@ -64,6 +66,8 @@ export interface GetStateOptions {
   viewport?: boolean;
   /** Output mode: "full" (default), "minimal" (landmarks + summaries), "interactive" (only elements with IDs) */
   mode?: "full" | "minimal" | "interactive";
+  /** Include elements hidden by CSS (opacity:0, visibility:hidden, etc). Default: false */
+  includeHidden?: boolean;
 }
 
 /**

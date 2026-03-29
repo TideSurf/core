@@ -120,6 +120,8 @@ function walkNode(
   // Special handling for IFRAME
   if (tag === "iframe") {
     const visible = attrs["data-os-visible"] === "1" ? true : undefined;
+    const stateAttr = attrs["data-os-state"];
+    const state = stateAttr ? stateAttr.split(",") : undefined;
     const filteredAttrs: Record<string, string> = {};
     for (const key of PASS_THROUGH_ATTRS) {
       if (attrs[key] !== undefined) {
@@ -142,6 +144,7 @@ function walkNode(
           attributes: filteredAttrs,
           children: postProcess(iframeChildren),
           visible,
+          state,
         },
       ];
     } else {
@@ -152,6 +155,7 @@ function walkNode(
           attributes: { ...filteredAttrs, status: "inaccessible" },
           children: [],
           visible,
+          state,
         },
       ];
     }
@@ -208,6 +212,8 @@ function walkNode(
 
   // Check for visibility attribute (set by viewport marking)
   const visible = attrs["data-os-visible"] === "1" ? true : undefined;
+  const stateAttr = attrs["data-os-state"];
+  const state = stateAttr ? stateAttr.split(",") : undefined;
 
   const osNode: OSNode = {
     tag,
@@ -215,6 +221,7 @@ function walkNode(
     attributes: filteredAttrs,
     children: postProcess(osChildren),
     visible,
+    state,
   };
 
   return [osNode];
