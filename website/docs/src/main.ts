@@ -491,6 +491,23 @@ function renderPage(pageName: string): void {
     document.title = `${title} — TideSurf Docs`;
   }
 
+  // Add page path indicator after h1
+  const h1 = contentEl.querySelector("h1");
+  if (h1 && !contentEl.querySelector(".page-path")) {
+    const pathEl = document.createElement("div");
+    pathEl.className = "page-path";
+    pathEl.textContent = `/docs#${pageName}`;
+    pathEl.title = "Click to copy link";
+    pathEl.addEventListener("click", () => {
+      const url = `${window.location.origin}/docs#${pageName}`;
+      navigator.clipboard.writeText(url).then(() => {
+        pathEl.textContent = "Copied!";
+        setTimeout(() => { pathEl.textContent = `/docs#${pageName}`; }, 1500);
+      });
+    });
+    h1.insertAdjacentElement("afterend", pathEl);
+  }
+
   buildTOC();
 }
 
@@ -550,13 +567,25 @@ function buildTOC(): void {
     const id = heading.id || slug || `heading-${Math.random().toString(36).substr(2, 9)}`;
     heading.id = id;
 
-    // Add anchor link
+    // Add anchor link with copy-to-clipboard
     if (!heading.querySelector('.anchor-link')) {
       const anchor = document.createElement("a");
       anchor.href = `#${currentPageName}:${id}`;
       anchor.className = "anchor-link";
       anchor.setAttribute("aria-label", `Link to ${text}`);
-      anchor.innerHTML = "#";
+      anchor.textContent = "#";
+      anchor.addEventListener("click", (event) => {
+        event.preventDefault();
+        const url = `${window.location.origin}${window.location.pathname}#${currentPageName}:${id}`;
+        navigator.clipboard.writeText(url).then(() => {
+          anchor.textContent = "\u2713";
+          anchor.classList.add("copied");
+          setTimeout(() => {
+            anchor.textContent = "#";
+            anchor.classList.remove("copied");
+          }, 1500);
+        });
+      });
       heading.appendChild(anchor);
     }
 

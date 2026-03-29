@@ -74,8 +74,8 @@
        ───────────────────────────────────── */
     --sidebar-w: 280px;
     --nav-h: 72px;
-    --content-max: 720px;
-    --toc-w: 200px;
+    --content-max: 820px;
+    --toc-w: 220px;
     
     /* ─────────────────────────────────────
        Animation
@@ -618,7 +618,7 @@ body.mobile-menu-open .mobile-overlay {
     flex: 1;
     margin-left: var(--sidebar-w);
     display: flex;
-    justify-content: center;
+    gap: 3rem;
     transition: margin-left 0.3s;
     position: relative;
 }
@@ -629,7 +629,7 @@ main {
     flex: 1;
     max-width: var(--content-max);
     padding: var(--space-3xl) var(--space-xl) var(--space-4xl);
-    margin: 0;
+    margin: 0 auto 0 clamp(2rem, 5vw, 6rem);
     min-width: 0;
 }
 
@@ -715,6 +715,28 @@ main h2:hover .anchor-link:hover,
 main h3:hover .anchor-link:hover,
 main h4:hover .anchor-link:hover {
     opacity: 1;
+    color: var(--accent);
+}
+
+.anchor-link.copied {
+    opacity: 1 !important;
+    color: var(--accent);
+}
+
+/* ── Page Path ── */
+
+.page-path {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--text-muted);
+    margin-top: calc(var(--space-sm) * -1);
+    margin-bottom: var(--space-xl);
+    cursor: pointer;
+    transition: color var(--duration) var(--ease);
+    user-select: all;
+}
+
+.page-path:hover {
     color: var(--accent);
 }
 
@@ -1051,6 +1073,12 @@ main code {
     color: #fff;
     border-color: var(--accent);
     opacity: 1;
+}
+
+@media (hover: none) {
+    .copy-code-btn {
+        opacity: 0.5;
+    }
 }
 
 /* ─────────────────────────────────────
@@ -1502,7 +1530,7 @@ main td code {
     }
 
     main {
-        margin-left: 0;
+        margin: 0;
         padding: var(--space-lg) max(env(safe-area-inset-right, 0px), 1.5rem) var(--space-3xl)
             max(env(safe-area-inset-left, 0px), 1.5rem);
         padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--space-3xl));
