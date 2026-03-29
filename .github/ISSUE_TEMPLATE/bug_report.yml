@@ -1,0 +1,50 @@
+name: Bug report
+description: Report a bug in TideSurf
+labels: [bug]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened? What did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Minimal code or steps to trigger the bug.
+      render: typescript
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: TideSurf version
+      placeholder: "0.5.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: runtime
+    attributes:
+      label: Runtime
+      options:
+        - Bun
+        - Node.js
+    validations:
+      required: true
+  - type: input
+    id: chrome
+    attributes:
+      label: Chrome version
+      placeholder: "Chrome 126"
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options:
+        - macOS
+        - Linux
+        - Windows
+    validations:
+      required: true

@@ -13,7 +13,8 @@
 <p align="center">
   <strong><a href="https://tidesurf.org">About</a></strong> |
   <strong><a href="https://tidesurf.org/docs">Documentation</a></strong> |
-  <strong><a href="https://tidesurf.org/llms.txt">llms.txt</a></strong>
+  <strong><a href="https://tidesurf.org/llms.txt">llms.txt</a></strong> |
+  <strong><a href="https://github.com/sponsors/MercuriusDream">Sponsor</a></strong>
 </p>
 
 <p align="center">
