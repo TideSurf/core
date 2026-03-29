@@ -72,10 +72,15 @@ export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string)
       const href = node.attributes["href"];
       const text = collectText(node).trim() || node.attributes["aria-label"] || node.attributes["title"] || "";
       const compHref = href ? compressUrl(href, pageUrl) : undefined;
+      const newTab = node.attributes["target"] === "_blank" ? " →" : "";
+      let flags = "";
+      if (node.attributes["aria-disabled"] === "true") flags += " disabled";
+      if (node.attributes["aria-expanded"] === "true") flags += " expanded";
+      else if (node.attributes["aria-expanded"] === "false") flags += " collapsed";
       if (compHref) {
-        parts.push(`${pad}[${id}](${compHref})${text ? " " + text : ""}`);
+        parts.push(`${pad}[${id}](${compHref}${newTab})${text ? " " + text : ""}${flags}`);
       } else {
-        parts.push(`${pad}[${id}]${text ? " " + text : ""}`);
+        parts.push(`${pad}[${id}]${text ? " " + text : ""}${flags}`);
       }
       continue;
     }
@@ -84,7 +89,11 @@ export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string)
     if (node.tag === "button") {
       const id = node.id ?? "";
       const text = collectText(node).trim() || node.attributes["aria-label"] || node.attributes["title"] || "";
-      parts.push(`${pad}[${id}]${text ? " " + text : ""}`);
+      let flags = "";
+      if (node.attributes["disabled"] !== undefined || node.attributes["aria-disabled"] === "true") flags += " disabled";
+      if (node.attributes["aria-expanded"] === "true") flags += " expanded";
+      else if (node.attributes["aria-expanded"] === "false") flags += " collapsed";
+      parts.push(`${pad}[${id}]${text ? " " + text : ""}${flags}`);
       continue;
     }
 
@@ -94,16 +103,23 @@ export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string)
       const type = node.attributes["type"];
       const placeholder = node.attributes["placeholder"];
       const value = node.attributes["value"];
-      const disabled = node.attributes["disabled"] !== undefined ? " disabled" : "";
+      const disabled = node.attributes["disabled"] !== undefined || node.attributes["aria-disabled"] === "true" ? " disabled" : "";
       const readonly = node.attributes["readonly"] !== undefined ? " readonly" : "";
       const required = node.attributes["required"] !== undefined ? " required" : "";
       const checked = node.attributes["checked"] !== undefined ? " checked" : "";
+      const min = node.attributes["min"] !== undefined ? ` min=${node.attributes["min"]}` : "";
+      const max = node.attributes["max"] !== undefined ? ` max=${node.attributes["max"]}` : "";
+      const step = node.attributes["step"] !== undefined ? ` step=${node.attributes["step"]}` : "";
+      const pattern = node.attributes["pattern"] !== undefined ? ` pattern=${node.attributes["pattern"]}` : "";
+      let expanded = "";
+      if (node.attributes["aria-expanded"] === "true") expanded = " expanded";
+      else if (node.attributes["aria-expanded"] === "false") expanded = " collapsed";
 
       let line = id;
       if (type && type !== "text") line += `:${type}`;
       if (placeholder) line += ` ~${placeholder}`;
       if (value) line += ` ="${value}"`;
-      line += disabled + readonly + required + checked;
+      line += min + max + step + pattern + disabled + readonly + required + checked + expanded;
       parts.push(`${pad}${line.trim()}`);
       continue;
     }
@@ -111,9 +127,13 @@ export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string)
     // Selects: ID:select with children
     if (node.tag === "select") {
       const id = node.id ?? "";
-      parts.push(`${pad}${id}:select`);
+      let flags = "";
+      if (node.attributes["disabled"] !== undefined || node.attributes["aria-disabled"] === "true") flags += " disabled";
+      if (node.attributes["required"] !== undefined) flags += " required";
+      if (node.attributes["multiple"] !== undefined) flags += " multiple";
+      parts.push(`${pad}${id}:select${flags}`);
       if (node.children.length > 0) {
-        parts.push(serialize(node.children, indent + 1, pageUrl));
+        parts.push(serializeSelectChildren(node.children, indent + 1, pageUrl));
       }
       continue;
     }
@@ -224,6 +244,30 @@ export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string)
     } else if (node.text) {
       parts.push(`${pad}${node.text}`);
     }
+  }
+
+  return parts.filter((p) => p.length > 0).join("\n");
+}
+
+/**
+ * Serialize children of a <select>, marking selected options with `>` prefix.
+ */
+function serializeSelectChildren(nodes: OSNode[], indent: number, pageUrl?: string): string {
+  const parts: string[] = [];
+  const pad = "  ".repeat(indent);
+
+  for (const node of nodes) {
+    if (node.tag === "#text") {
+      const text = node.text?.trim();
+      if (text) {
+        parts.push(`${pad}${text}`);
+      }
+      continue;
+    }
+    const text = collectText(node).trim();
+    if (!text) continue;
+    const isSelected = node.attributes["selected"] !== undefined || node.attributes["aria-selected"] === "true";
+    parts.push(`${pad}${isSelected ? "> " : ""}${text}`);
   }
 
   return parts.filter((p) => p.length > 0).join("\n");
