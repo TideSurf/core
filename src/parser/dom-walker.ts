@@ -3,6 +3,22 @@ import { classify, parseAttributes } from "./element-classifier.js";
 import { IDAssigner } from "./id-assigner.js";
 
 /**
+ * Valid state flags that can appear in data-os-state.
+ * Only these values are kept; anything else is filtered out.
+ */
+const VALID_STATE_FLAGS = new Set(["disabled", "inert", "obscured"]);
+
+/**
+ * Parse a data-os-state attribute value into an array of valid flags.
+ * Returns undefined if no valid flags remain after filtering.
+ */
+function parseStateFlags(raw: string | undefined): string[] | undefined {
+  if (!raw) return undefined;
+  const flags = raw.split(",").map(s => s.trim()).filter(s => VALID_STATE_FLAGS.has(s));
+  return flags.length > 0 ? flags : undefined;
+}
+
+/**
  * Attributes worth preserving in output
  */
 const PASS_THROUGH_ATTRS = new Set([
@@ -31,6 +47,7 @@ const PASS_THROUGH_ATTRS = new Set([
   "aria-selected",
   "aria-checked",
   "aria-disabled",
+  "label",
 ]);
 
 export interface WalkResult {
@@ -120,8 +137,7 @@ function walkNode(
   // Special handling for IFRAME
   if (tag === "iframe") {
     const visible = attrs["data-os-visible"] === "1" ? true : undefined;
-    const stateAttr = attrs["data-os-state"];
-    const state = stateAttr ? stateAttr.split(",") : undefined;
+    const state = parseStateFlags(attrs["data-os-state"]);
     const filteredAttrs: Record<string, string> = {};
     for (const key of PASS_THROUGH_ATTRS) {
       if (attrs[key] !== undefined) {
@@ -212,8 +228,7 @@ function walkNode(
 
   // Check for visibility attribute (set by viewport marking)
   const visible = attrs["data-os-visible"] === "1" ? true : undefined;
-  const stateAttr = attrs["data-os-state"];
-  const state = stateAttr ? stateAttr.split(",") : undefined;
+  const state = parseStateFlags(attrs["data-os-state"]);
 
   const osNode: OSNode = {
     tag,

@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { walkDOM } from "../../src/parser/dom-walker.js";
 import { serialize } from "../../src/parser/serializer.js";
+import { filterViewportOnly } from "../../src/parser/viewport-filter.js";
+import { filterInteractive } from "../../src/parser/mode-filter.js";
 import type { CDPNode, OSNode } from "../../src/types.js";
 
 // ---------------------------------------------------------------------------
@@ -461,5 +463,81 @@ describe("pipeline — nodeMap integrity with state attributes", () => {
     expect(nodes.some((n) => n.tag === "link")).toBe(true);
     expect(nodes.some((n) => n.tag === "input")).toBe(true);
     expect(nodes.some((n) => n.tag === "select")).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// State survives through filters (FIX 7)
+// ---------------------------------------------------------------------------
+
+describe("pipeline — state survives filterViewportOnly", () => {
+  it("node with state and visible: true keeps its state", () => {
+    const btn: OSNode = {
+      tag: "button",
+      id: "B1",
+      attributes: { id: "B1" },
+      children: [{ tag: "#text", attributes: {}, children: [], text: "Click" }],
+      visible: true,
+      state: ["disabled"],
+    };
+    const result = filterViewportOnly([btn]);
+    const found = result.nodes.find((n) => n.tag === "button");
+    expect(found).toBeDefined();
+    expect(found!.state).toEqual(["disabled"]);
+  });
+
+  it("ancestor node preserves state through viewport filter", () => {
+    const child: OSNode = {
+      tag: "button",
+      id: "B1",
+      attributes: { id: "B1" },
+      children: [{ tag: "#text", attributes: {}, children: [], text: "Click" }],
+      visible: true,
+    };
+    const parent: OSNode = {
+      tag: "nav",
+      attributes: {},
+      children: [child],
+      state: ["inert"],
+    };
+    const result = filterViewportOnly([parent]);
+    const nav = result.nodes.find((n) => n.tag === "nav");
+    expect(nav).toBeDefined();
+    expect(nav!.state).toEqual(["inert"]);
+  });
+});
+
+describe("pipeline — state survives filterInteractive", () => {
+  it("node with state and id keeps its state", () => {
+    const btn: OSNode = {
+      tag: "button",
+      id: "B1",
+      attributes: { id: "B1" },
+      children: [{ tag: "#text", attributes: {}, children: [], text: "Click" }],
+      state: ["obscured"],
+    };
+    const result = filterInteractive([btn]);
+    const found = result.find((n) => n.tag === "button");
+    expect(found).toBeDefined();
+    expect(found!.state).toEqual(["obscured"]);
+  });
+
+  it("ancestor node preserves state through interactive filter", () => {
+    const child: OSNode = {
+      tag: "button",
+      id: "B1",
+      attributes: { id: "B1" },
+      children: [{ tag: "#text", attributes: {}, children: [], text: "Click" }],
+    };
+    const parent: OSNode = {
+      tag: "form",
+      attributes: {},
+      children: [child],
+      state: ["disabled"],
+    };
+    const result = filterInteractive([parent]);
+    const form = result.find((n) => n.tag === "form");
+    expect(form).toBeDefined();
+    expect(form!.state).toEqual(["disabled"]);
   });
 });

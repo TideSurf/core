@@ -323,3 +323,127 @@ describe("serializer — input state enhancements", () => {
     expect(result).toBe("I1:email ~Name");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Tests: Link aria-expanded flags (FIX 5)
+// ---------------------------------------------------------------------------
+
+describe("serializer — link aria-expanded flags", () => {
+  it("serializes link with aria-expanded='true' as expanded", () => {
+    const result = serialize([
+      link("L1", "/menu", "Menu", { "aria-expanded": "true" }),
+    ]);
+    expect(result).toContain("expanded");
+  });
+
+  it("serializes link with aria-expanded='false' as collapsed", () => {
+    const result = serialize([
+      link("L1", "/menu", "Menu", { "aria-expanded": "false" }),
+    ]);
+    expect(result).toContain("collapsed");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: Select with optgroup children (FIX 6)
+// ---------------------------------------------------------------------------
+
+describe("serializer — select with optgroup", () => {
+  const optgroup = (
+    label: string,
+    children: OSNode[]
+  ): OSNode => ({
+    tag: "optgroup",
+    attributes: { label },
+    children,
+  });
+
+  it("optgroup label appears with colon suffix", () => {
+    const result = serialize([
+      select("S1", [
+        optgroup("Fruits", [option("Apple"), option("Banana")]),
+      ]),
+    ]);
+    expect(result).toContain("Fruits:");
+    expect(result).toContain("Apple");
+    expect(result).toContain("Banana");
+  });
+
+  it("optgroup uses label attribute as label", () => {
+    const result = serialize([
+      select("S1", [
+        optgroup("Vegetables", [option("Carrot"), option("Pea")]),
+      ]),
+    ]);
+    expect(result).toContain("Vegetables:");
+    expect(result).toContain("Carrot");
+    expect(result).toContain("Pea");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: Serializer reads node.state for state flag output (FIX 8)
+// ---------------------------------------------------------------------------
+
+describe("serializer — node.state flag output", () => {
+  it("button with state: ['disabled'] outputs disabled even without HTML attr", () => {
+    const btn: OSNode = {
+      tag: "button",
+      id: "B1",
+      attributes: { id: "B1" },
+      children: [text("Submit")],
+      state: ["disabled"],
+    };
+    const result = serialize([btn]);
+    expect(result).toContain("disabled");
+  });
+
+  it("button with state: ['obscured'] outputs obscured", () => {
+    const btn: OSNode = {
+      tag: "button",
+      id: "B1",
+      attributes: { id: "B1" },
+      children: [text("Submit")],
+      state: ["obscured"],
+    };
+    const result = serialize([btn]);
+    expect(result).toContain("obscured");
+  });
+
+  it("button with state: ['inert'] outputs inert", () => {
+    const btn: OSNode = {
+      tag: "button",
+      id: "B1",
+      attributes: { id: "B1" },
+      children: [text("Submit")],
+      state: ["inert"],
+    };
+    const result = serialize([btn]);
+    expect(result).toContain("inert");
+  });
+
+  it("link with state: ['disabled', 'obscured'] outputs both flags", () => {
+    const lnk: OSNode = {
+      tag: "link",
+      id: "L1",
+      attributes: { id: "L1", href: "/about" },
+      children: [text("About")],
+      state: ["disabled", "obscured"],
+    };
+    const result = serialize([lnk]);
+    expect(result).toContain("disabled");
+    expect(result).toContain("obscured");
+  });
+
+  it("input with state: ['disabled'] outputs disabled", () => {
+    const inp: OSNode = {
+      tag: "input",
+      id: "I1",
+      attributes: { id: "I1" },
+      children: [],
+      state: ["disabled"],
+    };
+    const result = serialize([inp]);
+    expect(result).toContain("disabled");
+  });
+});

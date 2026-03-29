@@ -42,6 +42,7 @@ export function filterInteractive(nodes: OSNode[]): OSNode[] {
       attributes: { ...node.attributes },
       children: filteredChildren,
       visible: node.visible,
+      state: node.state,
       // Intentionally omit text — ancestor-only nodes lose direct text
     });
   }

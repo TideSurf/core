@@ -71,8 +71,8 @@ function isElementVisible(
       }
     }
 
-    // visibility: hidden means invisible
-    if (computedStyle.visibility === "hidden") {
+    // visibility: hidden or collapse means invisible
+    if (computedStyle.visibility === "hidden" || computedStyle.visibility === "collapse") {
       return false;
     }
 
@@ -105,12 +105,13 @@ function computeStateFlags(
     flags.push("disabled");
   }
 
-  // pointer-events: none → obscured (can't interact)
+  // pointer-events: none → inert (can't interact)
   if (computedStyle?.pointerEvents === "none") {
-    flags.push("obscured");
+    flags.push("inert");
   }
 
-  if (isInert) {
+  // HTML inert attribute → also inert (deduplicate with pointer-events check)
+  if (isInert && !flags.includes("inert")) {
     flags.push("inert");
   }
 
@@ -216,6 +217,10 @@ describe("computed visibility — visibility property", () => {
     expect(isElementVisible(inViewport, VW, VH, { visibility: "hidden" })).toBe(false);
   });
 
+  it("element with visibility:collapse is NOT visible", () => {
+    expect(isElementVisible(inViewport, VW, VH, { visibility: "collapse" })).toBe(false);
+  });
+
   it("element with visibility:visible is visible", () => {
     expect(isElementVisible(inViewport, VW, VH, { visibility: "visible" })).toBe(true);
   });
@@ -297,8 +302,8 @@ describe("computed state flags", () => {
     expect(computeStateFlags({}, true)).toEqual(["disabled"]);
   });
 
-  it("pointer-events:none gets 'obscured' flag", () => {
-    expect(computeStateFlags({ pointerEvents: "none" })).toEqual(["obscured"]);
+  it("pointer-events:none gets 'inert' flag", () => {
+    expect(computeStateFlags({ pointerEvents: "none" })).toEqual(["inert"]);
   });
 
   it("inert element gets 'inert' flag", () => {
@@ -308,14 +313,13 @@ describe("computed state flags", () => {
   it("disabled + pointer-events:none gets both flags", () => {
     expect(computeStateFlags({ pointerEvents: "none" }, true)).toEqual([
       "disabled",
-      "obscured",
+      "inert",
     ]);
   });
 
   it("all flags combined", () => {
     expect(computeStateFlags({ pointerEvents: "none" }, true, true)).toEqual([
       "disabled",
-      "obscured",
       "inert",
     ]);
   });
@@ -326,5 +330,13 @@ describe("computed state flags", () => {
 
   it("no flags when computedStyle is undefined", () => {
     expect(computeStateFlags(undefined, false, false)).toEqual([]);
+  });
+
+  it("element inside [inert] ancestor gets 'inert' flag", () => {
+    // The isInert parameter simulates an element inside an [inert] ancestor.
+    // In the real browser, this would be detected via el.closest('[inert]').
+    // Full closest('[inert]') simulation requires integration testing with a real DOM;
+    // here we test the flag logic in isolation.
+    expect(computeStateFlags({}, false, true)).toEqual(["inert"]);
   });
 });

@@ -110,6 +110,7 @@ function filterVisible(nodes: OSNode[]): OSNode[] {
       children: filteredChildren,
       text: node.text,
       visible: node.visible,
+      state: node.state,
     });
   }
 

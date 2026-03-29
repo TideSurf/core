@@ -77,6 +77,12 @@ export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string)
       if (node.attributes["aria-disabled"] === "true") flags += " disabled";
       if (node.attributes["aria-expanded"] === "true") flags += " expanded";
       else if (node.attributes["aria-expanded"] === "false") flags += " collapsed";
+      // Append computed state flags from node.state (may overlap with attr-based flags)
+      if (node.state) {
+        for (const flag of node.state) {
+          if (!flags.includes(flag)) flags += ` ${flag}`;
+        }
+      }
       if (compHref) {
         parts.push(`${pad}[${id}](${compHref}${newTab})${text ? " " + text : ""}${flags}`);
       } else {
@@ -93,6 +99,12 @@ export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string)
       if (node.attributes["disabled"] !== undefined || node.attributes["aria-disabled"] === "true") flags += " disabled";
       if (node.attributes["aria-expanded"] === "true") flags += " expanded";
       else if (node.attributes["aria-expanded"] === "false") flags += " collapsed";
+      // Append computed state flags from node.state (may overlap with attr-based flags)
+      if (node.state) {
+        for (const flag of node.state) {
+          if (!flags.includes(flag)) flags += ` ${flag}`;
+        }
+      }
       parts.push(`${pad}[${id}]${text ? " " + text : ""}${flags}`);
       continue;
     }
@@ -120,6 +132,12 @@ export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string)
       if (placeholder) line += ` ~${placeholder}`;
       if (value) line += ` ="${value}"`;
       line += min + max + step + pattern + disabled + readonly + required + checked + expanded;
+      // Append computed state flags from node.state (may overlap with attr-based flags)
+      if (node.state) {
+        for (const flag of node.state) {
+          if (!line.includes(flag)) line += ` ${flag}`;
+        }
+      }
       parts.push(`${pad}${line.trim()}`);
       continue;
     }
@@ -261,6 +279,19 @@ function serializeSelectChildren(nodes: OSNode[], indent: number, pageUrl?: stri
       const text = node.text?.trim();
       if (text) {
         parts.push(`${pad}${text}`);
+      }
+      continue;
+    }
+    // Handle optgroup containers
+    if (node.tag === "optgroup") {
+      const label = node.attributes["label"] || collectText(node).split("\n")[0]?.trim() || "";
+      if (label) {
+        parts.push(`${pad}${label}:`);
+      }
+      // Serialize optgroup's children (options) at increased indent
+      const childContent = serializeSelectChildren(node.children, indent + 1, pageUrl);
+      if (childContent) {
+        parts.push(childContent);
       }
       continue;
     }
