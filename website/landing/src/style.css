@@ -1302,8 +1302,9 @@ footer::before {
 }
 
 
-.footer-copy {
-  font-size: 0.82rem;
+.footer-right {
+  display: flex;
+  align-items: center;
 }
 
 /* ── Scroll Reveal ── */

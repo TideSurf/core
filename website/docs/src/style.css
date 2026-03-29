@@ -1433,6 +1433,59 @@ main td code {
 }
 
 /* ─────────────────────────────────────
+   Footer
+   ───────────────────────────────────── */
+
+.docs-footer {
+    margin-left: var(--sidebar-w);
+    padding: 3rem clamp(1.5rem, 4vw, 3.5rem);
+    border-top: 1px solid var(--border);
+    background: var(--bg-secondary);
+    transition: background var(--duration-slow) var(--ease),
+        border-color var(--duration-slow) var(--ease);
+}
+
+.docs-footer .footer-inner {
+    max-width: var(--content-max);
+    margin: 0 auto 0 clamp(2rem, 5vw, 6rem);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-lg);
+}
+
+.docs-footer .footer-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--text-primary);
+}
+
+.docs-footer .footer-links {
+    display: flex;
+    gap: 2rem;
+}
+
+.docs-footer .footer-links a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: var(--text-sm);
+    font-weight: 500;
+    transition: color var(--duration) var(--ease);
+}
+
+.docs-footer .footer-links a:hover {
+    color: var(--text-primary);
+}
+
+.docs-footer .footer-right {
+    display: flex;
+    align-items: center;
+}
+
+/* ─────────────────────────────────────
    Reduced Motion
    ───────────────────────────────────── */
 
@@ -1498,6 +1551,17 @@ main td code {
 
     .content-area {
         margin-left: 0;
+    }
+
+    .docs-footer {
+        margin-left: 0;
+    }
+
+    .docs-footer .footer-inner {
+        margin: 0 auto;
+        flex-direction: column;
+        gap: var(--space-md);
+        text-align: center;
     }
 
     .nav {
