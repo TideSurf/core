@@ -264,6 +264,14 @@ function serializeSelectChildren(nodes: OSNode[], indent: number, pageUrl?: stri
       }
       continue;
     }
+    if (node.tag === "optgroup") {
+      const label = node.attributes["aria-label"] || collectText(node).trim();
+      if (label) parts.push(`${pad}${label}:`);
+      if (node.children.length > 0) {
+        parts.push(serializeSelectChildren(node.children, indent + 1, pageUrl));
+      }
+      continue;
+    }
     const text = collectText(node).trim();
     if (!text) continue;
     const isSelected = node.attributes["selected"] !== undefined || node.attributes["aria-selected"] === "true";

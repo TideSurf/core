@@ -38,6 +38,8 @@ const KEEP_TAG_MAP: Record<string, string> = {
   DIALOG: "dialog",
   IFRAME: "iframe",
   MAIN: "main",
+  OPTION: "option",
+  OPTGROUP: "optgroup",
 };
 
 const INTERACTIVE_TAGS = new Set(["A", "BUTTON", "INPUT", "SELECT", "TEXTAREA"]);
