@@ -71,8 +71,11 @@ Returns the compressed text representation of the active tab's DOM. The returned
 | `maxTokens` | `number` | unlimited | Maximum token budget for the output |
 | `viewport` | `boolean` | `true` | Only include elements visible in the current viewport |
 | `mode` | `"full" \| "minimal" \| "interactive"` | `"full"` | Output filtering mode |
+| `includeHidden` | `boolean` | `false` | Include elements hidden by CSS (opacity:0, visibility:hidden, display:none). Useful for debugging. |
 
 Modes compose: `getState({ viewport: true, mode: "interactive", maxTokens: 200 })` filters to visible interactive elements, then prunes to 200 tokens.
+
+The internal `OSNode` tree used during serialization includes a `state` field on each node. This field carries the element's runtime state flags (e.g. `disabled`, `expanded`, `collapsed`, `obscured`, `inert`, `checked`, `required`, `readonly`) which are serialized inline in the compressed output. See the [page format](/docs/page-format) documentation for details on how state flags appear in the text representation.
 
 ### `getPage()`
 

@@ -1,5 +1,82 @@
 # Changelog
 
+## 0.5.0 (2026-03-29)
+
+### New
+
+- **Element state awareness** — Interactive elements now serialize their runtime state directly into the compressed output. Buttons, links, inputs, and selects display flags like `disabled`, `expanded`, `collapsed`, `checked`, `required`, `readonly`, and constraint attributes (`min`, `max`, `step`, `pattern`).
+- **Computed CSS visibility checks** — `getState()` now inspects computed styles (`opacity`, `visibility`, `display`, `clip-path`, `pointer-events`) to filter out elements that are present in the DOM but not visible or usable on the page.
+- **Interaction state detection** — TideSurf detects elements disabled via `<fieldset>`, obscured by overlays (modal backdrops, cookie banners), and inert elements (`pointer-events: none`, HTML `inert` attribute). These states appear as `disabled`, `obscured`, and `inert` flags in the output.
+- **`includeHidden` option** — `getState({ includeHidden: true })` bypasses CSS visibility filtering to include all DOM elements regardless of computed style. Useful for debugging hidden menus, lazy-loaded content, and off-screen elements.
+- **OPTION/OPTGROUP handling** — Select dropdowns now serialize their options with group labels and a `>` prefix for the currently selected option(s). Disabled options and `multiple` selects are represented.
+- **Dialog element support** — `<dialog>` elements receive `D` prefix IDs (e.g. `D1`), joining the existing L/B/I/S/F/T prefix scheme.
+
+### Tests
+
+- 107 new unit tests covering element state serialization, computed visibility checks, interaction state detection, select/option handling, and edge cases.
+
+## 0.4.0 (2026-03-28)
+
+### Improved
+
+- **Detailed tool responses** — Action tools (`click`, `scroll`, `switch_tab`) now return the resulting page state so models can see what their actions caused. No more blind `"Clicked B1"` — the model immediately knows whether the page navigated, a modal opened, or content changed.
+- **Actionable error messages** — Errors now include guidance on what to do next. Element not found → "call get_state to see current IDs". Timeout → "page may still be loading, call get_state". Chrome connection errors → step-by-step setup instructions.
+- **CLI executor parity** — `executor.ts` (used by CLI and direct SDK) now returns the same level of detail as the MCP adapter.
+
+## 0.3.4 (2026-03-22)
+
+### Fixed
+
+- Enforce read-only mode on `TideSurf.navigate()` at the SDK level. Previously, `readOnly` was only checked in the tool executor — direct SDK callers could still navigate. A new `ReadOnlyError` is thrown when `navigate()` is called in read-only sessions.
+- `viewport: false` now works in both MCP servers. A truthiness bug silently dropped `false`, making full-page state unreachable via `get_state`. Both `src/cli.ts` and `mcp/index.ts` now forward the parameter correctly.
+- Icon-only buttons and links (e.g. SVG-only controls) now render their `aria-label` or `title` instead of producing blank `[B1]` / `[L1]` entries.
+- `type()` and `select()` now call `waitForStable()` after the action, matching `click()` and `scroll()`. This prevents race conditions with reactive forms, validation messages, and dependent dropdowns.
+- `selectOption()` now dispatches both `input` and `change` events (was `change` only), improving compatibility with framework-controlled inputs.
+- Add `launch_browser` tool and auto-connect fallback to the packaged `tidesurf mcp` server, matching the repo-only MCP adapter. Remove the broken `bun mcp/index.ts` suggestion from the error message.
+- Docs TOC links are now shareable — hash format changed from `#heading-N` (which collided with page routing) to `#page-name:heading-N`.
+- Docs language switcher now shows a notice when viewing in Japanese/Korean that content is in English.
+- Fix misleading "Full page (default)" comment in getting-started docs — now accurately reflects that viewport defaults to `true`.
+
+### Removed
+
+- Dead `searchPage()` function from `src/cdp/connection.ts` (superseded by `SurfingPage.search()`).
+- Dead `deduplicateSiblings` module (`src/parser/dedup.ts`) removed from the pipeline in v0.3.1 but never deleted.
+
+### Improved
+
+- Token budget pruning (`pruneToFit`) now recurses into large container children when top-level pruning alone cannot meet the budget. Pages dominated by a single `<main>` wrapper are now prunable.
+
+### Docs
+
+- Rewrote `README.md` with installation, quick start, CLI usage, MCP integration, and read-only examples.
+- Added **Security model** documentation page (read-only enforcement, filesystem confinement, input validation, CDP security).
+- Added **Agent patterns** documentation page (basic agent loop, authenticated sessions, token-efficient browsing, multi-tab workflows, form filling).
+
+### Landing page
+
+- Added "Built for agents" section with Observe / Act / Integrate pattern cards.
+- Added "Safe by default" section showcasing security features.
+
+## 0.3.3 (2026-03-21)
+
+### Fixed
+
+- Robust Chrome launch with port-polling fallback. Chrome on macOS may not write the DevTools URL to stderr when another instance is already running — CDP port polling is now used as a fallback detection method, and leaked Chrome processes are killed on timeout to prevent zombie processes from blocking retries.
+
+### Chore
+
+- Upgrade GitHub Actions to Node.js 24-compatible versions (`actions/checkout` v4 → v5, `actions/setup-node` v4 → v5, `node-version` 20 → 22).
+
+## 0.3.2 (2026-03-19)
+
+### New tools
+
+- **launch_browser** — Launch a new Chrome instance from the agent. Uses port 9223 by default to avoid conflicts with user's running Chrome on 9222. Defaults to headless; the model can choose headful via the tool.
+
+### Fixed
+
+- Auto-launch browser when `--auto-connect` fails. When no running Chrome is found, TideSurf now falls back to launching a new instance instead of erroring out.
+
 ## 0.3.1 (2026-03-16)
 
 ### Fixed
