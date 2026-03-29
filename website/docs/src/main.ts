@@ -132,10 +132,15 @@ const translations: Translations = {
     ja: "llms.txtを開く",
     ko: "llms.txt 열기",
   },
-  "content.lang-notice": {
-    en: "",
-    ja: "コンテンツは英語で提供されています。UIラベルは翻訳されています。",
-    ko: "콘텐츠는 영어로 제공됩니다. UI 라벨은 번역되어 있습니다.",
+  "content.copy.md": {
+    en: "Copy Markdown",
+    ja: "マークダウンをコピー",
+    ko: "마크다운 복사",
+  },
+  "content.copy.text": {
+    en: "Copy Text",
+    ja: "テキストをコピー",
+    ko: "텍스트 복사",
   },
 };
 
@@ -220,6 +225,8 @@ let currentPageName: string = DEFAULT_PAGE;
 let pages: Record<string, string> = {};
 let pageMap: Record<string, string> = {};
 let tocObserver: IntersectionObserver | null = null;
+let tocScrollHandler: (() => void) | null = null;
+let docMetaCleanup: (() => void) | null = null;
 
 const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 const contentEl = document.getElementById("content")!;
@@ -546,13 +553,6 @@ function renderPage(pageName: string): void {
   const fragment = sanitizeHtmlFragment(html);
   contentEl.replaceChildren(fragment);
 
-  if (currentLang !== "en") {
-    const notice = document.createElement("div");
-    notice.className = "lang-notice";
-    notice.textContent = translate("content.lang-notice");
-    contentEl.insertBefore(notice, contentEl.firstChild);
-  }
-
   // Wrap tables for horizontal scroll on mobile
   contentEl.querySelectorAll("table").forEach((table) => {
     if (!table.parentElement?.classList.contains("table-wrapper")) {
@@ -576,9 +576,16 @@ function renderPage(pageName: string): void {
     document.title = `${title} — TideSurf Docs`;
   }
 
-  // Add page path indicator after h1
+  // Clean up previous doc-meta click handler
+  docMetaCleanup?.();
+  docMetaCleanup = null;
+
+  // Add doc meta (path + action buttons) after h1
   const h1 = contentEl.querySelector("h1");
-  if (h1 && !contentEl.querySelector(".page-path")) {
+  if (h1 && !contentEl.querySelector(".doc-meta")) {
+    const docMeta = document.createElement("div");
+    docMeta.className = "doc-meta";
+
     const pathEl = document.createElement("div");
     pathEl.className = "page-path";
     pathEl.textContent = `/docs#${pageName}`;
@@ -586,95 +593,119 @@ function renderPage(pageName: string): void {
     pathEl.addEventListener("click", () => {
       const url = `${window.location.origin}/docs#${pageName}`;
       navigator.clipboard.writeText(url).then(() => {
-        pathEl.textContent = "Copied!";
+        pathEl.textContent = translate("content.share.copied");
         setTimeout(() => { pathEl.textContent = `/docs#${pageName}`; }, 1500);
       });
     });
-    h1.insertAdjacentElement("afterend", pathEl);
-  }
 
-  // Add share button after page path
-  const pagePath = contentEl.querySelector(".page-path");
-  if (pagePath && !contentEl.querySelector(".share-container")) {
-    const shareContainer = document.createElement("div");
-    shareContainer.className = "share-container";
-    
+    const actions = document.createElement("div");
+    actions.className = "doc-actions";
+
+    // Copy options (three dots)
+    const copyWrapper = document.createElement("div");
+    copyWrapper.className = "doc-action-wrapper";
+    const copyBtn = document.createElement("button");
+    copyBtn.className = "doc-action-btn";
+    copyBtn.setAttribute("aria-label", translate("content.copy.md"));
+    copyBtn.setAttribute("aria-haspopup", "true");
+    copyBtn.setAttribute("aria-expanded", "false");
+    copyBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="3" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="8" cy="13" r="1.5"/></svg>`;
+    const copyDropdown = document.createElement("div");
+    copyDropdown.className = "doc-action-dropdown";
+    copyDropdown.setAttribute("role", "menu");
+    copyDropdown.innerHTML = `
+      <button class="doc-action-option" role="menuitem" data-action="copy-md">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        <span>${translate("content.copy.md")}</span>
+      </button>
+      <button class="doc-action-option" role="menuitem" data-action="copy-text">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <span>${translate("content.copy.text")}</span>
+      </button>
+    `;
+    copyWrapper.appendChild(copyBtn);
+    copyWrapper.appendChild(copyDropdown);
+
+    // Share options
+    const shareWrapper = document.createElement("div");
+    shareWrapper.className = "doc-action-wrapper";
     const shareBtn = document.createElement("button");
-    shareBtn.className = "share-btn";
+    shareBtn.className = "doc-action-btn";
     shareBtn.setAttribute("aria-label", translate("content.share.title"));
     shareBtn.setAttribute("aria-haspopup", "true");
     shareBtn.setAttribute("aria-expanded", "false");
-    shareBtn.innerHTML = `
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="18" cy="5" r="3"/>
-        <circle cx="6" cy="12" r="3"/>
-        <circle cx="18" cy="19" r="3"/>
-        <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
-        <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
-      </svg>
-      <span>${translate("content.share.title")}</span>
-    `;
-    
+    shareBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>`;
     const shareDropdown = document.createElement("div");
-    shareDropdown.className = "share-dropdown";
+    shareDropdown.className = "doc-action-dropdown";
     shareDropdown.setAttribute("role", "menu");
     shareDropdown.innerHTML = `
-      <button class="share-option" role="menuitem" data-action="copy">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
-          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
-        </svg>
+      <button class="doc-action-option" role="menuitem" data-action="copy-link">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
         <span>${translate("content.share.copy")}</span>
       </button>
-      <button class="share-option" role="menuitem" data-action="llms">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-          <polyline points="14 2 14 8 20 8"/>
-          <line x1="16" y1="13" x2="8" y2="13"/>
-          <line x1="16" y1="17" x2="8" y2="17"/>
-          <polyline points="10 9 9 9 8 9"/>
-        </svg>
+      <button class="doc-action-option" role="menuitem" data-action="llms-txt">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
         <span>${translate("content.share.llms")}</span>
       </button>
     `;
-    
-    shareContainer.appendChild(shareBtn);
-    shareContainer.appendChild(shareDropdown);
-    pagePath.insertAdjacentElement("afterend", shareContainer);
-    
-    // Toggle dropdown
-    shareBtn.addEventListener("click", () => {
-      const isExpanded = shareBtn.getAttribute("aria-expanded") === "true";
-      shareBtn.setAttribute("aria-expanded", String(!isExpanded));
-      shareDropdown.classList.toggle("open", !isExpanded);
+    shareWrapper.appendChild(shareBtn);
+    shareWrapper.appendChild(shareDropdown);
+
+    actions.appendChild(copyWrapper);
+    actions.appendChild(shareWrapper);
+    docMeta.appendChild(pathEl);
+    docMeta.appendChild(actions);
+    h1.insertAdjacentElement("afterend", docMeta);
+
+    // Setup dropdown toggles
+    [copyBtn, shareBtn].forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const dropdown = btn.nextElementSibling as HTMLElement;
+        const isExpanded = btn.getAttribute("aria-expanded") === "true";
+        docMeta.querySelectorAll(".doc-action-dropdown").forEach((d) => d.classList.remove("open"));
+        docMeta.querySelectorAll(".doc-action-btn").forEach((b) => b.setAttribute("aria-expanded", "false"));
+        if (!isExpanded) {
+          btn.setAttribute("aria-expanded", "true");
+          dropdown.classList.add("open");
+        }
+      });
     });
-    
-    // Close dropdown when clicking outside
-    document.addEventListener("click", (e) => {
-      if (!shareContainer.contains(e.target as Node)) {
-        shareBtn.setAttribute("aria-expanded", "false");
-        shareDropdown.classList.remove("open");
+
+    // Close dropdowns when clicking outside
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (!actions.contains(e.target as Node)) {
+        docMeta.querySelectorAll(".doc-action-dropdown").forEach((d) => d.classList.remove("open"));
+        docMeta.querySelectorAll(".doc-action-btn").forEach((b) => b.setAttribute("aria-expanded", "false"));
       }
-    });
-    
-    // Handle share actions
-    shareDropdown.querySelectorAll(".share-option").forEach((option) => {
+    };
+    document.addEventListener("click", handleOutsideClick);
+    docMetaCleanup = () => document.removeEventListener("click", handleOutsideClick);
+
+    // Handle actions
+    docMeta.querySelectorAll(".doc-action-option").forEach((option) => {
       option.addEventListener("click", () => {
         const action = (option as HTMLElement).dataset.action;
-        if (action === "copy") {
+        const span = option.querySelector("span");
+        if (action === "copy-md") {
+          const md = pageMap[pageName] || "";
+          navigator.clipboard.writeText(md).then(() => {
+            if (span) { const orig = span.textContent; span.textContent = translate("content.share.copied"); setTimeout(() => { if (span) span.textContent = orig; }, 1500); }
+          });
+        } else if (action === "copy-text") {
+          const text = contentEl.innerText || "";
+          navigator.clipboard.writeText(text).then(() => {
+            if (span) { const orig = span.textContent; span.textContent = translate("content.share.copied"); setTimeout(() => { if (span) span.textContent = orig; }, 1500); }
+          });
+        } else if (action === "copy-link") {
           const url = `${window.location.origin}${window.location.pathname}#${pageName}`;
           navigator.clipboard.writeText(url).then(() => {
-            const span = option.querySelector("span");
-            if (span) span.textContent = translate("content.share.copied");
-            setTimeout(() => {
-              if (span) span.textContent = translate("content.share.copy");
-            }, 1500);
+            if (span) { span.textContent = translate("content.share.copied"); setTimeout(() => { if (span) span.textContent = translate("content.share.copy"); }, 1500); }
           });
-        } else if (action === "llms") {
+        } else if (action === "llms-txt") {
           openLlmsTxt(pageName);
         }
-        shareBtn.setAttribute("aria-expanded", "false");
-        shareDropdown.classList.remove("open");
+        docMeta.querySelectorAll(".doc-action-dropdown").forEach((d) => d.classList.remove("open"));
+        docMeta.querySelectorAll(".doc-action-btn").forEach((b) => b.setAttribute("aria-expanded", "false"));
       });
     });
   }
@@ -716,6 +747,10 @@ function buildTOC(): void {
 
   tocObserver?.disconnect();
   tocObserver = null;
+  if (tocScrollHandler) {
+    window.removeEventListener("scroll", tocScrollHandler);
+    tocScrollHandler = null;
+  }
   tocNav.replaceChildren();
 
   const headings = Array.from(contentEl.querySelectorAll("h2, h3, h4"));
@@ -783,27 +818,26 @@ function buildTOC(): void {
 
   tocNav.appendChild(fragment);
 
-  tocObserver = new IntersectionObserver(
-    (entries) => {
-      for (const entry of entries) {
-        if (!entry.isIntersecting) {
-          continue;
-        }
+  // Scroll-based active heading tracking for precise detection
+  const navHeight = 80;
 
-        tocNav.querySelectorAll(".toc-link").forEach((link) => {
-          link.classList.remove("active");
-        });
+  tocScrollHandler = () => {
+    let activeId = headings[0]?.id || "";
 
-        const active = tocNav.querySelector(
-          `[data-target="${entry.target.id}"]`
-        );
-        active?.classList.add("active");
+    for (const heading of headings) {
+      const rect = heading.getBoundingClientRect();
+      if (rect.top <= navHeight) {
+        activeId = heading.id;
       }
-    },
-    { rootMargin: "-100px 0px -60% 0px" }
-  );
+    }
 
-  headings.forEach((heading) => tocObserver?.observe(heading));
+    tocNav.querySelectorAll(".toc-link").forEach((link) => {
+      link.classList.toggle("active", (link as HTMLElement).dataset.target === activeId);
+    });
+  };
+
+  window.addEventListener("scroll", tocScrollHandler, { passive: true });
+  tocScrollHandler();
 }
 
 function setSearchResultsVisible(resultsEl: HTMLElement, visible: boolean): void {
@@ -972,6 +1006,7 @@ function initLanguage(): void {
       safeStorageSet("tidesurf-docs-lang", lang);
       applyLanguage();
       updateLangButtons();
+      renderPage(currentPageName);
     });
   });
 }
