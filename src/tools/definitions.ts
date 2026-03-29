@@ -42,6 +42,11 @@ export function getToolDefinitions(options?: {
             description:
               "Output mode. 'minimal' returns landmarks and summaries. 'interactive' returns only clickable/typeable elements.",
           },
+          includeHidden: {
+            type: "boolean",
+            description:
+              "Include elements hidden by CSS (opacity:0, visibility:hidden, display:none). Useful for debugging. Default: false.",
+          },
         },
       },
     },

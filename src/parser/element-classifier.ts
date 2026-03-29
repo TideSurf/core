@@ -1,4 +1,4 @@
-import type { ClassifyResult, OSNode } from "../types.js";
+import type { ClassifyResult } from "../types.js";
 
 const DISCARD_TAGS = new Set([
   "SCRIPT",
@@ -149,13 +149,3 @@ export function hasComputedState(state: string[] | undefined, flag: string): boo
   return state?.includes(flag) ?? false;
 }
 
-/**
- * Check if a node should be considered hidden based on computed visibility state.
- * Called after DOM walking, when data-os-visible markers are available.
- */
-export function isComputedHidden(node: OSNode): boolean {
-  // If viewport marking ran and this element wasn't marked visible,
-  // AND it has no visible descendants, it's hidden.
-  // (Note: the actual viewport filtering happens in viewport-filter.ts)
-  return false;
-}

@@ -39,9 +39,11 @@ export function filterInteractive(nodes: OSNode[]): OSNode[] {
     const filteredChildren = filterInteractive(node.children);
     result.push({
       tag: node.tag,
+      id: node.id,
       attributes: { ...node.attributes },
       children: filteredChildren,
       visible: node.visible,
+      state: node.state,
       // Intentionally omit text — ancestor-only nodes lose direct text
     });
   }
