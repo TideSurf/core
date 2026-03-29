@@ -4,16 +4,20 @@
 
 ### New
 
-- **Element state awareness** — Interactive elements now serialize their runtime state directly into the compressed output. Buttons, links, inputs, and selects display flags like `disabled`, `expanded`, `collapsed`, `checked`, `required`, `readonly`, and constraint attributes (`min`, `max`, `step`, `pattern`).
+- **Element state awareness** — Interactive elements now serialize their runtime state directly into the compressed output. Disabled and inert elements are wrapped in `~~strikethrough~~` (covering HTML `disabled`, `aria-disabled`, `<fieldset disabled>` inheritance, `pointer-events: none`, and the `inert` attribute). Toggle state uses `open`/`closed` keywords (from `aria-expanded`). Inputs display `checked`, `required`, `readonly`, and constraint attributes (`min`, `max`, `step`, `pattern`).
 - **Computed CSS visibility checks** — `getState()` now inspects computed styles (`opacity`, `visibility`, `display`, `clip-path`, `pointer-events`) to filter out elements that are present in the DOM but not visible or usable on the page.
-- **Interaction state detection** — TideSurf detects elements disabled via `<fieldset>`, obscured by overlays (modal backdrops, cookie banners), and inert elements (`pointer-events: none`, HTML `inert` attribute). These states appear as `disabled`, `obscured`, and `inert` flags in the output.
+- **Interaction state detection** — Elements behind overlays are annotated with `obscured`. Elements disabled by CSS or ancestry are wrapped in `~~strikethrough~~`. The `elementFromPoint` API detects overlay obstruction.
 - **`includeHidden` option** — `getState({ includeHidden: true })` bypasses CSS visibility filtering to include all DOM elements regardless of computed style. Useful for debugging hidden menus, lazy-loaded content, and off-screen elements.
 - **OPTION/OPTGROUP handling** — Select dropdowns now serialize their options with group labels and a `>` prefix for the currently selected option(s). Disabled options and `multiple` selects are represented.
 - **Dialog element support** — `<dialog>` elements receive `D` prefix IDs (e.g. `D1`), joining the existing L/B/I/S/F/T prefix scheme.
 
+### Changed
+
+- **Test runner** — Migrated from vitest to `bun test` (3x faster: 428ms vs 1.45s).
+
 ### Tests
 
-- 107 new unit tests covering element state serialization, computed visibility checks, interaction state detection, select/option handling, and edge cases.
+- 126 new unit tests covering element state serialization, computed visibility checks, interaction state detection, select/option handling, and edge cases. 324 total.
 
 ## 0.4.0 (2026-03-28)
 
