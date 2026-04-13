@@ -197,10 +197,6 @@ main {
 
 /* ── Mobile Navigation ── */
 
-.mobile-menu-btn {
-  display: none;
-}
-
 .mobile-menu {
   position: absolute;
   top: 100%;
@@ -238,12 +234,6 @@ main {
   color: var(--accent);
 }
 
-@media (max-width: 768px) {
-  .mobile-menu-btn {
-    display: flex;
-  }
-}
-
 .control-btn {
   background: transparent;
   border: none;
@@ -257,6 +247,15 @@ main {
   justify-content: center;
 }
 
+.mobile-menu-btn {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .mobile-menu-btn {
+    display: flex;
+  }
+}
 
 /* ── Theme Toggle SVG ── */
 

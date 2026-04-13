@@ -8,7 +8,7 @@ interface Translations {
 }
 
 const translations: Translations = {
-  "nav.docs": { en: "Docs", ja: "ドキュメント", ko: "문서" },
+  "nav.docs": { en: "Docs", ja: "Docs", ko: "Docs" },
   "nav.github": { en: "GitHub", ja: "GitHub", ko: "GitHub" },
   "nav.npm": { en: "npm", ja: "npm", ko: "npm" },
   "hero.title.line1": { en: "Surf", ja: "波に", ko: "파도를" },
@@ -38,8 +38,8 @@ const translations: Translations = {
   "compare.label": { en: "How it works", ja: "仕組み", ko: "동작 원리" },
   "compare.headline": {
     en: "HTML in, text out",
-    ja: "HTMLを入れて、テキストを出す",
-    ko: "HTML을 넣으면, 텍스트가 나온다",
+    ja: "HTML in, text out",
+    ko: "HTML in, text out",
   },
   "compare.desc": {
     en: "TideSurf strips wrapper elements, classes, scripts and styles. What's left is clean, compact text that any LLM can consume.",
@@ -75,8 +75,8 @@ const translations: Translations = {
   "bench.label": { en: "Compression", ja: "圧縮", ko: "압축" },
   "bench.title": {
     en: "Fewer tokens, less cost",
-    ja: "少ないトークン、低いコスト",
-    ko: "적은 토큰, 낮은 비용",
+    ja: "Fewer tokens, less cost",
+    ko: "Fewer tokens, less cost",
   },
   "bench.chart.tokens": { en: "Tokens", ja: "トークン数", ko: "토큰 수" },
   "bench.stat.peak": {
@@ -129,8 +129,8 @@ const translations: Translations = {
   "features.label": { en: "Features", ja: "機能", ko: "기능" },
   "features.title": {
     en: "What ships",
-    ja: "搭載機能",
-    ko: "제공 기능",
+    ja: "What ships",
+    ko: "What ships",
   },
   "feature.compression.title": {
     en: "DOM compression",
@@ -197,8 +197,8 @@ const translations: Translations = {
   "patterns.label": { en: "Patterns", ja: "パターン", ko: "패턴" },
   "patterns.title": {
     en: "Built for agents",
-    ja: "エージェントのために",
-    ko: "에이전트를 위해",
+    ja: "Built for agents",
+    ko: "Built for agents",
   },
   "patterns.sub": {
     en: "Three lines to browse. One tool call to act.",
@@ -226,8 +226,8 @@ const translations: Translations = {
   "security.label": { en: "Security", ja: "セキュリティ", ko: "보안" },
   "security.title": {
     en: "Safe by default",
-    ja: "デフォルトで安全",
-    ko: "기본부터 안전",
+    ja: "Safe by default",
+    ko: "Safe by default",
   },
   "security.sub": {
     en: "Production-grade guardrails for autonomous agents.",
@@ -281,13 +281,13 @@ const translations: Translations = {
   },
   "quickstart.title": {
     en: "Three lines",
-    ja: "たった3行",
-    ko: "단 3줄",
+    ja: "Three lines",
+    ko: "Three lines",
   },
   "qs.cta.title": {
     en: "Surf deeper?",
-    ja: "もっと深く?",
-    ko: "더 깊이?",
+    ja: "Surf deeper?",
+    ko: "Surf deeper?",
   },
   "qs.cta.btn": {
     en: "Read the docs",
