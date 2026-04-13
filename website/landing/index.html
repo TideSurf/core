@@ -51,6 +51,19 @@
                         >npm</a
                     >
                 </div>
+                <button
+                    id="mobile-menu-btn"
+                    class="control-btn mobile-menu-btn"
+                    aria-label="Open navigation menu"
+                    aria-expanded="false"
+                    aria-controls="mobile-menu"
+                >
+                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+                        <line x1="2" y1="4.5" x2="16" y2="4.5"/>
+                        <line x1="2" y1="9" x2="16" y2="9"/>
+                        <line x1="2" y1="13.5" x2="16" y2="13.5"/>
+                    </svg>
+                </button>
             </div>
             <div class="nav-controls">
                 <button
@@ -114,10 +127,15 @@
                         KR
                     </button>
                 </div>
-                <a href="https://github.com/TideSurf/core" class="github-star">
+                <a href="https://github.com/TideSurf/core" class="github-star" aria-label="Star TideSurf on GitHub">
                     <span class="gh-logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m 12.301 0 h 0.093 c 2.242 0 4.34 0.613 6.137 1.68 l -0.055 -0.031 c 1.871 1.094 3.386 2.609 4.449 4.422 l 0.031 0.058 c 1.04 1.769 1.654 3.896 1.654 6.166 c 0 5.406 -3.483 10 -8.327 11.658 l -0.087 0.026 c -0.063 0.02 -0.135 0.031 -0.209 0.031 c -0.162 0 -0.312 -0.054 -0.433 -0.144 l 0.002 0.001 c -0.128 -0.115 -0.208 -0.281 -0.208 -0.466 c 0 -0.005 0 -0.01 0 -0.014 v 0.001 q 0 -0.048 0.008 -1.226 t 0.008 -2.154 c 0.007 -0.075 0.011 -0.161 0.011 -0.249 c 0 -0.792 -0.323 -1.508 -0.844 -2.025 c 0.618 -0.061 1.176 -0.163 1.718 -0.305 l -0.076 0.017 c 0.573 -0.16 1.073 -0.373 1.537 -0.642 l -0.031 0.017 c 0.508 -0.28 0.938 -0.636 1.292 -1.058 l 0.006 -0.007 c 0.372 -0.476 0.663 -1.036 0.84 -1.645 l 0.009 -0.035 c 0.209 -0.683 0.329 -1.468 0.329 -2.281 c 0 -0.045 0 -0.091 -0.001 -0.136 v 0.007 c 0 -0.022 0.001 -0.047 0.001 -0.072 c 0 -1.248 -0.482 -2.383 -1.269 -3.23 l 0.003 0.003 c 0.168 -0.44 0.265 -0.948 0.265 -1.479 c 0 -0.649 -0.145 -1.263 -0.404 -1.814 l 0.011 0.026 c -0.115 -0.022 -0.246 -0.035 -0.381 -0.035 c -0.334 0 -0.649 0.078 -0.929 0.216 l 0.012 -0.005 c -0.568 0.21 -1.054 0.448 -1.512 0.726 l 0.038 -0.022 l -0.609 0.384 c -0.922 -0.264 -1.981 -0.416 -3.075 -0.416 s -2.153 0.152 -3.157 0.436 l 0.081 -0.02 q -0.256 -0.176 -0.681 -0.433 c -0.373 -0.214 -0.814 -0.421 -1.272 -0.595 l -0.066 -0.022 c -0.293 -0.154 -0.64 -0.244 -1.009 -0.244 c -0.124 0 -0.246 0.01 -0.364 0.03 l 0.013 -0.002 c -0.248 0.524 -0.393 1.139 -0.393 1.788 c 0 0.531 0.097 1.04 0.275 1.509 l -0.01 -0.029 c -0.785 0.844 -1.266 1.979 -1.266 3.227 c 0 0.025 0 0.051 0.001 0.076 v -0.004 c -0.001 0.039 -0.001 0.084 -0.001 0.13 c 0 0.809 0.12 1.591 0.344 2.327 l -0.015 -0.057 c 0.189 0.643 0.476 1.202 0.85 1.693 l -0.009 -0.013 c 0.354 0.435 0.782 0.793 1.267 1.062 l 0.022 0.011 c 0.432 0.252 0.933 0.465 1.46 0.614 l 0.046 0.011 c 0.466 0.125 1.024 0.227 1.595 0.284 l 0.046 0.004 c -0.431 0.428 -0.718 1 -0.784 1.638 l -0.001 0.012 c -0.207 0.101 -0.448 0.183 -0.699 0.236 l -0.021 0.004 c -0.256 0.051 -0.549 0.08 -0.85 0.08 c -0.022 0 -0.044 0 -0.066 0 h 0.003 c -0.394 -0.008 -0.756 -0.136 -1.055 -0.348 l 0.006 0.004 c -0.371 -0.259 -0.671 -0.595 -0.881 -0.986 l -0.007 -0.015 c -0.198 -0.336 -0.459 -0.614 -0.768 -0.827 l -0.009 -0.006 c -0.225 -0.169 -0.49 -0.301 -0.776 -0.38 l -0.016 -0.004 l -0.32 -0.048 c -0.023 -0.002 -0.05 -0.003 -0.077 -0.003 c -0.14 0 -0.273 0.028 -0.394 0.077 l 0.007 -0.003 q -0.128 0.072 -0.08 0.184 c 0.039 0.086 0.087 0.16 0.145 0.225 l -0.001 -0.001 c 0.061 0.072 0.13 0.135 0.205 0.19 l 0.003 0.002 l 0.112 0.08 c 0.283 0.148 0.516 0.354 0.693 0.603 l 0.004 0.006 c 0.191 0.237 0.359 0.505 0.494 0.792 l 0.01 0.024 l 0.16 0.368 c 0.135 0.402 0.38 0.738 0.7 0.981 l 0.005 0.004 c 0.3 0.234 0.662 0.402 1.057 0.478 l 0.016 0.002 c 0.33 0.064 0.714 0.104 1.106 0.112 h 0.007 c 0.045 0.002 0.097 0.002 0.15 0.002 c 0.261 0 0.517 -0.021 0.767 -0.062 l -0.027 0.004 l 0.368 -0.064 q 0 0.609 0.008 1.418 t 0.008 0.873 v 0.014 c 0 0.185 -0.08 0.351 -0.208 0.466 h -0.001 c -0.119 0.089 -0.268 0.143 -0.431 0.143 c -0.075 0 -0.147 -0.011 -0.214 -0.032 l 0.005 0.001 c -4.929 -1.689 -8.409 -6.283 -8.409 -11.69 c 0 -2.268 0.612 -4.393 1.681 -6.219 l -0.032 0.058 c 1.094 -1.871 2.609 -3.386 4.422 -4.449 l 0.058 -0.031 c 1.739 -1.034 3.835 -1.645 6.073 -1.645 h 0.098 h -0.005 Z m -7.64 17.666 q 0.048 -0.112 -0.112 -0.192 q -0.16 -0.048 -0.208 0.032 q -0.048 0.112 0.112 0.192 q 0.144 0.096 0.208 -0.032 Z m 0.497 0.545 q 0.112 -0.08 -0.032 -0.256 q -0.16 -0.144 -0.256 -0.048 q -0.112 0.08 0.032 0.256 q 0.159 0.157 0.256 0.047 Z m 0.48 0.72 q 0.144 -0.112 0 -0.304 q -0.128 -0.208 -0.272 -0.096 q -0.144 0.08 0 0.288 t 0.272 0.112 Z m 0.672 0.673 q 0.128 -0.128 -0.064 -0.304 q -0.192 -0.192 -0.32 -0.048 q -0.144 0.128 0.064 0.304 q 0.192 0.192 0.32 0.044 Z m 0.913 0.4 q 0.048 -0.176 -0.208 -0.256 q -0.24 -0.064 -0.304 0.112 t 0.208 0.24 q 0.24 0.097 0.304 -0.096 Z m 1.009 0.08 q 0 -0.208 -0.272 -0.176 q -0.256 0 -0.256 0.176 q 0 0.208 0.272 0.176 q 0.256 0.001 0.256 -0.175 Z m 0.929 -0.16 q -0.032 -0.176 -0.288 -0.144 q -0.256 0.048 -0.224 0.24 t 0.288 0.128 t 0.225 -0.224 Z"/></svg></span>
                     <span class="gh-stars"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><span class="star-count" id="star-count"></span></span>
                 </a>
+            </div>
+            <div id="mobile-menu" class="mobile-menu" aria-hidden="true">
+                <a href="https://tidesurf.org/docs" data-i18n="nav.docs">Docs</a>
+                <a href="https://www.npmjs.com/package/@tidesurf/core" data-i18n="nav.npm">npm</a>
+                <a href="https://github.com/TideSurf/core" data-i18n="nav.github">GitHub</a>
             </div>
         </nav>
 
@@ -170,7 +188,7 @@
                     </div>
                 </div>
             </div>
-            <div class="scroll-hint">
+            <div class="scroll-hint" aria-hidden="true">
                 <span data-i18n="hero.scroll">Scroll</span>
                 <div class="scroll-line"></div>
             </div>
@@ -180,7 +198,6 @@
             <!-- ── How it Works ── -->
             <section class="section comparison">
                 <div class="section-header reveal">
-                    <span class="section-label" data-i18n="compare.label">How it works</span>
                     <h2 class="compare-headline" data-i18n="compare.headline">HTML in, text out</h2>
                 </div>
 
@@ -223,22 +240,22 @@
                             <div class="bench-y"><span>120K</span><span>60K</span><span>0</span></div>
                             <div class="bench-chart-area">
                                 <div class="bench-col">
-                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 68%" data-val="84,236"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 2%" data-val="2,593"></div></div>
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 68%" data-val="84,236" role="img" aria-label="Raw HTML: 84,236 tokens"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 2%" data-val="2,593" role="img" aria-label="TideSurf: 2,593 tokens"></div></div>
                                     <span class="bench-col-site">GitHub</span>
                                     <span class="bench-col-ratio">32×</span>
                                 </div>
                                 <div class="bench-col">
-                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 100%" data-val="123,623"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 10%" data-val="12,097"></div></div>
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 100%" data-val="123,623" role="img" aria-label="Raw HTML: 123,623 tokens"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 10%" data-val="12,097" role="img" aria-label="TideSurf: 12,097 tokens"></div></div>
                                     <span class="bench-col-site">Wiki</span>
                                     <span class="bench-col-ratio">10×</span>
                                 </div>
                                 <div class="bench-col">
-                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 20%" data-val="24,925"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 2%" data-val="1,793"></div></div>
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 20%" data-val="24,925" role="img" aria-label="Raw HTML: 24,925 tokens"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 2%" data-val="1,793" role="img" aria-label="TideSurf: 1,793 tokens"></div></div>
                                     <span class="bench-col-site">MDN</span>
                                     <span class="bench-col-ratio">14×</span>
                                 </div>
                                 <div class="bench-col">
-                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 7%" data-val="8,706"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 1%" data-val="1,038"></div></div>
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 7%" data-val="8,706" role="img" aria-label="Raw HTML: 8,706 tokens"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 1%" data-val="1,038" role="img" aria-label="TideSurf: 1,038 tokens"></div></div>
                                     <span class="bench-col-site">HN</span>
                                     <span class="bench-col-ratio">8.4×</span>
                                 </div>
@@ -251,22 +268,22 @@
                             <div class="bench-y"><span>$618</span><span>$309</span><span>$0</span></div>
                             <div class="bench-chart-area">
                                 <div class="bench-col">
-                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 68%" data-val="$421"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 2%" data-val="$13"></div></div>
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 68%" data-val="$421" role="img" aria-label="Raw HTML: $421 per 1K pages"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 2%" data-val="$13" role="img" aria-label="TideSurf: $13 per 1K pages"></div></div>
                                     <span class="bench-col-site">GitHub</span>
                                     <span class="bench-col-save">&minus;$408</span>
                                 </div>
                                 <div class="bench-col">
-                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 100%" data-val="$618"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 10%" data-val="$60"></div></div>
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 100%" data-val="$618" role="img" aria-label="Raw HTML: $618 per 1K pages"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 10%" data-val="$60" role="img" aria-label="TideSurf: $60 per 1K pages"></div></div>
                                     <span class="bench-col-site">Wiki</span>
                                     <span class="bench-col-save">&minus;$558</span>
                                 </div>
                                 <div class="bench-col">
-                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 20%" data-val="$125"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 2%" data-val="$9"></div></div>
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 20%" data-val="$125" role="img" aria-label="Raw HTML: $125 per 1K pages"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 2%" data-val="$9" role="img" aria-label="TideSurf: $9 per 1K pages"></div></div>
                                     <span class="bench-col-site">MDN</span>
                                     <span class="bench-col-save">&minus;$116</span>
                                 </div>
                                 <div class="bench-col">
-                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 7%" data-val="$44"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 1%" data-val="$5"></div></div>
+                                    <div class="bench-col-bars"><div class="bench-col-bar bench-col-bar--raw" style="height: 7%" data-val="$44" role="img" aria-label="Raw HTML: $44 per 1K pages"></div><div class="bench-col-bar bench-col-bar--comp" style="height: 1%" data-val="$5" role="img" aria-label="TideSurf: $5 per 1K pages"></div></div>
                                     <span class="bench-col-site">HN</span>
                                     <span class="bench-col-save">&minus;$39</span>
                                 </div>
@@ -412,22 +429,22 @@
 
                 <div class="security-grid reveal">
                     <div class="security-item">
-                        <svg class="security-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                        <svg class="security-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" style="opacity:0.3"/><circle cx="12" cy="12" r="3" style="stroke:var(--accent)"/></svg>
                         <h3 data-i18n="security.readonly.title">Read-only mode</h3>
                         <p data-i18n="security.readonly.desc">Restrict agents to observation only. No clicks, no typing, no navigation — just compressed page state.</p>
                     </div>
                     <div class="security-item">
-                        <svg class="security-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                        <svg class="security-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" style="opacity:0.3"/><rect x="8.5" y="12" width="7" height="5" rx="1" style="stroke:var(--accent)"/><path d="M10.5 12v-1.5a1.5 1.5 0 0 1 3 0V12" style="stroke:var(--accent)"/></svg>
                         <h3 data-i18n="security.filesystem.title">Filesystem confinement</h3>
                         <p data-i18n="security.filesystem.desc">Upload and download paths are locked to explicit roots. No access outside your working directory by default.</p>
                     </div>
                     <div class="security-item">
-                        <svg class="security-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                        <svg class="security-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" style="opacity:0.3"/><polyline points="9 12 11 14 15 10" style="stroke:var(--accent)"/></svg>
                         <h3 data-i18n="security.validation.title">Input validation</h3>
                         <p data-i18n="security.validation.desc">URLs, selectors, expressions, and file paths are validated before execution. Blocked patterns prevent common injection vectors.</p>
                     </div>
                     <div class="security-item">
-                        <svg class="security-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+                        <svg class="security-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="7" rx="1.5" style="opacity:0.3"/><rect x="2" y="14" width="20" height="7" rx="1.5" style="opacity:0.3"/><circle cx="6.5" cy="6.5" r="1" style="fill:var(--accent);stroke:none"/><circle cx="6.5" cy="17.5" r="1" style="fill:var(--accent);stroke:none"/><path d="M10 6.5h7M10 17.5h5" style="stroke:var(--accent)"/></svg>
                         <h3 data-i18n="security.local.title">Local CDP only</h3>
                         <p data-i18n="security.local.desc">Chrome DevTools Protocol runs over local WebSocket. No remote connections, no cloud dependencies, no data leaves your machine.</p>
                     </div>
@@ -437,8 +454,7 @@
             <!-- ── Quick Start ── -->
             <section class="section quickstart">
                 <div class="section-header reveal">
-                    <span class="section-label" data-i18n="quickstart.label">Start</span>
-                    <h2 data-i18n="quickstart.title">Three lines</h2>
+                    <h2 data-i18n="quickstart.title">Three lines.</h2>
                 </div>
                 <div class="qs-split reveal">
                     <div class="qs-install">
@@ -481,7 +497,7 @@
                     >
                 </div>
                 <div class="footer-right">
-                    <a href="https://www.producthunt.com/products/tidesurf?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-tidesurf" class="ph-badge" target="_blank" rel="noopener noreferrer"><img alt="TideSurf on Product Hunt" width="148" height="32" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1101853&amp;theme=neutral&amp;t=1773855834160" /></a>
+                    <a href="https://www.producthunt.com/products/tidesurf?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-tidesurf" class="ph-badge" target="_blank" rel="noopener noreferrer"><img alt="TideSurf on Product Hunt" width="148" height="32" loading="lazy" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1101853&amp;theme=neutral&amp;t=1773855834160" /></a>
                     <!-- Thanks to SaltyAom -->
                 </div>
             </div>

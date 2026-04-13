@@ -24,6 +24,7 @@
   --accent-sky: #0055FF;
   --accent-subtle: rgba(0, 85, 255, 0.06);
   --accent-mid: rgba(0, 85, 255, 0.14);
+  --on-accent: #ffffff;
   --bg-hero: #FFFFFF;
   --text-hero: #111111;
   --text-hero-muted: #737373;
@@ -69,7 +70,12 @@
 
 ::selection {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
+}
+
+/* Ensure logo accent wave always matches the design system accent */
+.logo-mark path:nth-child(3) {
+  stroke: var(--accent);
 }
 
 html {
@@ -96,19 +102,6 @@ main {
   overflow-x: hidden;
 }
 
-.nav-logo:focus-visible,
-.nav-links a:focus-visible,
-.control-btn:focus-visible,
-.lang-btn:focus-visible,
-.github-star:focus-visible,
-.ph-badge:focus-visible,
-.copy-btn:focus-visible,
-.showcase-nav:focus-visible,
-.showcase-dot:focus-visible,
-.step:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
-}
 
 /* Opt out elements that need their own timing */
 .floating-tag,
@@ -191,11 +184,64 @@ main {
   transition: color var(--duration) var(--ease);
 }
 
+.nav-links a:hover {
+  color: var(--text-hero);
+}
+
 
 .nav-controls {
   display: flex;
   align-items: stretch;
   gap: 0.5rem;
+}
+
+/* ── Mobile Navigation ── */
+
+.mobile-menu-btn {
+  display: none;
+}
+
+.mobile-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border);
+  padding: 0.5rem max(env(safe-area-inset-right, 0px), 1.75rem) 1rem max(env(safe-area-inset-left, 0px), 1.75rem);
+  display: flex;
+  flex-direction: column;
+  transform: translateY(-0.5rem);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.2s var(--ease), opacity 0.2s var(--ease), background var(--duration-slow) var(--ease), border-color var(--duration-slow) var(--ease);
+  z-index: 99;
+}
+
+.mobile-menu.is-open {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.mobile-menu a {
+  display: block;
+  color: var(--text-primary);
+  text-decoration: none;
+  font-size: 1rem;
+  font-weight: 500;
+  padding: 0.75rem 0;
+  transition: color var(--duration) var(--ease);
+}
+
+.mobile-menu a:hover {
+  color: var(--accent);
+}
+
+@media (max-width: 768px) {
+  .mobile-menu-btn {
+    display: flex;
+  }
 }
 
 .control-btn {
@@ -231,7 +277,8 @@ main {
   background: transparent;
   border: none;
   color: var(--text-muted);
-  padding: 0.5rem 0.5rem;
+  padding: 0.6rem 0.65rem;
+  min-height: 44px;
   border-radius: 3px;
   font-family: var(--font);
   font-size: 0.8rem;
@@ -530,14 +577,15 @@ main {
   border: none;
   color: var(--text-hero-muted);
   cursor: pointer;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border-radius: 3px;
   transition: all var(--duration) var(--ease);
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0.5;
+  flex-shrink: 0;
 }
 
 .copy-btn:hover {
@@ -556,9 +604,9 @@ main {
   opacity: 1;
 }
 
-.copy-btn.copied { 
+.copy-btn.copied {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   border: none;
   opacity: 1;
 }
@@ -746,6 +794,7 @@ main {
 }
 
 .showcase-dot {
+  position: relative;
   width: 6px;
   height: 6px;
   border-radius: 3px;
@@ -755,6 +804,17 @@ main {
   cursor: pointer;
   padding: 0;
   transition: opacity var(--duration) var(--ease), background var(--duration) var(--ease), transform var(--duration) var(--ease);
+}
+
+/* Expand tap target without changing visual size */
+.showcase-dot::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 44px;
+  min-height: 44px;
 }
 
 .showcase-dot.active {
@@ -902,7 +962,7 @@ main {
 
 .bench-ratio-best {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 .bench-bars {
@@ -943,7 +1003,7 @@ main {
 }
 
 .bench-bar-compressed .bench-bar-value {
-  color: #fff;
+  color: var(--on-accent);
 }
 
 /* Stagger the bar animations removed */
@@ -989,7 +1049,6 @@ main {
 
 .bench-explain-block {
   padding: 1.5rem;
-  border: 1px solid var(--border);
   border-radius: 3px;
   background: var(--bg-secondary);
 }
@@ -1550,7 +1609,6 @@ footer::before {
 
 .feature-card {
   padding: 1.5rem;
-  border: 1px solid var(--border);
   border-radius: 3px;
   background: var(--bg-secondary);
 }
@@ -1658,7 +1716,7 @@ footer::before {
 .bench-tab.is-active {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-weight: 600;
 }
 
@@ -1668,7 +1726,6 @@ footer::before {
   gap: 2.5rem;
   align-items: center;
   background: var(--bg-secondary);
-  border: 1px solid var(--border);
   border-radius: 3px;
   padding: 1.5rem 2rem;
   margin-bottom: 0.75rem;
@@ -1707,7 +1764,8 @@ footer::before {
 .bench-panel-bar {
   height: 100%;
   border-radius: 3px;
-  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: left;
+  transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .bench-panel-bar--raw {
@@ -1785,19 +1843,13 @@ footer::before {
 
 .bento-card {
   background: var(--bg-secondary);
-  border: 1px solid var(--border);
   border-radius: 3px;
   padding: 1.25rem;
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  transition: border-color 0.3s var(--ease);
   min-width: 0;
   overflow: hidden;
-}
-
-.bento-card:hover {
-  border-color: color-mix(in srgb, var(--accent) 18%, var(--border));
 }
 
 /* Hero card: full width, horizontal layout */
@@ -1855,7 +1907,6 @@ footer::before {
 
 .bento-card .code-block {
   margin-top: auto;
-  border: 1px solid var(--border);
 }
 
 /* Plug in options */
@@ -1871,16 +1922,10 @@ footer::before {
   gap: 0.5rem;
   padding: 1rem 1.25rem;
   background: var(--bg-elevated);
-  border: 1px solid var(--border);
   border-radius: 3px;
   text-decoration: none;
-  transition: border-color 0.2s var(--ease);
   min-width: 0;
   overflow: hidden;
-}
-
-.bento-opt:hover {
-  border-color: var(--accent-mid);
 }
 
 .bento-opt-label {
@@ -1920,7 +1965,6 @@ footer::before {
 
 .qs-install pre {
   background: var(--bg-elevated);
-  border: 1px solid var(--border);
   border-radius: 3px;
   padding: 0.875rem 1.25rem;
   font-family: var(--font-mono);
@@ -2204,19 +2248,13 @@ footer::before {
 
 .pattern-card {
   background: var(--bg-secondary);
-  border: 1px solid var(--border);
   border-radius: 3px;
   padding: 1.25rem;
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  transition: border-color 0.3s var(--ease);
   min-width: 0;
   overflow: hidden;
-}
-
-.pattern-card:hover {
-  border-color: color-mix(in srgb, var(--accent) 18%, var(--border));
 }
 
 .pattern-card--hero {
@@ -2240,7 +2278,6 @@ footer::before {
 
 .pattern-code {
   background: var(--code-bg);
-  border: 1px solid var(--border);
   border-radius: 3px;
   padding: 0.875rem 1.25rem;
   overflow-x: auto;
@@ -2265,21 +2302,15 @@ footer::before {
 
 .security-item {
   background: var(--bg-secondary);
-  border: 1px solid var(--border);
   border-radius: 3px;
   padding: 1.25rem;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  transition: border-color 0.3s var(--ease);
-}
-
-.security-item:hover {
-  border-color: color-mix(in srgb, var(--accent) 18%, var(--border));
 }
 
 .security-icon {
-  color: var(--text-secondary);
+  color: var(--text-primary);
   flex-shrink: 0;
 }
 
@@ -2300,6 +2331,7 @@ footer::before {
   margin-bottom: 2rem;
 }
 
+
 .qs-cta {
   text-align: center;
   margin-top: 4rem;
@@ -2319,7 +2351,7 @@ footer::before {
   display: inline-block;
   padding: 0.75rem 2rem;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-family: var(--font);
   font-size: 1rem;
   font-weight: 600;
@@ -2698,7 +2730,8 @@ footer::before {
 .bench-col-bar {
   width: clamp(18px, 3vw, 40px);
   border-radius: 2px 2px 0 0;
-  transition: height 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: bottom;
+  transition: transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
   min-height: 3px;
 }
 
@@ -2808,7 +2841,7 @@ footer::before {
 .bench-model.is-active {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-weight: 600;
 }
 
@@ -2937,7 +2970,6 @@ footer::before {
   max-width: 640px;
   width: 100%;
   background: var(--bg-secondary);
-  border: 1px solid var(--border);
   border-radius: 3px;
   padding: 1.25rem;
   padding-bottom: 2.5rem;
@@ -2964,8 +2996,8 @@ footer::before {
   position: absolute;
   top: 0.75rem;
   right: 0.75rem;
-  width: 28px;
-  height: 28px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;

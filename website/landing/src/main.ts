@@ -28,7 +28,7 @@ const translations: Translations = {
   "hero.tagline": {
     en: "Your agent does not need eyes to browse.",
     ja: "LLM向けDOM圧縮。不要な要素を除去し、ナビゲート、操作、抽出を実現。",
-    ko: "LLM을 위한 DOM 압축. 불필요한 요소를 제거하고 탐색, 상호작용, 추출을 수행합니다.",
+    ko: "LLM을 위한 DOM 압축. 불필요한 요소를 걷어내고 탐색, 조작, 추출을 제공합니다.",
   },
   "hero.oneliner": {
     en: "DOM compression that keeps token costs 10\u2013100\u00d7 lower than screenshots.",
@@ -44,7 +44,7 @@ const translations: Translations = {
   "compare.desc": {
     en: "TideSurf strips wrapper elements, classes, scripts and styles. What's left is clean, compact text that any LLM can consume.",
     ja: "TideSurfはラッパー要素、クラス、スクリプト、スタイルを除去。残るのは、どのLLMでも消費できるクリーンでコンパクトなテキストです。",
-    ko: "래퍼 요소, 클래스, 스크립트, 스타일을 모두 걷어내고 LLM이 바로 이해할 수 있는 깔끔하고 압축된 텍스트만 남깁니다.",
+    ko: "래퍼 요소, 클래스, 스크립트, 스타일을 걷어내고 LLM이 바로 이해할 수 있는 깔끔한 텍스트만 남깁니다.",
   },
   "compare.nav.label": {
     en: "Navigation",
@@ -108,13 +108,13 @@ const translations: Translations = {
   "bench.why.body": {
     en: "Every token your agent reads costs money and eats into the context window. A GitHub page that takes 84,236 tokens raw fits in just 2,593 with TideSurf — that's 32x compression. Browse dozens of pages in a single session instead of one page filling your context.",
     ja: "エージェントが読むトークンにはすべてコストが発生し、コンテキストウィンドウを消費します。生HTMLで84,236トークンのGitHubページがTideSurfではわずか2,593トークンに — 32倍の圧縮です。1ページでコンテキストが埋まるか、1セッションで数十ページを閲覧できるかの違いです。",
-    ko: "에이전트가 읽는 모든 토큰에는 비용이 발생하며 컨텍스트 윈도우를 소모합니다. 원본 HTML로 84,236 토큰인 GitHub 페이지가 TideSurf에서는 단 2,593 토큰으로 — 32배 압축됩니다. 한 페이지로 컨텍스트가 가득 차는 것이 아니라 수십 페이지를 탐색할 수 있습니다.",
+    ko: "에이전트가 읽는 모든 토큰에는 비용이 발생하고 컨텍스트 윈도우도 줄어듭니다. 원본 HTML로 84,236 토큰인 GitHub 페이지가 TideSurf에서는 단 2,593 토큰 — 32배 압축입니다. 한 페이지에 컨텍스트가 가득 차는 것이 아니라 수십 페이지를 탐색할 수 있습니다.",
   },
   "bench.how.title": { en: "How we measure", ja: "測定方法", ko: "측정 방법" },
   "bench.how.body": {
     en: "We launch headless Chrome, navigate to each site, and compare the full rendered DOM against TideSurf's compressed output. Token counts use cl100k_base estimation. No cherry-picking — these are live pages, measured as-is.",
     ja: "ヘッドレスChromeを起動し、各サイトに遷移して、レンダリング済みDOMとTideSurfの圧縮出力を比較しています。トークン数はcl100k_base推定を使用しています。意図的な選別はしていません。すべて実際のページをそのまま計測しています。",
-    ko: "헤드리스 Chrome을 실행하여 각 사이트에 접속한 후, 렌더링된 전체 DOM과 TideSurf의 압축 출력을 비교합니다. 토큰 수는 cl100k_base 추정을 사용합니다. 의도적인 선별 없이 실제 페이지를 있는 그대로 측정합니다.",
+    ko: "헤드리스 Chrome으로 각 사이트에 접속한 뒤, 렌더링된 DOM과 TideSurf 출력을 비교합니다. 토큰 수는 cl100k_base 추정치를 사용합니다. 선별 없이 실제 페이지를 있는 그대로 측정합니다.",
   },
   "bench.varies.title": {
     en: "Compression varies",
@@ -124,7 +124,7 @@ const translations: Translations = {
   "bench.varies.body": {
     en: "Heavy sites like GitHub (deep nesting, SVGs, generated classes) see 32x compression. Even lean sites like Hacker News still achieve 8x thanks to the compact output format, URL compression, and text truncation.",
     ja: "GitHubのように重いサイト（深いネスト、SVG、自動生成クラス）は32倍の圧縮を実現します。Hacker Newsのような軽量なサイトでも、コンパクトな出力形式、URL圧縮、テキスト切り詰めにより8倍の圧縮を達成します。",
-    ko: "GitHub처럼 무거운 사이트(깊은 중첩, SVG, 자동 생성 클래스)는 32배 압축됩니다. Hacker News처럼 가벼운 사이트도 압축된 출력 형식, URL 압축, 텍스트 트렁케이션 덕분에 8배 압축을 달성합니다.",
+    ko: "GitHub처럼 무거운 사이트(깊은 중첩, SVG, 자동 생성 클래스)는 32배 압축됩니다. Hacker News처럼 가벼운 사이트도 출력 형식 최적화, URL 압축, 텍스트 트런케이션 덕분에 8배 압축을 달성합니다.",
   },
   "features.label": { en: "Features", ja: "機能", ko: "기능" },
   "features.title": {
@@ -166,13 +166,13 @@ const translations: Translations = {
   "feature.tokens.desc": {
     en: "Set a max token limit and TideSurf prioritizes interactive and visible elements, pruning the rest",
     ja: "最大トークン制限を設定すると、TideSurfはインタラクティブで可視の要素を優先し、残りを削減",
-    ko: "최대 토큰 수를 지정하면, 인터랙티브 요소와 핵심 콘텐츠를 우선 배치하고 나머지는 자동으로 제거합니다.",
+    ko: "최대 토큰 수를 지정하면 인터랙티브 요소와 핵심 콘텐츠를 우선 배치하고 나머지는 자동으로 제거합니다.",
   },
   "feature.mcp.title": { en: "MCP server", ja: "MCPサーバー", ko: "MCP 서버" },
   "feature.mcp.desc": {
     en: "Ships with a Model Context Protocol server. Directly drop into any agent.",
     ja: "Model Context Protocolサーバーを同梱。任意のMCPクライアントにドロップイン",
-    ko: "Model Context Protocol 서버가 기본 내장되어 있어, 추가적 연결 과정이 필요 없습니다.",
+    ko: "Model Context Protocol 서버가 기본 내장되어 있어 별도 설정 없이 바로 사용할 수 있습니다.",
   },
   "feature.typescript.title": {
     en: "TypeScript-first",
@@ -182,7 +182,7 @@ const translations: Translations = {
   "feature.typescript.desc": {
     en: "Full type definitions and error classes are built-in. Built for Bun, also works with Node",
     ja: "完全な型定義とエラークラスが内蔵されています。Bun用に構築され、Nodeでも動作",
-    ko: "완전한 Type 정의와 클래스가 포함되었습니다. Bun 채택으로 속도와 호환성을 만족합니다.",
+    ko: "완전한 타입 정의와 에러 클래스를 제공합니다. Bun 기반이지만 Node에서도 동작합니다.",
   },
   "feature.autoconnect.title": {
     en: "Auto Connect",
@@ -192,7 +192,7 @@ const translations: Translations = {
   "feature.autoconnect.desc": {
     en: "Connect to an already-running Chrome instead of launching a new one. Re-use logged-in sessions, debug live pages, seamlessly hand off between manual browsing and agent control",
     ja: "新しいChromeを起動する代わりに、既に実行中のChromeに接続。ログイン済みセッションの再利用、ライブページのデバッグ、手動ブラウジングとエージェント制御のシームレスな切り替え",
-    ko: "새 Chrome을 실행하는 대신 이미 실행 중인 Chrome에 연결합니다. 로그인된 세션 재사용, 라이브 페이지 디버깅, 수동 브라우징과 에이전트 제어 간의 원활한 전환",
+    ko: "새 Chrome을 실행하는 대신 이미 실행 중인 Chrome에 연결합니다. 로그인된 세션 재사용, 라이브 페이지 디버깅, 수동 브라우징과 에이전트 제어 간의 원활한 전환이 모두 가능합니다.",
   },
   "patterns.label": { en: "Patterns", ja: "パターン", ko: "패턴" },
   "patterns.title": {
@@ -242,7 +242,7 @@ const translations: Translations = {
   "security.readonly.desc": {
     en: "Restrict agents to observation only. No clicks, no typing, no navigation — just compressed page state.",
     ja: "エージェントを観察のみに制限。クリック、入力、ナビゲーション不可 — 圧縮されたページ状態のみ。",
-    ko: "에이전트를 관찰 전용으로 제한. 클릭, 입력, 내비게이션 불가 — 압축된 페이지 상태만.",
+    ko: "에이전트를 관찰 전용으로 제한. 클릭, 입력, 탐색 불가 — 압축된 페이지 상태만.",
   },
   "security.filesystem.title": {
     en: "Filesystem confinement",
@@ -310,7 +310,7 @@ const translations: Translations = {
   "step3.desc": {
     en: "Navigate and interact with pages",
     ja: "ページをナビゲートして操作",
-    ko: "페이지를 탐색하고 상호작용합니다",
+    ko: "페이지를 탐색하고 조작합니다",
   },
   "bento.tools.title": { en: "Tools", ja: "ツール", ko: "도구" },
   "bento.tools.desc": {
@@ -415,6 +415,7 @@ function applyTheme(): void {
 function initLanguage(): void {
   const saved = safeStorageGet("tidesurf-lang") as Language | null;
   currentLang = saved || detectLanguage();
+  loadCJKFont(currentLang);
   applyLanguage();
 
   document.querySelectorAll(".lang-btn").forEach((btn) => {
@@ -423,6 +424,7 @@ function initLanguage(): void {
       if (lang && lang !== currentLang) {
         currentLang = lang;
         safeStorageSet("tidesurf-lang", lang);
+        loadCJKFont(lang);
         applyLanguage();
         updateLangButtons();
       }
@@ -800,6 +802,66 @@ function initCodeWall(): void {
   }
 }
 
+// ── Mobile Menu ──
+
+function initMobileMenu(): void {
+  const btn = document.getElementById("mobile-menu-btn") as HTMLButtonElement | null;
+  const menu = document.getElementById("mobile-menu") as HTMLElement | null;
+  if (!btn || !menu) return;
+
+  function openMenu(): void {
+    btn!.setAttribute("aria-expanded", "true");
+    menu!.classList.add("is-open");
+    menu!.removeAttribute("aria-hidden");
+  }
+
+  function closeMenu(): void {
+    btn!.setAttribute("aria-expanded", "false");
+    menu!.classList.remove("is-open");
+    menu!.setAttribute("aria-hidden", "true");
+  }
+
+  btn.addEventListener("click", () => {
+    const isOpen = btn!.getAttribute("aria-expanded") === "true";
+    if (isOpen) closeMenu(); else openMenu();
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && menu!.classList.contains("is-open")) {
+      closeMenu();
+      btn!.focus();
+    }
+  });
+
+  menu.querySelectorAll("a").forEach((link) => {
+    link.addEventListener("click", closeMenu);
+  });
+}
+
+// ── CJK Font Lazy Loader ──
+
+function loadCJKFont(lang: Language): void {
+  if (lang === "ja") {
+    if (!document.getElementById("font-noto-jp")) {
+      const link = document.createElement("link");
+      link.id = "font-noto-jp";
+      link.rel = "stylesheet";
+      link.href =
+        "https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap";
+      document.head.appendChild(link);
+    }
+  } else if (lang === "ko") {
+    if (!document.getElementById("font-noto-kr")) {
+      const link = document.createElement("link");
+      link.id = "font-noto-kr";
+      link.rel = "stylesheet";
+      link.href =
+        "https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap";
+      document.head.appendChild(link);
+    }
+  }
+}
+
 // ── Init ──
 
 async function initGitHubStars(): Promise<void> {
@@ -883,10 +945,10 @@ function initCountUp(): void {
 function initBenchGraph(): void {
   if (prefersReducedMotion()) return;
 
+  // Use transform: scaleY() instead of height to avoid layout recalculation
   const bars = document.querySelectorAll(".bench-col-bar") as NodeListOf<HTMLElement>;
   bars.forEach((bar) => {
-    bar.dataset.h = bar.style.height;
-    bar.style.height = "0";
+    bar.style.transform = "scaleY(0)";
   });
 
   const observer = new IntersectionObserver(
@@ -896,7 +958,7 @@ function initBenchGraph(): void {
         const all = entry.target.querySelectorAll(".bench-col-bar") as NodeListOf<HTMLElement>;
         all.forEach((bar, i) => {
           setTimeout(() => {
-            bar.style.height = bar.dataset.h || "0";
+            bar.style.transform = "scaleY(1)";
           }, i * 60);
         });
         observer.unobserve(entry.target);
@@ -916,25 +978,94 @@ function initBentoPopup(): void {
   const content = document.getElementById("bento-modal-content");
   if (!modal || !content) return;
 
+  let triggerEl: HTMLElement | null = null;
+  let trapHandler: ((e: KeyboardEvent) => void) | null = null;
+
+  function getFocusable(): HTMLElement[] {
+    return Array.from(
+      modal!.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      )
+    ).filter((el) => !el.hasAttribute("disabled"));
+  }
+
+  function trapFocus(e: KeyboardEvent): void {
+    if (e.key !== "Tab") return;
+    const focusable = getFocusable();
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey) {
+      if (document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      }
+    } else {
+      if (document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  }
+
   function openModal(card: HTMLElement): void {
+    triggerEl = card;
     const clone = card.cloneNode(true) as HTMLElement;
+    clone.removeAttribute("role");
+    clone.removeAttribute("tabindex");
+    clone.removeAttribute("aria-label");
     clone.querySelectorAll("[hidden]").forEach((el) => el.removeAttribute("hidden"));
-    content.innerHTML =
-      '<button class="bento-modal-close" aria-label="Close">\u00d7</button>' +
+    const title = clone.querySelector(".bento-title")?.textContent ?? "";
+
+    content!.innerHTML =
+      '<button class="bento-modal-close" aria-label="Close dialog">\u00d7</button>' +
       clone.innerHTML;
-    content.querySelector(".bento-modal-close")?.addEventListener("click", closeModal);
-    modal.classList.add("is-open");
+    content!.querySelector(".bento-modal-close")?.addEventListener("click", closeModal);
+
+    modal!.setAttribute("role", "dialog");
+    modal!.setAttribute("aria-modal", "true");
+    modal!.setAttribute("aria-label", title);
+    modal!.classList.add("is-open");
+
+    trapHandler = trapFocus;
+    document.addEventListener("keydown", trapHandler);
+
+    requestAnimationFrame(() => {
+      (content!.querySelector(".bento-modal-close") as HTMLElement)?.focus();
+    });
   }
 
   function closeModal(): void {
     modal!.classList.remove("is-open");
+    if (trapHandler) {
+      document.removeEventListener("keydown", trapHandler);
+      trapHandler = null;
+    }
+    const trigger = triggerEl;
+    triggerEl = null;
+    trigger?.focus();
   }
 
   document.querySelectorAll(".bento-card").forEach((card) => {
-    (card as HTMLElement).style.cursor = "pointer";
-    card.addEventListener("click", (e) => {
+    const el = card as HTMLElement;
+    el.setAttribute("role", "button");
+    el.setAttribute("tabindex", "0");
+    const title = el.querySelector(".bento-title")?.textContent ?? "feature";
+    el.setAttribute("aria-label", `Learn more about ${title}`);
+
+    el.addEventListener("click", (e) => {
       if ((e.target as HTMLElement).closest("a")) return;
-      openModal(card as HTMLElement);
+      openModal(el);
+    });
+
+    el.addEventListener("keydown", (e: Event) => {
+      const ke = e as KeyboardEvent;
+      if (ke.key === "Enter" || ke.key === " ") {
+        ke.preventDefault();
+        if (!(ke.target as HTMLElement).closest("a")) {
+          openModal(el);
+        }
+      }
     });
   });
 
@@ -954,6 +1085,7 @@ async function init(): Promise<void> {
   initLanguage();
   initCopyButtons();
   initNavScroll();
+  initMobileMenu();
   initScrollReveal();
   initCountUp();
   initBenchGraph();
@@ -980,27 +1112,44 @@ function initPkgCycle() {
     "yarn add @tidesurf/core",
     "pnpm add @tidesurf/core",
   ];
-  
-  let currentIndex = 0;
-  const itemHeight = track.firstElementChild?.clientHeight || track.getBoundingClientRect().height / 5 || 24;
 
-  setInterval(() => {
+  let currentIndex = 0;
+  const itemHeight =
+    track.firstElementChild?.clientHeight ||
+    track.getBoundingClientRect().height / 5 ||
+    24;
+  let intervalId: ReturnType<typeof setInterval> | null = null;
+
+  function step(): void {
     currentIndex++;
-    track.style.transition = "transform 0.45s cubic-bezier(0.23, 1, 0.32, 1)";
-    track.style.transform = `translateY(-${currentIndex * itemHeight}px)`;
+    track!.style.transition = "transform 0.45s cubic-bezier(0.23, 1, 0.32, 1)";
+    track!.style.transform = `translateY(-${currentIndex * itemHeight}px)`;
 
     const cmdIndex = currentIndex % commands.length;
-    copyBtn.setAttribute("data-copy", commands[cmdIndex]);
-    
-    // Check if the current visible text has changed in translations if applicable, otherwise keep it English
-    // Or we leave text as is since we just shift the div. The copy button holds the actual data to strip.
+    copyBtn!.setAttribute("data-copy", commands[cmdIndex]);
 
     if (currentIndex === commands.length) {
       setTimeout(() => {
-        track.style.transition = "none";
-        track.style.transform = "translateY(0)";
+        track!.style.transition = "none";
+        track!.style.transform = "translateY(0)";
         currentIndex = 0;
       }, 500);
     }
-  }, 3000);
+  }
+
+  // Only run the cycle when the hero is visible — saves CPU on scroll
+  const hero = document.querySelector(".hero");
+  if (hero) {
+    new IntersectionObserver((entries) => {
+      const visible = entries[0].isIntersecting;
+      if (visible && !intervalId) {
+        intervalId = setInterval(step, 3000);
+      } else if (!visible && intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    }).observe(hero);
+  } else {
+    intervalId = setInterval(step, 3000);
+  }
 }
