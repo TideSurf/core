@@ -9,18 +9,29 @@ export function withTimeout<T>(
   operation: string
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
+    let settled = false;
+
     const timer = setTimeout(() => {
-      reject(new CDPTimeoutError(operation, ms));
+      if (!settled) {
+        settled = true;
+        reject(new CDPTimeoutError(operation, ms));
+      }
     }, ms);
 
     promise.then(
       (value) => {
-        clearTimeout(timer);
-        resolve(value);
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          resolve(value);
+        }
       },
       (err) => {
-        clearTimeout(timer);
-        reject(err);
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          reject(err);
+        }
       }
     );
   });

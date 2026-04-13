@@ -23,16 +23,25 @@
 
 <p align="center">
   사실, 웹 탐색에는 옴니모달도 비전 모델도 필요하지 않습니다.<br>
-  TideSurf는 DOM을 전달함으로서 최적의 Agentic 웹 탐색을 가능하게 합니다.
+  TideSurf는 라이브 DOM을 토큰 효율적인 구조화된 표현으로 변환하여 LLM이 이해하고 상호작용할 수 있도록 합니다.
 </p>
 
-<br>
+<p align="center">
+  TideSurf는 <a href="https://chromedevtools.github.io/devtools-protocol">Chrome DevTools Protocol</a>을 통해 Chromium을 LLM 에이전트에 연결하는 TypeScript 라이브러리입니다. 라이브 DOM을 탐색하고 50-200 토큰의 토큰 효율적인 구조화된 표현(스크린샷 기반 접근법보다 10-100배 낮은 토큰 비용)으로 압축하며, 18개의 도구 정의를 LLM 함수 호출용으로 노출합니다.
+</p>
+
+<p align="center">
+  <a href="https://tidesurf.org/docs#getting-started">Getting started</a>
+  <a href="https://tidesurf.org/docs#page-format">Page format</a>
+  <a href="https://tidesurf.org/docs#token-budget">Token budget</a>
+  <a href="https://tidesurf.org/docs#agent-patterns">Agent patterns</a>
+  <a href="https://tidesurf.org/docs#security">Security</a>
+  <a href="https://tidesurf.org/docs#api-reference">API reference</a>
+</p>
 
 <p align="center">
   <img src="https://tidesurf.org/og.png" alt="TideSurf Social Preview">
 </p>
-
-<br>
 
 <p align="center">
   <a href="https://github.com/TideSurf/core/actions/workflows/ci.yml"><img src="https://github.com/TideSurf/core/actions/workflows/ci.yml/badge.svg" alt="CI"></a>

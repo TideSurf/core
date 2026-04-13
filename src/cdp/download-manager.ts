@@ -28,49 +28,86 @@ export async function setupDownloads(
 }
 
 /**
- * Wait for a download to complete.
- * Listens for Page.downloadWillBegin and Page.downloadProgress events.
- * Cleans up listeners on completion, cancellation, or timeout.
- * @returns DownloadResult with file path, name, and size
+ * Download state tracker for managing download event handlers.
+ * Enhanced to track by URL and handle GUID assignment race (NEW-CDP-001).
  */
-export async function downloadFile(
+interface DownloadState {
+  fileName: string;
+  guid: string;
+  url: string;
+  completed: boolean;
+  canceled: boolean;
+  resolve: (result: DownloadResult) => void;
+  reject: (err: Error) => void;
+}
+
+/**
+ * Setup download listeners BEFORE triggering the download.
+ * This prevents race conditions where fast downloads complete before listeners are attached.
+ * Tracks by URL for better multi-download handling and handles GUID assignment race.
+ * @returns Object containing the download promise and cleanup function
+ */
+export function setupDownloadListeners(
   conn: CDPConnection,
   downloadDir: string,
-  timeout: number = 30000
-): Promise<DownloadResult> {
-  let onBegin: ((params: { guid: string; suggestedFilename: string }) => void) | null = null;
-  let onProgress: ((params: { guid: string; state: string; totalBytes?: number }) => void) | null = null;
+  expectedUrl?: string
+): {
+  promise: Promise<DownloadResult>;
+  cleanup: () => void;
+} {
+  const state: DownloadState = {
+    fileName: "",
+    guid: "",
+    url: "",
+    completed: false,
+    canceled: false,
+    resolve: () => {},
+    reject: () => {},
+  };
+
   let unsubscribeBegin: (() => void) | null = null;
   let unsubscribeProgress: (() => void) | null = null;
 
-  function cleanup() {
+  const cleanup = () => {
     unsubscribeBegin?.();
     unsubscribeProgress?.();
-    onBegin = null;
-    onProgress = null;
     unsubscribeBegin = null;
     unsubscribeProgress = null;
-  }
+  };
 
-  const downloadPromise = new Promise<DownloadResult>((resolve, reject) => {
-    let fileName = "";
-    let guid = "";
+  const promise = new Promise<DownloadResult>((resolve, reject) => {
+    state.resolve = resolve;
+    state.reject = reject;
 
-    onBegin = (params) => {
-      guid = params.guid;
-      fileName = params.suggestedFilename;
+    const onBegin = (params: { guid: string; suggestedFilename: string; url?: string }) => {
+      // If expectedUrl is provided, only track matching downloads
+      if (expectedUrl && params.url && params.url !== expectedUrl) return;
+      
+      state.guid = params.guid;
+      state.fileName = params.suggestedFilename;
+      state.url = params.url || "";
     };
 
-    onProgress = (params) => {
-      if (params.guid !== guid) return;
-      if (params.state === "completed") {
+    const onProgress = (params: { guid: string; state: string; totalBytes?: number }) => {
+      if (params.guid !== state.guid && state.guid !== "") return;
+      
+      // Handle GUID assignment race: if we haven't seen the begin event yet,
+      // this might be a fast download. Store the guid if this is our first event.
+      if (state.guid === "" && params.state === "completed") {
+        state.guid = params.guid;
+      }
+      if (params.guid !== state.guid) return;
+
+      if (params.state === "completed" && !state.completed) {
+        state.completed = true;
         cleanup();
         resolve({
-          filePath: join(downloadDir, fileName),
-          fileName,
+          filePath: join(downloadDir, state.fileName || "unknown"),
+          fileName: state.fileName || "unknown",
           totalBytes: params.totalBytes ?? 0,
         });
-      } else if (params.state === "canceled") {
+      } else if (params.state === "canceled" && !state.canceled) {
+        state.canceled = true;
         cleanup();
         reject(new Error("Download canceled"));
       }
@@ -80,6 +117,40 @@ export async function downloadFile(
     unsubscribeProgress = conn.Page.on("downloadProgress", onProgress);
   });
 
+  return { promise, cleanup };
+}
+
+/**
+ * Wait for a download to complete.
+ * Listens for Page.downloadWillBegin and Page.downloadProgress events.
+ * Cleans up listeners on completion, cancellation, or timeout.
+ * @returns DownloadResult with file path, name, and size
+ * @deprecated Use setupDownloadListeners + waitForDownload instead to avoid race conditions
+ */
+export async function downloadFile(
+  conn: CDPConnection,
+  downloadDir: string,
+  timeout: number = 30000
+): Promise<DownloadResult> {
+  const { promise, cleanup } = setupDownloadListeners(conn, downloadDir);
+
+  try {
+    return await withTimeout(promise, timeout, "download");
+  } catch (err) {
+    cleanup();
+    throw err;
+  }
+}
+
+/**
+ * Wait for an existing download promise with timeout.
+ * Use this after setupDownloadListeners and triggering the download action.
+ */
+export async function waitForDownload(
+  downloadPromise: Promise<DownloadResult>,
+  timeout: number,
+  cleanup: () => void
+): Promise<DownloadResult> {
   try {
     return await withTimeout(downloadPromise, timeout, "download");
   } catch (err) {

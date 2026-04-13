@@ -2,6 +2,26 @@ import type { OSNode, ScrollPosition } from "../types.js";
 import { compressUrl } from "./url-compressor.js";
 import { hasComputedState } from "./element-classifier.js";
 
+/**
+ * Escape double quotes in a string for safe embedding in quoted attributes.
+ * HIGH-012: Prevent quote breakage in serialized output.
+ */
+function escapeQuotes(text: string): string {
+  return text.replace(/"/g, '\\"');
+}
+
+/**
+ * Escape HTML entities to prevent XSS in serialized output.
+ * NEW-PARSER-008: All text content must be escaped.
+ */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 interface ElementState {
   /** Element is not actionable — wrap in ~~ */
   struck: boolean;
@@ -54,16 +74,35 @@ const HEADING_MAP: Record<string, string> = {
 
 /**
  * Collect all text from a node and its children.
+ * Uses memoization cache to avoid re-traversing subtrees.
+ * NEW-PARSER-008: Text is escaped to prevent XSS.
  */
-function collectText(node: OSNode): string {
-  if (node.tag === "#text") return node.text ?? "";
-  const parts: string[] = [];
-  if (node.text) parts.push(node.text);
-  for (const child of node.children) {
-    const t = collectText(child);
-    if (t) parts.push(t);
+export function collectTextMemoized(node: OSNode, cache = new Map<OSNode, string>()): string {
+  if (cache.has(node)) return cache.get(node)!;
+  
+  let result: string;
+  if (node.tag === "#text") {
+    result = escapeHtml(node.text ?? "");
+  } else {
+    const parts: string[] = [];
+    if (node.text) parts.push(escapeHtml(node.text));
+    for (const child of node.children) {
+      const t = collectTextMemoized(child, cache);
+      if (t) parts.push(t);
+    }
+    result = parts.join(" ");
   }
-  return parts.join(" ");
+  
+  cache.set(node, result);
+  return result;
+}
+
+/**
+ * Collect all text from a node and its children.
+ * Uses memoization to avoid quadratic complexity on repeated calls.
+ */
+export function collectText(node: OSNode): string {
+  return collectTextMemoized(node);
 }
 
 /**
@@ -76,7 +115,7 @@ export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string)
   for (const node of nodes) {
     if (node.tag === "#text") {
       if (node.text?.trim()) {
-        parts.push(`${pad}${node.text}`);
+        parts.push(`${pad}${escapeHtml(node.text)}`);
       }
       continue;
     }
@@ -136,8 +175,8 @@ export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string)
 
       let line = id;
       if (type && type !== "text") line += `:${type}`;
-      if (placeholder) line += ` ~${placeholder}`;
-      if (value) line += ` ="${value}"`;
+      if (placeholder) line += ` ~${escapeQuotes(placeholder)}`;
+      if (value) line += ` ="${escapeQuotes(value)}"`;
       line += min + max + step + pattern + flags + readonly + required + checked;
       parts.push(struck ? `${pad}~~${line.trim()}~~` : `${pad}${line.trim()}`);
       continue;

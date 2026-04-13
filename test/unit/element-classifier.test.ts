@@ -242,4 +242,71 @@ describe("classify", () => {
       ).toEqual({ action: "KEEP", mappedTag: "footer" });
     });
   });
+
+  // HIGH-010: Proper CSS detection with regex
+  describe("CSS style detection", () => {
+    it("discards display:none with no spaces", () => {
+      expect(classify("DIV", { style: "display:none" })).toEqual({
+        action: "DISCARD",
+      });
+    });
+
+    it("discards display:none with spaces", () => {
+      expect(classify("DIV", { style: "display: none" })).toEqual({
+        action: "DISCARD",
+      });
+    });
+
+    it("discards display:none with multiple spaces", () => {
+      expect(classify("DIV", { style: "display:  none" })).toEqual({
+        action: "DISCARD",
+      });
+    });
+
+    it("discards display:none with tabs", () => {
+      expect(classify("DIV", { style: "display:\tnone" })).toEqual({
+        action: "DISCARD",
+      });
+    });
+
+    it("discards display:none with mixed whitespace", () => {
+      expect(classify("DIV", { style: "display \t:  \n none" })).toEqual({
+        action: "DISCARD",
+      });
+    });
+
+    it("does NOT discard display:nonexistent (word boundary check)", () => {
+      // "nonexistent" starts with "none" but isn't the same as "none"
+      expect(classify("DIV", { style: "display:nonexistent" })).toEqual({
+        action: "COLLAPSE",
+      });
+    });
+
+    it("discards visibility:hidden with no spaces", () => {
+      expect(classify("SPAN", { style: "visibility:hidden" })).toEqual({
+        action: "DISCARD",
+      });
+    });
+
+    it("discards visibility:hidden with spaces", () => {
+      expect(classify("SPAN", { style: "visibility: hidden" })).toEqual({
+        action: "DISCARD",
+      });
+    });
+
+    it("handles mixed styles with display:none", () => {
+      expect(classify("DIV", { style: "color:red;display:none;font-size:12px" })).toEqual({
+        action: "DISCARD",
+      });
+    });
+
+    it("handles case-insensitive style matching", () => {
+      expect(classify("DIV", { style: "DISPLAY:NONE" })).toEqual({
+        action: "DISCARD",
+      });
+      expect(classify("DIV", { style: "Display:None" })).toEqual({
+        action: "DISCARD",
+      });
+    });
+  });
 });

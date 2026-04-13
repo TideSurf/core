@@ -34,9 +34,9 @@ All tool inputs are validated before execution:
 
 | Input | Validation |
 |---|---|
-| URLs | Must be `http:` or `https:` protocol |
-| CSS selectors | Blocked characters: `{`, `}`, `;`, `//`, `<!--` |
-| JavaScript expressions | Blocked keywords: `require`, `import`, `process`, `child_process`, `__dirname`, `__filename` |
+| URLs | Must be `http:` or `https:` protocol; private IP addresses (localhost, 127.x, 10.x, 192.168.x) are blocked |
+| CSS selectors | Max length 1000 characters; dangerous patterns blocked |
+| JavaScript expressions | Max length 10000 characters; blocked patterns: `document.cookie`, `localStorage`, `sessionStorage`, `indexedDB`, `fetch`, `XMLHttpRequest`, `WebSocket`, `eval`, `Function` |
 | Element IDs | Must match `[LBISFTD]\d+` pattern |
 | File paths | Must resolve inside `fileAccessRoots` |
 | Numeric inputs | Must be positive integers/numbers where required |
@@ -57,4 +57,18 @@ For debugging purposes, the `includeHidden` option can be passed to `getState()`
 
 ## Evaluate safety
 
-The `evaluate` tool executes arbitrary JavaScript in the page context. It is blocked in read-only mode but available otherwise. The expression validator blocks common Node.js escape patterns but cannot prevent all browser-side effects. Use with the same caution as a browser DevTools console.
+The `evaluate` tool executes arbitrary JavaScript in the page context. It is blocked in read-only mode but available otherwise.
+
+**Validation applied:**
+- Maximum length: 10000 characters
+- Blocked patterns:
+  - `document.cookie` — prevents cookie access
+  - `localStorage`, `sessionStorage`, `indexedDB` — prevents storage access
+  - `fetch`, `XMLHttpRequest`, `WebSocket` — prevents network requests
+  - `eval`, `Function` — prevents dynamic code execution
+
+**Important limitations:**
+- The validator does NOT block `require`, `import`, `process`, or Node.js-specific keywords — these are not available in the browser page context anyway
+- Page-side JavaScript can still perform actions like navigation, form submission, and DOM manipulation
+- `evaluate` has the same power as a browser DevTools console — use with equivalent caution
+- Always validate any data returned from `evaluate` before using it in subsequent operations

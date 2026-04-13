@@ -1,7 +1,14 @@
 import CDP, { type Client } from "chrome-remote-interface";
 import type { CDPNode } from "../types.js";
-import { CDPConnectionError, ElementNotFoundError, NavigationError, TideSurfError } from "../errors.js";
+import { CDPConnectionError, CDPTimeoutError, ElementNotFoundError, NavigationError, TideSurfError, ValidationError } from "../errors.js";
 import { withTimeout } from "./timeout.js";
+
+/**
+ * Clipboard rate limiting state
+ * HIGH-020: Limit clipboard reads to prevent data exfiltration
+ */
+let lastClipboardReadTime = 0;
+const CLIPBOARD_READ_COOLDOWN_MS = 5000; // 5 seconds between reads
 
 export interface CDPConnection {
   client: Client;
@@ -10,6 +17,8 @@ export interface CDPConnection {
   Runtime: Client["Runtime"];
   Input: Client["Input"];
   Emulation: Client["Emulation"];
+  /** True if the connection is dead (Chrome crashed or disconnected) */
+  isDead?: boolean;
 }
 
 /**
@@ -37,7 +46,18 @@ export async function connect(options: {
 
     await Promise.all([DOM.enable(), Page.enable(), Runtime.enable()]);
 
-    return { client, DOM, Page, Runtime, Input, Emulation };
+    const conn: CDPConnection = { client, DOM, Page, Runtime, Input, Emulation, isDead: false };
+
+    // HIGH-018: Chrome crash/disconnect detection
+    // Type assertion needed because chrome-remote-interface types don't expose event methods
+    (client as unknown as { on(event: string, handler: () => void): void }).on("disconnect", () => {
+      conn.isDead = true;
+    });
+    (Page as unknown as { on(event: string, handler: () => void): void }).on("targetCrashed", () => {
+      conn.isDead = true;
+    });
+
+    return conn;
   } catch (err) {
     if (err instanceof TideSurfError) throw err;
     throw new CDPConnectionError(
@@ -47,8 +67,33 @@ export async function connect(options: {
   }
 }
 
+// NEW-CRIT-005: Maximum DOM node count to prevent memory exhaustion
+const MAX_DOM_NODES = 50_000;
+
+/**
+ * Count nodes in a CDP DOM tree recursively
+ */
+function countNodes(node: CDPNode): number {
+  let count = 1;
+  if (node.children) {
+    for (const child of node.children) {
+      count += countNodes(child);
+    }
+  }
+  if (node.shadowRoots) {
+    for (const shadow of node.shadowRoots) {
+      count += countNodes(shadow);
+    }
+  }
+  if (node.contentDocument) {
+    count += countNodes(node.contentDocument);
+  }
+  return count;
+}
+
 /**
  * Get the full DOM tree (pierces shadow DOM)
+ * NEW-CRIT-005: Enforces 50,000 node limit to prevent memory exhaustion
  */
 export async function getFullDOM(conn: CDPConnection, timeout?: number): Promise<CDPNode> {
   const { root } = await withTimeout(
@@ -56,6 +101,16 @@ export async function getFullDOM(conn: CDPConnection, timeout?: number): Promise
     timeout ?? 15_000,
     "getFullDOM"
   );
+
+  // NEW-CRIT-005: Check node count to prevent memory exhaustion
+  const nodeCount = countNodes(root as unknown as CDPNode);
+  if (nodeCount > MAX_DOM_NODES) {
+    throw new Error(
+      `DOM exceeds maximum node count of ${MAX_DOM_NODES.toLocaleString()} (found ${nodeCount.toLocaleString()}). ` +
+      `Use viewport mode or navigate to a simpler page.`
+    );
+  }
+
   return root as unknown as CDPNode;
 }
 
@@ -147,19 +202,13 @@ export async function typeText(
       });
     }
 
-    // Type each character via Input.dispatchKeyEvent
-    for (const char of text) {
-      await conn.Input.dispatchKeyEvent({
-        type: "keyDown",
-        text: char,
-      });
-      await conn.Input.dispatchKeyEvent({
-        type: "keyUp",
-        text: char,
-      });
-    }
+    // HIGH-002b: Use Input.insertText for fast typing (1 round-trip instead of 2N)
+    // This is ~200x faster than per-character dispatchKeyEvent for long strings
+    // Type assertion needed because chrome-remote-interface types don't expose insertText
+    const Input = conn.Input as unknown as { insertText(params: { text: string }): Promise<void> };
+    await Input.insertText({ text });
 
-    // Dispatch input event
+    // Dispatch input event to trigger any listeners
     await conn.Runtime.callFunctionOn({
       objectId: object.objectId,
       functionDeclaration:
@@ -210,16 +259,22 @@ export async function selectOption(
 export async function scroll(
   conn: CDPConnection,
   direction: "up" | "down",
-  amount: number = 500
+  amount: number = 500,
+  timeout?: number
 ): Promise<void> {
   const delta = direction === "down" ? amount : -amount;
-  await conn.Runtime.evaluate({
-    expression: `window.scrollBy(0, ${delta})`,
-  });
+  await withTimeout(
+    conn.Runtime.evaluate({
+      expression: `window.scrollBy(0, ${delta})`,
+    }),
+    timeout ?? 5_000,
+    "scroll"
+  );
 }
 
 /**
  * Execute JavaScript in the page context
+ * HIGH-011: Added null check on result.result
  */
 export async function evaluate(
   conn: CDPConnection,
@@ -240,6 +295,10 @@ export async function evaluate(
       `Evaluation failed: ${result.exceptionDetails.text ?? "unknown error"}`
     );
   }
+  // HIGH-011: Check if result.result exists before accessing value
+  if (!result.result) {
+    throw new Error("Evaluation returned no result");
+  }
   return result.result.value;
 }
 
@@ -248,6 +307,7 @@ export async function evaluate(
  * Observes DOM changes and waits for a quiet period (no mutations for 300ms).
  * Resolves early (500ms) if no mutations observed at all.
  * Hard timeout cap prevents hanging.
+ * Uses a shared observer instance to prevent accumulation (HIGH-013).
  */
 export async function waitForStable(
   conn: CDPConnection,
@@ -256,14 +316,27 @@ export async function waitForStable(
   await withTimeout(
     conn.Runtime.evaluate({
       expression: `new Promise(resolve => {
+  // Use shared observer on window to prevent accumulation
+  if (window.__tidesurf_stable_observer) {
+    window.__tidesurf_stable_observer.disconnect();
+  }
   let timer = null;
   let resolved = false;
-  const done = () => { if (!resolved) { resolved = true; observer.disconnect(); resolve(); } };
-  const observer = new MutationObserver(() => {
+  const done = () => { 
+    if (!resolved) { 
+      resolved = true; 
+      if (window.__tidesurf_stable_observer) {
+        window.__tidesurf_stable_observer.disconnect();
+        window.__tidesurf_stable_observer = null;
+      }
+      resolve(); 
+    } 
+  };
+  window.__tidesurf_stable_observer = new MutationObserver(() => {
     clearTimeout(timer);
     timer = setTimeout(done, 300);
   });
-  observer.observe(document.body || document.documentElement, {
+  window.__tidesurf_stable_observer.observe(document.body || document.documentElement, {
     childList: true, subtree: true, attributes: true, characterData: true
   });
   // Early resolve if no mutations at all within 500ms
@@ -307,45 +380,79 @@ export async function captureScreenshot(
 
 /**
  * Set files on a file input element.
+ * HIGH-008: All CDP calls wrapped with timeout
  */
 export async function setFileInput(
   conn: CDPConnection,
   backendNodeId: number,
-  filePaths: string[]
+  filePaths: string[],
+  timeout?: number
 ): Promise<void> {
-  await conn.DOM.setFileInputFiles({ files: filePaths, backendNodeId });
+  const operationTimeout = timeout ?? 10_000;
+
+  await withTimeout(
+    conn.DOM.setFileInputFiles({ files: filePaths, backendNodeId }),
+    operationTimeout,
+    "setFileInput: setFileInputFiles"
+  );
 
   // Dispatch a change event so the page reacts
-  const { object } = await conn.DOM.resolveNode({ backendNodeId });
+  const { object } = await withTimeout(
+    conn.DOM.resolveNode({ backendNodeId }),
+    operationTimeout,
+    "setFileInput: resolveNode"
+  );
   if (object.objectId) {
     try {
-      await conn.Runtime.callFunctionOn({
-        objectId: object.objectId,
-        functionDeclaration:
-          "function() { this.dispatchEvent(new Event('change', { bubbles: true })); }",
-        returnByValue: true,
-      });
+      await withTimeout(
+        conn.Runtime.callFunctionOn({
+          objectId: object.objectId,
+          functionDeclaration:
+            "function() { this.dispatchEvent(new Event('change', { bubbles: true })); }",
+          returnByValue: true,
+        }),
+        operationTimeout,
+        "setFileInput: dispatchEvent"
+      );
     } finally {
-      await conn.Runtime.releaseObject({ objectId: object.objectId }).catch(() => {});
+      await withTimeout(
+        conn.Runtime.releaseObject({ objectId: object.objectId }),
+        operationTimeout,
+        "setFileInput: releaseObject"
+      ).catch(() => {});
     }
   }
 }
 
 /**
  * Read text from the clipboard.
+ * HIGH-020: Rate limited to prevent data exfiltration
  */
 export async function clipboardRead(conn: CDPConnection): Promise<string> {
+  const now = Date.now();
+  const timeSinceLastRead = now - lastClipboardReadTime;
+
+  if (timeSinceLastRead < CLIPBOARD_READ_COOLDOWN_MS) {
+    const remaining = Math.ceil((CLIPBOARD_READ_COOLDOWN_MS - timeSinceLastRead) / 1000);
+    throw new ValidationError(
+      `Clipboard read rate limit exceeded. Please wait ${remaining} second(s) before reading again.`
+    );
+  }
+
   const result = await conn.Runtime.evaluate({
     expression: "navigator.clipboard.readText()",
     awaitPromise: true,
     userGesture: true,
     returnByValue: true,
   });
+
   if (result.exceptionDetails) {
     throw new Error(
       `Clipboard read failed: ${result.exceptionDetails.text ?? "unknown error"}`
     );
   }
+
+  lastClipboardReadTime = Date.now();
   return String(result.result.value ?? "");
 }
 
@@ -371,7 +478,22 @@ export async function clipboardWrite(
 
 /**
  * Close the CDP connection
+ * Properly disables CDP domains before closing (NEW-CDP-004)
  */
 export async function disconnect(conn: CDPConnection): Promise<void> {
-  await conn.client.close();
+  try {
+    // Disable domains before closing to clean up properly
+    // Type assertions needed because chrome-remote-interface types don't expose disable methods
+    // Note: DOM.disable(), Page.disable(), Runtime.disable() are called via type assertions
+    const DOM = conn.DOM as unknown as { disable(): Promise<void> };
+    const Page = conn.Page as unknown as { disable(): Promise<void> };
+    const Runtime = conn.Runtime as unknown as { disable(): Promise<void> };
+    await Promise.all([
+      DOM.disable().catch(() => {}),
+      Page.disable().catch(() => {}),
+      Runtime.disable().catch(() => {}),
+    ]);
+  } finally {
+    await conn.client.close();
+  }
 }

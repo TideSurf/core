@@ -99,3 +99,89 @@ If `getState()` returns very little content or doesn't include elements you expe
 ## High token count
 
 If the compressed output is larger than expected, the page likely has a complex, deeply nested DOM with many interactive elements. Consider using `maxTokens` to cap the output, which forces TideSurf to prioritize the most actionable elements and prune the rest.
+
+## Common CDP connection errors
+
+### "No open page targets found"
+
+Chrome is running with remote debugging enabled, but has no regular tabs open (only DevTools or extension pages).
+
+**Fix:** Open at least one regular tab in Chrome before connecting.
+
+### "Protocol error: Invalid session"
+
+The CDP session was interrupted, usually because Chrome crashed or was closed externally.
+
+**Fix:** Restart Chrome and reconnect.
+
+### Connection hangs indefinitely
+
+Sometimes Chrome is unresponsive due to a frozen tab or extension conflict.
+
+**Fix:**
+1. Try closing all tabs except one blank tab
+2. Disable extensions that might interfere with CDP
+3. Restart Chrome with a fresh profile: `--user-data-dir=/tmp/tidesurf-profile`
+
+### Port conflicts on 9222
+
+Another process is already using port 9222.
+
+**Fix:** Use a different port:
+
+```typescript
+const browser = await TideSurf.launch({ port: 9223 });
+// or
+const browser = await TideSurf.connect({ port: 9223 });
+```
+
+```bash
+tidesurf mcp --port 9223
+tidesurf inspect https://example.com --port 9223
+```
+
+## Chrome process leaks
+
+If TideSurf crashes or is killed, Chrome processes might remain running.
+
+**Fix on macOS/Linux:**
+```bash
+# Find Chrome processes with remote debugging
+ps aux | grep "remote-debugging-port"
+
+# Kill them manually
+kill -9 <pid>
+```
+
+**Fix on Windows:**
+```powershell
+# Find Chrome with debugging port
+Get-Process chrome | Where-Object {$_.CommandLine -like "*remote-debugging-port*"}
+
+# Stop the process
+Stop-Process -Id <pid>
+```
+
+## Permission denied errors
+
+### Upload/download
+
+```
+File "/path/to/file" is outside allowed file access roots
+```
+
+**Fix:** Files must be within the configured `fileAccessRoots` (defaults to working directory + temp directory).
+
+```typescript
+const browser = await TideSurf.launch({
+  fileAccessRoots: [process.cwd(), "/allowed/path"],
+});
+```
+
+### Clipboard access
+
+```
+clipboard_read is not available in read-only mode
+```
+
+**Fix:** Clipboard tools are disabled in read-only mode. Launch without `readOnly: true` to use them.

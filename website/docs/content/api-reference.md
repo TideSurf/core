@@ -77,6 +77,98 @@ Modes compose: `getState({ viewport: true, mode: "interactive", maxTokens: 200 }
 
 The internal `OSNode` tree used during serialization includes a `state` field on each node. This field carries the element's runtime state flags (e.g. `disabled`, `inert`, `obscured`, `checked`, `required`, `readonly`) and toggle state (`expanded`/`collapsed` from `aria-expanded`), which are serialized inline in the compressed output — disabled/inert as `~~strikethrough~~`, toggle as `open`/`closed` keywords. See the [page format](#page-format) documentation for details on how state flags appear in the text representation.
 
+## Types
+
+### `PageState`
+
+```typescript
+interface PageState {
+  url: string;           // Current page URL
+  title: string;         // Page title
+  content: string;       // Compressed DOM representation (primary field)
+  xml: string;          // @deprecated Alias for content
+  nodeMap: Map<string, number>;  // Maps TideSurf IDs to CDP backendNodeIds
+}
+```
+
+### `GetStateOptions`
+
+```typescript
+interface GetStateOptions {
+  maxTokens?: number;                    // Token budget for output
+  viewport?: boolean;                     // Only include visible elements (default: true)
+  mode?: "full" | "minimal" | "interactive";  // Output filtering mode
+  includeHidden?: boolean;                // Include CSS-hidden elements
+}
+```
+
+### `TabInfo`
+
+```typescript
+interface TabInfo {
+  id: string;     // CDP target ID
+  url: string;    // Tab URL
+  title: string;  // Tab title
+  type: string;   // Always "page" for regular tabs
+}
+```
+
+### `ScrollPosition`
+
+```typescript
+interface ScrollPosition {
+  scrollY: number;         // Current vertical scroll position
+  scrollHeight: number;   // Total scrollable height
+  viewportHeight: number; // Visible viewport height
+}
+```
+
+### `SearchResult`
+
+```typescript
+interface SearchResult {
+  text: string;       // Surrounding text context
+  tag: string;        // HTML tag name
+  index: number;      // Match index (1-based)
+  elementId?: string; // Nearest interactive TideSurf ID
+}
+```
+
+### `DownloadResult`
+
+```typescript
+interface DownloadResult {
+  filePath: string;   // Absolute path to downloaded file
+  fileName: string;   // Original file name
+  totalBytes: number; // File size in bytes
+}
+```
+
+## Tool response formats
+
+Each tool returns a specific response format. When using the tool executor or MCP, responses are wrapped appropriately. Direct SDK methods return the following:
+
+| Tool | Return Type | Description |
+|------|-------------|-------------|
+| `get_state` | `PageState` | Full page state with content, url, title, nodeMap |
+| `navigate` | `void` | Throws on failure, use `get_state` after to see result |
+| `click` | `void` | Throws on failure, page may navigate or update |
+| `type` | `void` | Throws on failure |
+| `select` | `void` | Throws on failure |
+| `scroll` | `void` | Throws on failure |
+| `extract` | `string` | Extracted text content |
+| `evaluate` | `unknown` | JavaScript evaluation result (serialized to string in MCP) |
+| `list_tabs` | `TabInfo[]` | Array of tab information |
+| `new_tab` | `TabInfo` | Created tab information |
+| `switch_tab` | `void` | Throws on failure |
+| `close_tab` | `void` | Throws on failure |
+| `search` | `SearchResult[]` | Array of search matches |
+| `screenshot` | `string` | Base64-encoded PNG image |
+| `upload` | `void` | Throws on failure |
+| `clipboard_read` | `string` | Clipboard text content |
+| `clipboard_write` | `void` | Throws on failure |
+| `download` | `DownloadResult` | Download file information |
+
 ### `getPage()`
 
 ```typescript

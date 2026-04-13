@@ -10,7 +10,6 @@ const WRITE_TOOLS = new Set([
   "new_tab",
   "close_tab",
   "upload",
-  "clipboard_read",
   "clipboard_write",
   "download",
 ]);
@@ -22,7 +21,7 @@ export function getToolDefinitions(options?: {
     {
       name: "get_state",
       description:
-        "Get the current page state as compressed text. Returns the page URL, title, and a token-efficient representation of the visible DOM. Interactive elements have IDs (L=link, B=button, I=input, S=select) for use with other tools. Elements in ~~strikethrough~~ are disabled or inert — do not pass their IDs to interaction tools.",
+        "Get the current page state as compressed text. Returns the page URL, title, and a token-efficient representation of the visible DOM. Interactive elements have IDs (L=link, B=button, I=input, S=select, F=form, T=table, D=dialog) for use with other tools. Elements in ~~strikethrough~~ are disabled or inert — do not pass their IDs to interaction tools.",
       input_schema: {
         type: "object",
         properties: {

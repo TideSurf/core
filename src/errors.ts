@@ -42,10 +42,9 @@ export class ChromeLaunchError extends TideSurfError {
  * Element not found in the current node map
  */
 export class ElementNotFoundError extends TideSurfError {
-  constructor(id: string) {
-    super(
-      `Element "${id}" not found. Call getState() first to refresh the node map.`
-    );
+  constructor(id: string, additionalInfo?: string) {
+    const baseMessage = `Element "${id}" not found. Call getState() first to refresh the node map.`;
+    super(additionalInfo ? `${baseMessage} ${additionalInfo}` : baseMessage);
     this.name = "ElementNotFoundError";
   }
 }

@@ -71,7 +71,7 @@ describe("serialize", () => {
     expect(result).toContain("  [B1] Submit");
   });
 
-  it("does not escape XML special characters (plain text)", () => {
+  it("escapes HTML special characters to prevent XSS (NEW-PARSER-008)", () => {
     const nodes: OSNode[] = [
       {
         tag: "h1",
@@ -82,7 +82,24 @@ describe("serialize", () => {
       },
     ];
     const result = serialize(nodes);
-    expect(result).toContain('A & B < C > D "E"');
+    // HTML entities should be escaped to prevent XSS
+    expect(result).toContain("A &amp; B &lt; C &gt; D &quot;E&quot;");
+  });
+
+  it("escapes script tags to prevent XSS (NEW-PARSER-008)", () => {
+    const nodes: OSNode[] = [
+      {
+        tag: "h1",
+        attributes: {},
+        children: [
+          { tag: "#text", attributes: {}, children: [], text: "<script>alert(1)</script>" },
+        ],
+      },
+    ];
+    const result = serialize(nodes);
+    // Script tags should be escaped
+    expect(result).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
+    expect(result).not.toContain("<script>");
   });
 
   it("handles multiple sibling links", () => {
@@ -253,6 +270,33 @@ describe("serialize", () => {
     ];
     const result = serialize(nodes);
     expect(result).toBe("Email:");
+  });
+
+  // HIGH-012: Quote escaping in input values
+  it("escapes quotes in input values", () => {
+    const nodes: OSNode[] = [
+      {
+        tag: "input",
+        id: "I1",
+        attributes: { id: "I1", value: 'say "hello"' },
+        children: [],
+      },
+    ];
+    const result = serialize(nodes);
+    expect(result).toContain('say \\"hello\\"');
+  });
+
+  it("escapes quotes in input placeholders", () => {
+    const nodes: OSNode[] = [
+      {
+        tag: "input",
+        id: "I1",
+        attributes: { id: "I1", placeholder: 'type "search"' },
+        children: [],
+      },
+    ];
+    const result = serialize(nodes);
+    expect(result).toContain('type \\"search\\"');
   });
 });
 

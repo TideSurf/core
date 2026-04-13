@@ -124,6 +124,10 @@ export interface ToolResult {
   success: boolean;
   data?: unknown;
   error?: string;
+  /** Error type/class name for programmatic handling */
+  errorType?: string;
+  /** Stack trace in development mode */
+  stack?: string;
 }
 
 /**

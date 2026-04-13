@@ -49,8 +49,34 @@ interface WalkContext {
 const HEADING_TAGS = new Set(["h1", "h2", "h3", "h4", "h5", "h6", "heading"]);
 const TEXT_TRUNCATE_LIMIT = 60;
 
-function truncateText(text: string, limit: number): string {
-  if (text.length <= limit) return text;
+// MED-004: Use Intl.Segmenter for grapheme-aware truncation if available
+const segmenter = typeof Intl !== "undefined" && "Segmenter" in Intl
+  ? new Intl.Segmenter("en", { granularity: "grapheme" })
+  : null;
+
+function getGraphemeCount(text: string): number {
+  if (segmenter) {
+    return Array.from(segmenter.segment(text)).length;
+  }
+  // Fallback: use code unit length (less accurate for complex scripts)
+  return text.length;
+}
+
+function truncateGraphemes(text: string, limit: number): string {
+  if (getGraphemeCount(text) <= limit) return text;
+
+  if (segmenter) {
+    const segments = Array.from(segmenter.segment(text));
+    // Find a good break point near the limit
+    let end = limit;
+    while (end > 0 && segments[end] && !/\s/.test(segments[end].segment)) {
+      end--;
+    }
+    if (end <= 0) end = limit;
+    return segments.slice(0, end).map(s => s.segment).join("").trimEnd() + "...";
+  }
+
+  // Fallback: use code unit-based truncation
   const cut = text.lastIndexOf(" ", limit);
   const end = cut > 0 ? cut : limit;
   return text.slice(0, end) + "...";
@@ -60,13 +86,15 @@ function truncateText(text: string, limit: number): string {
  * Walk a CDP DOM tree and produce compressed OSNode tree + nodeMap.
  * @param truncate - Set false to disable text truncation (e.g. for search)
  */
+const MAX_DEPTH = 500;
+
 export function walkDOM(root: CDPNode, options?: { truncate?: boolean }): WalkResult {
   const assigner = new IDAssigner();
   const nodeMap: NodeMap = new Map();
   const doTruncate = options?.truncate !== false;
   const ctx: WalkContext = { insideInteractive: false, insideHeading: false };
 
-  const nodes = walkChildren(root.children ?? [], assigner, nodeMap, ctx, doTruncate);
+  const nodes = walkChildren(root.children ?? [], assigner, nodeMap, ctx, doTruncate, 0);
   const cleaned = postProcess(nodes);
 
   return { nodes: cleaned, nodeMap };
@@ -77,14 +105,20 @@ function walkNode(
   assigner: IDAssigner,
   nodeMap: NodeMap,
   ctx: WalkContext,
-  doTruncate: boolean
+  doTruncate: boolean,
+  depth: number = 0
 ): OSNode[] {
+  // Prevent stack overflow on deeply nested DOM
+  if (depth > MAX_DEPTH) {
+    return [{ tag: "#text", text: "[truncated]", attributes: {}, children: [] }];
+  }
+
   // Text nodes
   if (node.nodeType === 3) {
     let text = (node.nodeValue ?? "").trim();
     if (!text) return [];
     if (doTruncate && !ctx.insideInteractive && !ctx.insideHeading) {
-      text = truncateText(text, TEXT_TRUNCATE_LIMIT);
+      text = truncateGraphemes(text, TEXT_TRUNCATE_LIMIT);
     }
     return [{ tag: "#text", attributes: {}, children: [], text }];
   }
@@ -105,12 +139,12 @@ function walkNode(
 
   if (result.action === "COLLAPSE") {
     // Promote children
-    const promoted = walkChildren(children, assigner, nodeMap, ctx, doTruncate);
+    const promoted = walkChildren(children, assigner, nodeMap, ctx, doTruncate, depth + 1);
     // Also walk shadow roots if present
     if (node.shadowRoots) {
       for (const shadowRoot of node.shadowRoots) {
         promoted.push(
-          ...walkChildren(shadowRoot.children ?? [], assigner, nodeMap, ctx, doTruncate)
+          ...walkChildren(shadowRoot.children ?? [], assigner, nodeMap, ctx, doTruncate, depth + 1)
         );
       }
     }
@@ -140,7 +174,8 @@ function walkNode(
         assigner,
         nodeMap,
         ctx,
-        doTruncate
+        doTruncate,
+        depth + 1
       );
       return [
         {
@@ -203,13 +238,13 @@ function walkNode(
   };
 
   // Walk regular children
-  const osChildren = walkChildren(children, assigner, nodeMap, childCtx, doTruncate);
+  const osChildren = walkChildren(children, assigner, nodeMap, childCtx, doTruncate, depth + 1);
 
   // Walk shadow roots and merge shadow children into host's children
   if (node.shadowRoots) {
     for (const shadowRoot of node.shadowRoots) {
       osChildren.push(
-        ...walkChildren(shadowRoot.children ?? [], assigner, nodeMap, childCtx, doTruncate)
+        ...walkChildren(shadowRoot.children ?? [], assigner, nodeMap, childCtx, doTruncate, depth + 1)
       );
     }
   }
@@ -237,11 +272,12 @@ function walkChildren(
   assigner: IDAssigner,
   nodeMap: NodeMap,
   ctx: WalkContext,
-  doTruncate: boolean
+  doTruncate: boolean,
+  depth: number = 0
 ): OSNode[] {
   const result: OSNode[] = [];
   for (const child of children) {
-    result.push(...walkNode(child, assigner, nodeMap, ctx, doTruncate));
+    result.push(...walkNode(child, assigner, nodeMap, ctx, doTruncate, depth));
   }
   return result;
 }
@@ -258,7 +294,12 @@ function postProcess(nodes: OSNode[]): OSNode[] {
       merged.length > 0 &&
       merged[merged.length - 1].tag === "#text"
     ) {
-      merged[merged.length - 1].text += " " + node.text;
+      const prevText = merged[merged.length - 1].text ?? "";
+      const currText = node.text ?? "";
+      // Only add space if previous or current text had whitespace
+      const needsSpace = prevText.length > 0 && currText.length > 0 &&
+        !prevText.endsWith(" ") && !currText.startsWith(" ");
+      merged[merged.length - 1].text = prevText + (needsSpace ? " " : "") + currText;
     } else {
       merged.push(node);
     }

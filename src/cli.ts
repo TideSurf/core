@@ -10,6 +10,7 @@
 
 import { TideSurf } from "./index.js";
 import { VERSION } from "./version.js";
+import { validateUrl } from "./validation.js";
 
 const args = process.argv.slice(2);
 
@@ -42,6 +43,7 @@ Examples:
 function parseFlag(flag: string): string | undefined {
   const idx = args.indexOf(flag);
   if (idx === -1) return undefined;
+  if (idx + 1 >= args.length) return undefined;
   return args[idx + 1];
 }
 
@@ -51,6 +53,14 @@ async function inspect() {
   const url = args[1];
   if (!url) {
     console.error("Error: missing URL. Usage: tidesurf inspect <url>");
+    process.exit(1);
+  }
+
+  // NEW-CLI-004: Argument injection via URL - validate URL before use
+  try {
+    validateUrl(url);
+  } catch (err) {
+    console.error(`Error: Invalid URL - ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);
   }
 
@@ -131,26 +141,35 @@ async function mcp() {
 
   let surfing: TideSurf | null = null;
   let headless = !headful;
+  let browserPromise: Promise<TideSurf> | null = null;
 
   async function browser(): Promise<TideSurf> {
-    if (!surfing) {
-      if (autoConnect) {
+    if (surfing) return surfing;
+    if (!browserPromise) {
+      browserPromise = (async () => {
         try {
-          console.error(`[tidesurf] Connecting to running Chrome (port ${port ?? 9222})...`);
-          surfing = await TideSurf.connect({ port, readOnly });
-          console.error("[tidesurf] Connected to existing browser.");
-        } catch {
-          console.error("[tidesurf] No running Chrome found, launching a new instance...");
-          surfing = await TideSurf.launch({ headless, port, readOnly });
-          console.error("[tidesurf] Browser launched.");
+          if (autoConnect) {
+            try {
+              console.error(`[tidesurf] Connecting to running Chrome (port ${port ?? 9222})...`);
+              surfing = await TideSurf.connect({ port, readOnly });
+              console.error("[tidesurf] Connected to existing browser.");
+            } catch {
+              console.error("[tidesurf] No running Chrome found, launching a new instance...");
+              surfing = await TideSurf.launch({ headless, port, readOnly });
+              console.error("[tidesurf] Browser launched.");
+            }
+          } else {
+            console.error(`[tidesurf] Launching browser (${headless ? "headless" : "headful"})...`);
+            surfing = await TideSurf.launch({ headless, port, readOnly });
+            console.error("[tidesurf] Browser ready.");
+          }
+          return surfing;
+        } finally {
+          browserPromise = null;
         }
-      } else {
-        console.error(`[tidesurf] Launching browser (${headless ? "headless" : "headful"})...`);
-        surfing = await TideSurf.launch({ headless, port, readOnly });
-        console.error("[tidesurf] Browser ready.");
-      }
+      })();
     }
-    return surfing;
+    return browserPromise;
   }
 
   function text(t: string) {
@@ -178,18 +197,20 @@ async function mcp() {
   // --- Page tools ---
 
   server.registerTool("get_state", {
-    description: "Get the current page as compressed text. Interactive elements have IDs (L=link, B=button, I=input, S=select) for use with click/type/select.",
+    description: "Get the current page as compressed text. Interactive elements have IDs (L=link, B=button, I=input, S=select, F=form, T=table, D=dialog) for use with click/type/select.",
     inputSchema: {
       maxTokens: z.number().optional().describe("Token budget — prunes low-priority elements to fit"),
       viewport: z.boolean().optional().describe("Only include visible viewport elements"),
       mode: z.enum(["full", "minimal", "interactive"]).optional().describe("Output mode"),
+      includeHidden: z.boolean().optional().describe("Include elements hidden by CSS (opacity:0, visibility:hidden, display:none). Useful for debugging. Default: false."),
     },
-  }, async ({ maxTokens, viewport, mode }: { maxTokens?: number; viewport?: boolean; mode?: "full" | "minimal" | "interactive" }) => {
+  }, async ({ maxTokens, viewport, mode, includeHidden }: { maxTokens?: number; viewport?: boolean; mode?: "full" | "minimal" | "interactive"; includeHidden?: boolean }) => {
     const s = await browser();
     const state = await s.getState({
       ...(maxTokens ? { maxTokens } : {}),
       ...(viewport !== undefined ? { viewport } : {}),
       ...(mode ? { mode } : {}),
+      ...(includeHidden !== undefined ? { includeHidden } : {}),
     });
     return text(state.content);
   });
@@ -389,17 +410,45 @@ async function mcp() {
 
   const transport = new StdioServerTransport();
 
-  const shutdown = async () => {
-    if (surfing) await surfing.close();
-    process.exit(0);
+  let isShuttingDown = false;
+  const shutdown = async (signal: string) => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    console.error(`[tidesurf] Received ${signal}, shutting down...`);
+    try {
+      if (surfing) {
+        await Promise.race([
+          surfing.close(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Shutdown timeout')), 10000)
+          )
+        ]);
+      }
+      process.exit(0);
+    } catch (err) {
+      console.error(`[tidesurf] Shutdown error: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
   };
 
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
+  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
 
   await server.connect(transport);
   console.error("[tidesurf] MCP server running on stdio");
 }
+
+// --- Process error handlers (NEW-CLI-001) ---
+
+process.on('uncaughtException', (err) => {
+  console.error(`[tidesurf] Uncaught exception: ${err instanceof Error ? err.message : String(err)}`);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error(`[tidesurf] Unhandled rejection: ${reason instanceof Error ? reason.message : String(reason)}`);
+  process.exit(1);
+});
 
 // --- Main dispatch ---
 

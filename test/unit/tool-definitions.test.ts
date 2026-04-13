@@ -16,9 +16,9 @@ describe("getToolDefinitions", () => {
     }
   });
 
-  it("returns 6 tools in read-only mode", () => {
+  it("returns 7 tools in read-only mode", () => {
     const tools = getToolDefinitions({ readOnly: true });
-    expect(tools).toHaveLength(6);
+    expect(tools).toHaveLength(7);
   });
 
   it("read-only mode excludes all write tools", () => {
@@ -31,7 +31,6 @@ describe("getToolDefinitions", () => {
       "new_tab",
       "close_tab",
       "upload",
-      "clipboard_read",
       "clipboard_write",
       "download",
     ];
@@ -50,6 +49,7 @@ describe("getToolDefinitions", () => {
         "switch_tab",
         "search",
       "screenshot",
+      "clipboard_read",
     ];
     const tools = getToolDefinitions({ readOnly: true });
     const names = tools.map((t) => t.name);

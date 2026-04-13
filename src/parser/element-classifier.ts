@@ -93,11 +93,12 @@ export function classify(
 
   // display:none or visibility:hidden in style
   if (attributes?.["style"]) {
-    const style = attributes["style"].toLowerCase();
-    if (style.includes("display:none") || style.includes("display: none")) {
+    const style = attributes["style"];
+    // Use proper regex to handle various whitespace combinations
+    if (/display\s*:\s*none\b/i.test(style)) {
       return { action: "DISCARD" };
     }
-    if (style.includes("visibility:hidden") || style.includes("visibility: hidden")) {
+    if (/visibility\s*:\s*hidden\b/i.test(style)) {
       return { action: "DISCARD" };
     }
   }

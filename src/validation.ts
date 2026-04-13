@@ -14,6 +14,11 @@ export function validateUrl(url: string): void {
     throw new ValidationError("URL must be a non-empty string");
   }
 
+  // NEW-CRIT-004: URL length limit to prevent buffer overflow and DoS
+  if (url.length > 2048) {
+    throw new ValidationError("URL exceeds maximum length of 2048 characters");
+  }
+
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -21,15 +26,60 @@ export function validateUrl(url: string): void {
     throw new ValidationError(`Invalid URL: "${url}". Must be a valid absolute URL`);
   }
 
-  const allowedProtocols = new Set(["http:", "https:", "data:", "about:"]);
+  // HIGH-019: data: URLs are blocked to prevent XSS and data exfiltration
+  const allowedProtocols = new Set(["http:", "https:", "about:"]);
   if (!allowedProtocols.has(parsed.protocol)) {
     throw new ValidationError(
-      `Invalid URL: "${url}". Must start with http://, https://, data:, or about:`
+      `Invalid URL: "${url}". Must start with http://, https://, or about:`
     );
   }
 
   if (/\s/.test(url)) {
     throw new ValidationError(`Invalid URL: "${url}". Whitespace is not allowed`);
+  }
+
+  // Check for private IP addresses ( SSRF prevention )
+  let hostname = parsed.hostname;
+  if (hostname) {
+    // IPv6 addresses in URLs may have brackets; normalize for checks
+    if (hostname.startsWith("[") && hostname.endsWith("]")) {
+      hostname = hostname.slice(1, -1);
+    }
+    // Block localhost and private IP ranges
+    if (
+      hostname === "localhost" ||
+      /^127\./.test(hostname) ||
+      /^10\./.test(hostname) ||
+      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname) ||
+      /^192\.168\./.test(hostname) ||
+      /^169\.254\./.test(hostname) || // Link-local
+      /^0\./.test(hostname) ||
+      hostname === "::1" || // IPv6 localhost
+      /^fc00:/i.test(hostname) || // IPv6 unique local
+      /^fe80:/i.test(hostname) // IPv6 link-local
+    ) {
+      throw new ValidationError(
+        `Invalid URL: "${url}". Private IP addresses and localhost are not allowed`
+      );
+    }
+  }
+
+  // Check for IDN homograph attacks ( mixed script / punycode )
+  // First check if hostname contains punycode (xn--)
+  if (hostname && hostname.includes("xn--")) {
+    throw new ValidationError(
+      `Invalid URL: "${url}". Punycode hostnames are not allowed (possible homograph attack)`
+    );
+  }
+  // Check for mixed scripts in the hostname
+  if (hostname && /\p{Script=Latin}/u.test(hostname)) {
+    // If hostname has Latin chars, check for other scripts
+    const nonLatinScripts = /\p{Script=Han}|\p{Script=Cyrl}|\p{Script=Greek}|\p{Script=Arabic}/u;
+    if (nonLatinScripts.test(hostname)) {
+      throw new ValidationError(
+        `Invalid URL: "${url}". Mixed-script hostnames are not allowed (possible homograph attack)`
+      );
+    }
   }
 }
 
@@ -46,6 +96,17 @@ export function validateSelector(selector: string): void {
 }
 
 /**
+ * Blocked patterns for dangerous JavaScript APIs
+ * CRIT-002: Prevent access to cookies, storage, network, and code execution
+ */
+const BLOCKED_PATTERNS = [
+  /document\.cookie/i,
+  /localStorage|sessionStorage|indexedDB/i,
+  /fetch\s*\(|XMLHttpRequest|WebSocket/i,
+  /eval\s*\(|Function\s*\(/i,
+];
+
+/**
  * Validate a JavaScript expression
  */
 export function validateExpression(expression: string): void {
@@ -56,6 +117,15 @@ export function validateExpression(expression: string): void {
     throw new ValidationError(
       "Expression is too long (max 10000 characters)"
     );
+  }
+
+  // CRIT-002: Check for dangerous API patterns
+  for (const pattern of BLOCKED_PATTERNS) {
+    if (pattern.test(expression)) {
+      throw new ValidationError(
+        `Expression contains disallowed pattern: ${pattern.source}`
+      );
+    }
   }
 }
 
@@ -172,8 +242,11 @@ export function validateUploadFilePath(
     throw new ValidationError(`Upload path must be a file: "${filePath}"`);
   }
 
-  ensureAllowedPath(filePath, resolveFileAccessRoots(roots), resolved, "File");
-  return resolved;
+  // SEC-005: TOCTOU protection - re-resolve at point of use
+  const finalResolved = realpathSync.native(absolute);
+  const allowedRoots = resolveFileAccessRoots(roots);
+  ensureAllowedPath(filePath, allowedRoots, finalResolved, "File");
+  return finalResolved;
 }
 
 export function validateDownloadDirectory(

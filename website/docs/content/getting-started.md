@@ -201,3 +201,4 @@ Modes compose with each other and `maxTokens`.
 - **[Page format](#page-format)** — understand the output format TideSurf produces and how element IDs work
 - **[Token budget](#token-budget)** — control output size with `maxTokens` and learn how TideSurf prioritizes content
 - **[API reference](#api-reference)** — full method signatures and tool definitions (including `TideSurf.connect()`)
+- **[Migration guide](#migration)** — upgrade guide for breaking changes between versions

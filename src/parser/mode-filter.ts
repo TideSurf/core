@@ -1,11 +1,14 @@
 import type { OSNode } from "../types.js";
 
+const MAX_FILTER_DEPTH = 500;
+
 /**
  * Check whether any node in the subtree has an `id` field (is interactive).
  */
-function hasInteractiveDescendant(node: OSNode): boolean {
+function hasInteractiveDescendant(node: OSNode, depth: number = 0): boolean {
+  if (depth > MAX_FILTER_DEPTH) return false;
   if (node.id) return true;
-  return node.children.some(hasInteractiveDescendant);
+  return node.children.some(child => hasInteractiveDescendant(child, depth + 1));
 }
 
 /**
@@ -14,7 +17,9 @@ function hasInteractiveDescendant(node: OSNode): boolean {
  * - Ancestor nodes (no id themselves) keep tag/attributes but lose direct text.
  * - #text nodes not inside an interactive element are removed.
  */
-export function filterInteractive(nodes: OSNode[]): OSNode[] {
+export function filterInteractive(nodes: OSNode[], depth: number = 0): OSNode[] {
+  if (depth > MAX_FILTER_DEPTH) return [];
+
   const result: OSNode[] = [];
 
   for (const node of nodes) {
@@ -30,13 +35,13 @@ export function filterInteractive(nodes: OSNode[]): OSNode[] {
     }
 
     // Check if any descendant is interactive
-    if (!hasInteractiveDescendant(node)) {
+    if (!hasInteractiveDescendant(node, depth + 1)) {
       continue;
     }
 
     // This node is an ancestor of interactive elements.
     // Keep its structure but strip its own direct text content.
-    const filteredChildren = filterInteractive(node.children);
+    const filteredChildren = filterInteractive(node.children, depth + 1);
     result.push({
       tag: node.tag,
       id: node.id,
@@ -80,7 +85,8 @@ export function countInteractiveChildren(
 ): Record<string, number> {
   const counts: Record<string, number> = {};
 
-  function walk(n: OSNode): void {
+  function walk(n: OSNode, depth: number): void {
+    if (depth > MAX_FILTER_DEPTH) return;
     if (n.id) {
       const prefix = n.id.replace(/\d+$/, "");
       let label: string;
@@ -103,12 +109,12 @@ export function countInteractiveChildren(
       counts[label] = (counts[label] ?? 0) + 1;
     }
     for (const child of n.children) {
-      walk(child);
+      walk(child, depth + 1);
     }
   }
 
   for (const child of node.children) {
-    walk(child);
+    walk(child, 0);
   }
 
   return counts;
@@ -120,14 +126,15 @@ export function countInteractiveChildren(
 export function collectText(node: OSNode): string {
   const parts: string[] = [];
 
-  function walk(n: OSNode): void {
+  function walk(n: OSNode, depth: number): void {
+    if (depth > MAX_FILTER_DEPTH) return;
     if (n.text) parts.push(n.text);
     for (const child of n.children) {
-      walk(child);
+      walk(child, depth + 1);
     }
   }
 
-  walk(node);
+  walk(node, 0);
   return parts.join(" ");
 }
 
@@ -150,7 +157,9 @@ export function interactiveSummary(counts: Record<string, number>): string {
  * - For each kept container: counts interactive children, includes first ~100 chars of text
  * - Discards everything else
  */
-export function filterMinimal(nodes: OSNode[]): OSNode[] {
+export function filterMinimal(nodes: OSNode[], depth: number = 0): OSNode[] {
+  if (depth > MAX_FILTER_DEPTH) return [];
+
   const result: OSNode[] = [];
 
   for (const node of nodes) {
@@ -179,7 +188,7 @@ export function filterMinimal(nodes: OSNode[]): OSNode[] {
     }
 
     // Not a landmark — recurse into children to find nested landmarks
-    const childLandmarks = filterMinimal(node.children);
+    const childLandmarks = filterMinimal(node.children, depth + 1);
     if (childLandmarks.length > 0) {
       result.push(...childLandmarks);
     }

@@ -6,13 +6,13 @@
  * Exposes all browser tools as native MCP tools over stdio.
  *
  * Usage:
- *   bun mcp/index.ts [--auto-connect] [--port 9222] [--read-only]
+ *   bunx tidesurf mcp [--auto-connect] [--port 9222] [--read-only]
  *
  * Configure in .mcp.json:
- *   { "mcpServers": { "tidesurf": { "command": "bun", "args": ["mcp/index.ts"] } } }
+ *   { "mcpServers": { "tidesurf": { "command": "bunx", "args": ["tidesurf", "mcp"] } } }
  *
  * To connect to an already-running Chrome instance:
- *   { "mcpServers": { "tidesurf": { "command": "bun", "args": ["mcp/index.ts", "--auto-connect"] } } }
+ *   { "mcpServers": { "tidesurf": { "command": "bunx", "args": ["tidesurf", "mcp", "--auto-connect"] } } }
  *
  * Headless by default. The model can call launch_browser({ headless: false }) for a visible window.
  */
@@ -22,6 +22,15 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { TideSurf } from "../src/index.js";
 import { VERSION } from "../src/version.js";
+import {
+  validateUrl,
+  validateElementId,
+  validateSelector,
+  validateExpression,
+  validateSearchQuery,
+  validatePositiveInteger,
+} from "../src/validation.js";
+import { ValidationError } from "../src/errors.js";
 
 const autoConnect = process.argv.includes("--auto-connect");
 const readOnly = process.argv.includes("--read-only");
@@ -46,31 +55,59 @@ const port = parsePort();
 // Lazy browser launch — only starts on first tool call
 let surfing: TideSurf | null = null;
 let headless = true; // default headless, model can override via launch_browser
+let browserPromise: Promise<TideSurf> | null = null;
 
 async function browser(): Promise<TideSurf> {
-  if (!surfing) {
-    if (autoConnect) {
+  if (surfing) return surfing;
+  if (!browserPromise) {
+    browserPromise = (async () => {
       try {
-        console.error(`[tidesurf-mcp] Connecting to running Chrome (port ${port ?? 9222})...`);
-        surfing = await TideSurf.connect({ port, readOnly });
-        console.error("[tidesurf-mcp] Connected to existing browser.");
-      } catch {
-        console.error("[tidesurf-mcp] No running Chrome found, launching a new instance...");
-        surfing = await TideSurf.launch({ headless, port, readOnly });
-        console.error("[tidesurf-mcp] Browser launched.");
+        if (autoConnect) {
+          try {
+            console.error(`[tidesurf-mcp] Connecting to running Chrome (port ${port ?? 9222})...`);
+            surfing = await TideSurf.connect({ port, readOnly });
+            console.error("[tidesurf-mcp] Connected to existing browser.");
+          } catch {
+            console.error("[tidesurf-mcp] No running Chrome found, launching a new instance...");
+            surfing = await TideSurf.launch({ headless, port, readOnly });
+            console.error("[tidesurf-mcp] Browser launched.");
+          }
+        } else {
+          console.error(`[tidesurf-mcp] Launching browser (${headless ? "headless" : "headful"})...`);
+          surfing = await TideSurf.launch({ headless, port, readOnly });
+          console.error("[tidesurf-mcp] Browser ready.");
+        }
+        return surfing;
+      } finally {
+        browserPromise = null;
       }
-    } else {
-      console.error(`[tidesurf-mcp] Launching browser (${headless ? "headless" : "headful"})...`);
-      surfing = await TideSurf.launch({ headless, port, readOnly });
-      console.error("[tidesurf-mcp] Browser ready.");
-    }
+    })();
   }
-  return surfing;
+  return browserPromise;
 }
 
 
 function text(t: string) {
   return { content: [{ type: "text" as const, text: t }] };
+}
+
+// NEW-MCP-003: Timeout wrapper for all tools
+const DEFAULT_TOOL_TIMEOUT_MS = 60000;
+
+function withTimeout<T>(promise: Promise<T>, operation: string, timeoutMs = DEFAULT_TOOL_TIMEOUT_MS): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${operation} timed out after ${timeoutMs}ms`)), timeoutMs)
+    ),
+  ]);
+}
+
+// NEW-MCP-002: Standardized error response format
+function errorResponse(err: unknown): { content: Array<{ type: "text"; text: string }> } {
+  const message = err instanceof Error ? err.message : String(err);
+  const type = err instanceof ValidationError ? "Validation Error" : "Error";
+  return text(`[${type}] ${message}`);
 }
 
 // --- Server ---
@@ -97,7 +134,7 @@ server.registerTool(
     }
     if (hl !== undefined) headless = hl;
     try {
-      await browser();
+      await withTimeout(browser(), "Browser launch", 30000);
       return text(`Browser launched (${headless ? "headless" : "headful"}). You can now call navigate to go to a URL.`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -119,7 +156,7 @@ server.registerTool(
   "get_state",
   {
     description:
-      "Get the current page as compressed text. Interactive elements have IDs (L=link, B=button, I=input, S=select) for use with click/type/select.",
+      "Get the current page as compressed text. Interactive elements have IDs (L=link, B=button, I=input, S=select, F=form, T=table, D=dialog) for use with click/type/select.",
     inputSchema: {
       maxTokens: z.number().optional().describe("Token budget — prunes low-priority elements to fit"),
       viewport: z.boolean().optional().describe("Only include visible viewport elements"),
@@ -128,14 +165,24 @@ server.registerTool(
     },
   },
   async ({ maxTokens, viewport, mode, includeHidden }) => {
-    const s = await browser();
-    const state = await s.getState({
-      ...(maxTokens ? { maxTokens } : {}),
-      ...(viewport !== undefined ? { viewport } : {}),
-      ...(mode ? { mode } : {}),
-      ...(includeHidden !== undefined ? { includeHidden } : {}),
-    });
-    return text(state.content);
+    try {
+      if (maxTokens !== undefined) {
+        validatePositiveInteger(maxTokens, "maxTokens");
+      }
+      const s = await browser();
+      const state = await withTimeout(
+        s.getState({
+          ...(maxTokens ? { maxTokens } : {}),
+          ...(viewport !== undefined ? { viewport } : {}),
+          ...(mode ? { mode } : {}),
+          ...(includeHidden !== undefined ? { includeHidden } : {}),
+        }),
+        "Get state"
+      );
+      return text(state.content);
+    } catch (err) {
+      return errorResponse(err);
+    }
   }
 );
 
@@ -149,10 +196,16 @@ if (!readOnly) {
       },
     },
     async ({ url }) => {
-      const s = await browser();
-      await s.navigate(url);
-      const state = await s.getState();
-      return text(state.content);
+      try {
+        // HIGH-007: Missing input validation at MCP boundary
+        validateUrl(url);
+        const s = await browser();
+        await withTimeout(s.navigate(url), "Navigate");
+        const state = await withTimeout(s.getState(), "Get state");
+        return text(state.content);
+      } catch (err) {
+        return errorResponse(err);
+      }
     }
   );
 
@@ -166,11 +219,16 @@ if (!readOnly) {
       },
     },
     async ({ id }) => {
-      const s = await browser();
-      const page = s.getPage();
-      await page.click(id);
-      const state = await s.getState();
-      return text(`Clicked ${id}. Page state after click:\n\n${state.content}`);
+      try {
+        validateElementId(id);
+        const s = await browser();
+        const page = s.getPage();
+        await withTimeout(page.click(id), "Click");
+        const state = await withTimeout(s.getState(), "Get state");
+        return text(`Clicked ${id}. Page state after click:\n\n${state.content}`);
+      } catch (err) {
+        return errorResponse(err);
+      }
     }
   );
 
@@ -185,9 +243,14 @@ if (!readOnly) {
       },
     },
     async ({ id, text: t, clear }) => {
-      const page = (await browser()).getPage();
-      await page.type(id, t, clear ?? false);
-      return text(`Typed "${t}" into ${id}${clear ? " (field cleared first)" : ""}. Call get_state to see the updated page, or call click on a submit button to proceed.`);
+      try {
+        validateElementId(id);
+        const page = (await browser()).getPage();
+        await withTimeout(page.type(id, t, clear ?? false), "Type");
+        return text(`Typed "${t}" into ${id}${clear ? " (field cleared first)" : ""}. Call get_state to see the updated page, or call click on a submit button to proceed.`);
+      } catch (err) {
+        return errorResponse(err);
+      }
     }
   );
 
@@ -201,9 +264,14 @@ if (!readOnly) {
       },
     },
     async ({ id, value }) => {
-      const page = (await browser()).getPage();
-      await page.select(id, value);
-      return text(`Selected "${value}" in ${id}. Call get_state to see the updated page if the selection triggers a change.`);
+      try {
+        validateElementId(id);
+        const page = (await browser()).getPage();
+        await withTimeout(page.select(id, value), "Select");
+        return text(`Selected "${value}" in ${id}. Call get_state to see the updated page if the selection triggers a change.`);
+      } catch (err) {
+        return errorResponse(err);
+      }
     }
   );
 
@@ -217,11 +285,18 @@ if (!readOnly) {
       },
     },
     async ({ direction, amount }) => {
-      const s = await browser();
-      const page = s.getPage();
-      await page.scroll(direction, amount);
-      const state = await s.getState();
-      return text(`Scrolled ${direction}. Page state after scroll:\n\n${state.content}`);
+      try {
+        if (amount !== undefined && amount <= 0) {
+          throw new ValidationError("Scroll amount must be a positive number");
+        }
+        const s = await browser();
+        const page = s.getPage();
+        await withTimeout(page.scroll(direction, amount), "Scroll");
+        const state = await withTimeout(s.getState(), "Get state");
+        return text(`Scrolled ${direction}. Page state after scroll:\n\n${state.content}`);
+      } catch (err) {
+        return errorResponse(err);
+      }
     }
   );
 }
@@ -235,9 +310,14 @@ server.registerTool(
     },
   },
   async ({ selector }) => {
-    const page = (await browser()).getPage();
-    const t = await page.extract(selector);
-    return text(t);
+    try {
+      validateSelector(selector);
+      const page = (await browser()).getPage();
+      const t = await withTimeout(page.extract(selector), "Extract");
+      return text(t);
+    } catch (err) {
+      return errorResponse(err);
+    }
   }
 );
 
@@ -251,9 +331,14 @@ if (!readOnly) {
       },
     },
     async ({ expression }) => {
-      const page = (await browser()).getPage();
-      const result = await page.evaluate(expression);
-      return text(String(result));
+      try {
+        validateExpression(expression);
+        const page = (await browser()).getPage();
+        const result = await withTimeout(page.evaluate(expression), "Evaluate");
+        return text(String(result));
+      } catch (err) {
+        return errorResponse(err);
+      }
     }
   );
 }
@@ -267,8 +352,12 @@ server.registerTool(
     inputSchema: {},
   },
   async () => {
-    const tabs = await (await browser()).listTabs();
-    return text(JSON.stringify(tabs, null, 2));
+    try {
+      const tabs = await withTimeout((await browser()).listTabs(), "List tabs");
+      return text(JSON.stringify(tabs, null, 2));
+    } catch (err) {
+      return errorResponse(err);
+    }
   }
 );
 
@@ -282,8 +371,16 @@ if (!readOnly) {
       },
     },
     async ({ url }) => {
-      const tab = await (await browser()).newTab(url);
-      return text(JSON.stringify(tab));
+      try {
+        // HIGH-007: Validate URL if provided
+        if (url !== undefined) {
+          validateUrl(url);
+        }
+        const tab = await withTimeout((await browser()).newTab(url), "New tab");
+        return text(JSON.stringify(tab));
+      } catch (err) {
+        return errorResponse(err);
+      }
     }
   );
 }
@@ -297,10 +394,17 @@ server.registerTool(
     },
   },
   async ({ tabId }) => {
-    const s = await browser();
-    await s.switchTab(tabId);
-    const state = await s.getState();
-    return text(`Switched to tab ${tabId}. Page state:\n\n${state.content}`);
+    try {
+      if (!tabId || typeof tabId !== "string") {
+        throw new ValidationError("Tab ID must be a non-empty string");
+      }
+      const s = await browser();
+      await withTimeout(s.switchTab(tabId), "Switch tab");
+      const state = await withTimeout(s.getState(), "Get state");
+      return text(`Switched to tab ${tabId}. Page state:\n\n${state.content}`);
+    } catch (err) {
+      return errorResponse(err);
+    }
   }
 );
 
@@ -314,10 +418,17 @@ if (!readOnly) {
       },
     },
     async ({ tabId }) => {
-      const s = await browser();
-      await s.closeTab(tabId);
-      const tabs = await s.listTabs();
-      return text(`Closed tab ${tabId}. Remaining tabs:\n${JSON.stringify(tabs, null, 2)}`);
+      try {
+        if (!tabId || typeof tabId !== "string") {
+          throw new ValidationError("Tab ID must be a non-empty string");
+        }
+        const s = await browser();
+        await withTimeout(s.closeTab(tabId), "Close tab");
+        const tabs = await withTimeout(s.listTabs(), "List tabs");
+        return text(`Closed tab ${tabId}. Remaining tabs:\n${JSON.stringify(tabs, null, 2)}`);
+      } catch (err) {
+        return errorResponse(err);
+      }
     }
   );
 }
@@ -334,9 +445,17 @@ server.registerTool(
     },
   },
   async ({ query, maxResults }) => {
-    const page = (await browser()).getPage();
-    const results = await page.search(query, maxResults);
-    return text(JSON.stringify(results, null, 2));
+    try {
+      validateSearchQuery(query);
+      if (maxResults !== undefined) {
+        validatePositiveInteger(maxResults, "maxResults");
+      }
+      const page = (await browser()).getPage();
+      const results = await withTimeout(page.search(query, maxResults), "Search");
+      return text(JSON.stringify(results, null, 2));
+    } catch (err) {
+      return errorResponse(err);
+    }
   }
 );
 
@@ -350,9 +469,17 @@ server.registerTool(
     },
   },
   async ({ elementId, fullPage }) => {
-    const page = (await browser()).getPage();
-    const base64 = await page.screenshot({ elementId, fullPage });
-    return { content: [{ type: "image" as const, data: base64, mimeType: "image/png" }] };
+    try {
+      // NEW-MCP-004: Screenshot missing error handling
+      if (elementId !== undefined) {
+        validateElementId(elementId);
+      }
+      const page = (await browser()).getPage();
+      const base64 = await withTimeout(page.screenshot({ elementId, fullPage }), "Screenshot");
+      return { content: [{ type: "image" as const, data: base64, mimeType: "image/png" }] };
+    } catch (err) {
+      return errorResponse(err);
+    }
   }
 );
 
@@ -366,9 +493,13 @@ if (!readOnly) {
       inputSchema: {},
     },
     async () => {
-      const page = (await browser()).getPage();
-      const t = await page.clipboardRead();
-      return text(t);
+      try {
+        const page = (await browser()).getPage();
+        const t = await withTimeout(page.clipboardRead(), "Clipboard read");
+        return text(t);
+      } catch (err) {
+        return errorResponse(err);
+      }
     }
   );
 
@@ -382,9 +513,14 @@ if (!readOnly) {
       },
     },
     async ({ id, filePath }) => {
-      const page = (await browser()).getPage();
-      await page.upload(id, [filePath]);
-      return text(`Uploaded file "${filePath}" to ${id}. Call get_state to see the updated page.`);
+      try {
+        validateElementId(id);
+        const page = (await browser()).getPage();
+        await withTimeout(page.upload(id, [filePath]), "Upload");
+        return text(`Uploaded file "${filePath}" to ${id}. Call get_state to see the updated page.`);
+      } catch (err) {
+        return errorResponse(err);
+      }
     }
   );
 
@@ -397,9 +533,13 @@ if (!readOnly) {
       },
     },
     async ({ text: t }) => {
-      const page = (await browser()).getPage();
-      await page.clipboardWrite(t);
-      return text(`Clipboard updated with: "${t.length > 200 ? t.slice(0, 200) + '...' : t}"`);
+      try {
+        const page = (await browser()).getPage();
+        await withTimeout(page.clipboardWrite(t), "Clipboard write");
+        return text(`Clipboard updated with: "${t.length > 200 ? t.slice(0, 200) + '...' : t}"`);
+      } catch (err) {
+        return errorResponse(err);
+      }
     }
   );
 
@@ -414,9 +554,18 @@ if (!readOnly) {
       },
     },
     async ({ id, downloadDir, timeout }) => {
-      const page = (await browser()).getPage();
-      const result = await page.download(id, { downloadDir, timeout });
-      return text(JSON.stringify(result));
+      try {
+        validateElementId(id);
+        const page = (await browser()).getPage();
+        const result = await withTimeout(
+          page.download(id, { downloadDir, timeout }),
+          "Download",
+          timeout ?? 60000
+        );
+        return text(JSON.stringify(result));
+      } catch (err) {
+        return errorResponse(err);
+      }
     }
   );
 }
@@ -426,17 +575,53 @@ if (!readOnly) {
 async function main() {
   const transport = new StdioServerTransport();
 
-  const shutdown = async () => {
-    if (surfing) await surfing.close();
+  // NEW-MCP-001: Add stdio error handling
+  transport.onerror = (err: Error) => {
+    console.error(`[tidesurf-mcp] Transport error: ${err.message}`);
+  };
+  transport.onclose = () => {
+    console.error("[tidesurf-mcp] Transport closed");
     process.exit(0);
   };
 
-  process.on("SIGINT", shutdown);
-  process.on("SIGTERM", shutdown);
+  let isShuttingDown = false;
+  const shutdown = async (signal: string) => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    console.error(`[tidesurf-mcp] Received ${signal}, shutting down...`);
+    try {
+      if (surfing) {
+        await Promise.race([
+          surfing.close(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Shutdown timeout')), 10000)
+          )
+        ]);
+      }
+      process.exit(0);
+    } catch (err) {
+      console.error(`[tidesurf-mcp] Shutdown error: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    }
+  };
+
+  process.on("SIGINT", () => shutdown("SIGINT"));
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
 
   await server.connect(transport);
   console.error("[tidesurf-mcp] MCP server running on stdio");
 }
+
+// NEW-CLI-001: Add unhandled process event handlers
+process.on('uncaughtException', (err) => {
+  console.error(`[tidesurf-mcp] Uncaught exception: ${err instanceof Error ? err.message : String(err)}`);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error(`[tidesurf-mcp] Unhandled rejection: ${reason instanceof Error ? reason.message : String(reason)}`);
+  process.exit(1);
+});
 
 main().catch((err) => {
   console.error("[tidesurf-mcp] Fatal:", err);

@@ -253,12 +253,25 @@ export class TideSurf {
   async switchTab(tabId: string): Promise<void> {
     let page = this.pages.get(tabId);
     if (!page) {
-      const conn = await this.tabManager.connectToTab(tabId);
-      if (this.defaultViewport) {
-        await applyViewport(conn, this.defaultViewport);
+      let conn;
+      try {
+        conn = await this.tabManager.connectToTab(tabId);
+        if (this.defaultViewport) {
+          await applyViewport(conn, this.defaultViewport);
+        }
+        page = new SurfingPage(conn, this.fileAccessRoots);
+        this.pages.set(tabId, page);
+      } catch (err) {
+        // Clean up connection if it was created but setup failed
+        if (conn) {
+          try {
+            await conn.client.close();
+          } catch {
+            // ignore cleanup errors
+          }
+        }
+        throw err;
       }
-      page = new SurfingPage(conn, this.fileAccessRoots);
-      this.pages.set(tabId, page);
     }
     this.activePage = page;
     this.activeTabId = tabId;
@@ -274,23 +287,58 @@ export class TideSurf {
     const page = this.pages.get(tabId);
     const isActiveTab = tabId === this.activeTabId;
 
+    // Always clean up from pages map to prevent memory leaks
     if (page) {
       try {
         await page.close();
-      } catch {
-        // ignore
+      } catch (err) {
+        // Log for debugging but don't throw - we're cleaning up
+        if (process.env.NODE_ENV === "development") {
+          console.error(`Error closing page for tab ${tabId}:`, err);
+        }
       }
       this.pages.delete(tabId);
     }
-    await this.tabManager.closeTab(tabId);
+
+    // Get remaining tabs BEFORE closing to handle race conditions
+    let remainingTabs = await this.tabManager.listTabs();
+    
+    try {
+      await this.tabManager.closeTab(tabId);
+    } catch (err) {
+      // Tab may already be closed - check if it's actually gone
+      remainingTabs = await this.tabManager.listTabs();
+      const tabStillExists = remainingTabs.some(t => t.id === tabId);
+      if (tabStillExists) {
+        throw err; // Re-throw if the tab is still there (real error)
+      }
+      // Otherwise tab is closed, continue
+    }
+
+    // Re-check remaining tabs after close operation
+    remainingTabs = await this.tabManager.listTabs();
 
     // If we closed the active tab, switch to another open tab
     if (isActiveTab) {
-      const remaining = await this.tabManager.listTabs();
-      if (remaining.length > 0) {
-        await this.switchTab(remaining[0].id);
+      if (remainingTabs.length > 0) {
+        // Prefer the first remaining tab that we have a page for, or just the first one
+        const nextTab = remainingTabs.find(t => this.pages.has(t.id)) ?? remainingTabs[0];
+        await this.switchTab(nextTab.id);
       } else {
         await this.newTab("about:blank");
+      }
+    }
+
+    // Cleanup any pages in the map that no longer exist as tabs (prevents memory leaks)
+    const validTabIds = new Set(remainingTabs.map(t => t.id));
+    for (const [id, stalePage] of this.pages.entries()) {
+      if (!validTabIds.has(id)) {
+        try {
+          await stalePage.close();
+        } catch {
+          // Ignore - already closed
+        }
+        this.pages.delete(id);
       }
     }
   }

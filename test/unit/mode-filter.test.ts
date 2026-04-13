@@ -224,4 +224,33 @@ describe("filterMinimal", () => {
     // Should NOT say "1 links"
     expect(result[0].text).not.toMatch(/1 links/);
   });
+
+  // HIGH-004: Stack overflow protection with depth limit
+  it("handles deeply nested trees without stack overflow (filterInteractive)", () => {
+    // Create a deeply nested structure (within MAX_FILTER_DEPTH = 500)
+    let deepNode = makeNode("button", [makeText("Deep")], { id: "B1" });
+    for (let i = 0; i < 400; i++) {
+      deepNode = makeNode("div", [deepNode]);
+    }
+    const nodes: OSNode[] = [deepNode];
+    
+    // Should not throw
+    const result = filterInteractive(nodes);
+    expect(result.length).toBeGreaterThan(0);
+    expect(result[0].children.length).toBeGreaterThan(0);
+  });
+
+  it("handles deeply nested trees without stack overflow (filterMinimal)", () => {
+    // Create a deeply nested structure with landmarks (within MAX_FILTER_DEPTH = 500)
+    let deepNode = makeNode("nav", [makeText("Navigation")]);
+    for (let i = 0; i < 400; i++) {
+      deepNode = makeNode("div", [deepNode]);
+    }
+    const nodes: OSNode[] = [deepNode];
+    
+    // Should not throw
+    const result = filterMinimal(nodes);
+    // Landmark should still be found despite deep nesting
+    expect(result.some(n => n.tag === "nav")).toBe(true);
+  });
 });

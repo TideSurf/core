@@ -83,6 +83,19 @@ export function buildChromeArgs(
 
   const explicitNoSandbox = env["TIDESURF_NO_SANDBOX"] === "1";
   if (explicitNoSandbox || uid === 0) {
+    // SECURITY: Add warning for sandbox bypass
+    if (explicitNoSandbox) {
+      console.warn(
+        "[SECURITY WARNING] TIDESURF_NO_SANDBOX is set. Chrome sandbox is disabled. " +
+        "This reduces security isolation. Only use in trusted environments."
+      );
+    }
+    if (uid === 0) {
+      console.warn(
+        "[SECURITY WARNING] Running as root. Chrome sandbox is disabled. " +
+        "Consider running as a non-root user for better security."
+      );
+    }
     args.push(
       "--no-sandbox",
       "--disable-setuid-sandbox",
@@ -273,6 +286,10 @@ function waitForDevTools(proc: ChildProcess, port: number): Promise<string> {
     stderrStream.setEncoding("utf-8");
     stderrStream.on("data", (chunk: string) => {
       accumulatedErr += chunk;
+      // NEW-CDP-002: Cap unbounded string accumulation at 100KB
+      if (accumulatedErr.length > 100_000) {
+        accumulatedErr = accumulatedErr.slice(-50_000);
+      }
       const match = accumulatedErr.match(DEVTOOLS_RE);
       if (match) finish(match[1]);
     });
@@ -282,6 +299,10 @@ function waitForDevTools(proc: ChildProcess, port: number): Promise<string> {
       stdout.setEncoding("utf-8");
       stdout.on("data", (chunk: string) => {
         accumulatedOut += chunk;
+        // NEW-CDP-002: Cap unbounded string accumulation at 100KB
+        if (accumulatedOut.length > 100_000) {
+          accumulatedOut = accumulatedOut.slice(-50_000);
+        }
         const match = accumulatedOut.match(DEVTOOLS_RE);
         if (match) finish(match[1]);
       });

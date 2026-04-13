@@ -29,7 +29,7 @@ import {
   validateUploadFilePath,
   resolveFileAccessRoots,
 } from "../validation.js";
-import { setupDownloads, downloadFile } from "./download-manager.js";
+import { setupDownloads, setupDownloadListeners, waitForDownload } from "./download-manager.js";
 
 function collectVisibleIds(nodes: OSNode[]): Set<string> {
   const ids = new Set<string>();
@@ -93,13 +93,29 @@ export class SurfingPage {
       await markVisibleElements(this.conn);
     }
 
-    // 4. Get URL and scroll position before DOM fetch (needed for serialization)
-    const url = await this.getUrl();
-    const title = await this.getTitle();
-
+    // 4. Batch URL, title, and scroll position into single CDP call
+    // BEFORE: 3 sequential CDP calls → AFTER: 1 batched call (HIGH-002a optimization)
+    const pageInfo = await cdp.evaluate(
+      this.conn,
+      `({
+        url: location.href,
+        title: document.title,
+        scrollY: window.scrollY,
+        scrollHeight: document.documentElement.scrollHeight,
+        viewportHeight: window.innerHeight
+      })`
+    ) as { url: string; title: string; scrollY: number; scrollHeight: number; viewportHeight: number };
+    
+    const url = pageInfo.url;
+    const title = pageInfo.title;
+    
     let scrollPosition: ScrollPosition | undefined;
     if (useViewport && !includeHidden) {
-      scrollPosition = await getScrollPosition(this.conn);
+      scrollPosition = {
+        scrollY: pageInfo.scrollY,
+        scrollHeight: pageInfo.scrollHeight,
+        viewportHeight: pageInfo.viewportHeight,
+      };
     }
 
     // 5. Get full DOM
@@ -168,7 +184,7 @@ export class SurfingPage {
    */
   async click(id: string): Promise<void> {
     validateElementId(id);
-    const backendNodeId = this.resolveId(id);
+    const backendNodeId = await this.resolveId(id);
     await cdp.clickNode(this.conn, backendNodeId);
     await cdp.waitForStable(this.conn);
   }
@@ -181,7 +197,7 @@ export class SurfingPage {
    */
   async type(id: string, text: string, clear: boolean = false): Promise<void> {
     validateElementId(id);
-    const backendNodeId = this.resolveId(id);
+    const backendNodeId = await this.resolveId(id);
     await cdp.typeText(this.conn, backendNodeId, text, clear);
     await cdp.waitForStable(this.conn);
   }
@@ -193,7 +209,7 @@ export class SurfingPage {
    */
   async select(id: string, value: string): Promise<void> {
     validateElementId(id);
-    const backendNodeId = this.resolveId(id);
+    const backendNodeId = await this.resolveId(id);
     await cdp.selectOption(this.conn, backendNodeId, value);
     await cdp.waitForStable(this.conn);
   }
@@ -264,7 +280,7 @@ export class SurfingPage {
     validateSearchQuery(query);
     validatePositiveInteger(maxResults, "maxResults");
     const needle = query.trim().toLowerCase();
-    const { nodes, nodeMap } = walkDOM(await cdp.getFullDOM(this.conn), { truncate: false });
+    const { nodes } = walkDOM(await cdp.getFullDOM(this.conn), { truncate: false });
     const results: SearchResult[] = [];
 
     const walk = (node: OSNode, parentTag?: string, nearestId?: string): void => {
@@ -300,7 +316,9 @@ export class SurfingPage {
       }
     }
 
-    this.lastNodeMap = nodeMap;
+    // Note: search() does NOT update lastNodeMap to avoid overwriting
+    // the main node map from getState(). IDs from search results reference
+    // the current getState() node map.
     return results;
   }
 
@@ -316,7 +334,7 @@ export class SurfingPage {
 
     if (options?.elementId) {
       validateElementId(options.elementId);
-      const backendNodeId = this.resolveId(options.elementId);
+      const backendNodeId = await this.resolveId(options.elementId);
 
       // Get box model for the element to create a clip region
       const { model } = await this.conn.DOM.getBoxModel({ backendNodeId });
@@ -364,7 +382,7 @@ export class SurfingPage {
     const validatedFilePaths = filePaths.map((fp) =>
       validateUploadFilePath(fp, this.fileAccessRoots)
     );
-    const backendNodeId = this.resolveId(id);
+    const backendNodeId = await this.resolveId(id);
     await cdp.setFileInput(this.conn, backendNodeId, validatedFilePaths);
     await cdp.waitForStable(this.conn);
   }
@@ -400,24 +418,32 @@ export class SurfingPage {
     if (options?.timeout !== undefined) {
       validatePositiveInteger(options.timeout, "timeout");
     }
-    const backendNodeId = this.resolveId(id);
+    const backendNodeId = await this.resolveId(id);
 
+    // Setup download directory and listeners BEFORE clicking
     const downloadDir = await setupDownloads(
       this.conn,
       options?.downloadDir
         ? validateDownloadDirectory(options.downloadDir, this.fileAccessRoots)
         : undefined
     );
-    const downloadPromise = downloadFile(
+
+    // Setup listeners FIRST to avoid race with fast downloads
+    const { promise: downloadPromise, cleanup } = setupDownloadListeners(
       this.conn,
-      downloadDir,
-      options?.timeout
+      downloadDir
     );
 
-    // Click the element to trigger the download
-    await cdp.clickNode(this.conn, backendNodeId);
+    try {
+      // Click the element to trigger the download
+      await cdp.clickNode(this.conn, backendNodeId);
 
-    return downloadPromise;
+      // Wait for download to complete
+      return await waitForDownload(downloadPromise, options?.timeout ?? 30000, cleanup);
+    } catch (err) {
+      cleanup();
+      throw err;
+    }
   }
 
   /**
@@ -427,10 +453,30 @@ export class SurfingPage {
     await cdp.disconnect(this.conn);
   }
 
-  private resolveId(id: string): number {
+  private async resolveId(id: string): Promise<number> {
     const backendNodeId = this.lastNodeMap.get(id);
     if (backendNodeId === undefined) {
       throw new ElementNotFoundError(id);
+    }
+    // Pre-flight validation: verify the node still exists in the DOM
+    // This prevents race conditions where the element was removed after getState()
+    try {
+      // Use resolveNode to check if the node is still attached to the DOM
+      const result = await this.conn.DOM.resolveNode({ backendNodeId });
+      // If we got a result but no object, the node exists but may be detached
+      if (!result || !result.object) {
+        throw new ElementNotFoundError(id, "Element may have changed - call get_state to refresh");
+      }
+      // Release the remote object immediately - we only needed to check existence
+      if (result.object.objectId) {
+        await this.conn.Runtime.releaseObject({ objectId: result.object.objectId }).catch(() => {});
+      }
+    } catch (err) {
+      // If resolveNode throws, the node doesn't exist in the current DOM
+      if (err instanceof ElementNotFoundError) {
+        throw err;
+      }
+      throw new ElementNotFoundError(id, "Element may have changed - call get_state to refresh");
     }
     return backendNodeId;
   }

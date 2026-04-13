@@ -22,8 +22,26 @@ describe("validateUrl", () => {
   it("accepts valid http URLs", () => {
     expect(() => validateUrl("http://example.com")).not.toThrow();
     expect(() => validateUrl("https://example.com/path?q=1")).not.toThrow();
-    expect(() => validateUrl("data:text/html,<h1>Test</h1>")).not.toThrow();
     expect(() => validateUrl("about:blank")).not.toThrow();
+  });
+
+  it("rejects data: URLs (HIGH-019)", () => {
+    expect(() => validateUrl("data:text/html,<h1>Test</h1>")).toThrow(ValidationError);
+    expect(() => validateUrl("data:text/html,<script>alert(1)</script>")).toThrow(ValidationError);
+  });
+
+  it("rejects private IP addresses (SSRF prevention)", () => {
+    expect(() => validateUrl("http://localhost/path")).toThrow(ValidationError);
+    expect(() => validateUrl("http://127.0.0.1/path")).toThrow(ValidationError);
+    expect(() => validateUrl("http://10.0.0.1/path")).toThrow(ValidationError);
+    expect(() => validateUrl("http://192.168.1.1/path")).toThrow(ValidationError);
+    expect(() => validateUrl("http://172.16.0.1/path")).toThrow(ValidationError);
+    expect(() => validateUrl("http://[::1]/path")).toThrow(ValidationError);
+  });
+
+  it("rejects punycode hostnames (IDN homograph prevention)", () => {
+    // xn-- prefix indicates punycode encoding (IDN)
+    expect(() => validateUrl("http://xn--e1awd7f.com")).toThrow(ValidationError);
   });
 
   it("rejects empty string", () => {
@@ -38,6 +56,19 @@ describe("validateUrl", () => {
   it("rejects malformed URLs and whitespace", () => {
     expect(() => validateUrl("https://exa mple.com")).toThrow(ValidationError);
     expect(() => validateUrl("http://")).toThrow(ValidationError);
+  });
+
+  it("rejects URLs over 2048 characters (NEW-CRIT-004)", () => {
+    const longPath = "a".repeat(2100);
+    expect(() => validateUrl(`https://example.com/${longPath}`)).toThrow(ValidationError);
+    expect(() => validateUrl(`https://example.com/${longPath}`)).toThrow("2048");
+  });
+
+  it("accepts URLs at the 2048 character limit", () => {
+    // URL with exactly 2048 characters should pass
+    const baseUrl = "https://example.com/";
+    const padding = "x".repeat(2048 - baseUrl.length);
+    expect(() => validateUrl(`${baseUrl}${padding}`)).not.toThrow();
   });
 });
 
@@ -59,6 +90,8 @@ describe("validateSelector", () => {
 describe("validateExpression", () => {
   it("accepts valid expressions", () => {
     expect(() => validateExpression("document.title")).not.toThrow();
+    expect(() => validateExpression("1+1")).not.toThrow();
+    expect(() => validateExpression("window.location.href")).not.toThrow();
   });
 
   it("rejects empty string", () => {
@@ -67,6 +100,28 @@ describe("validateExpression", () => {
 
   it("rejects overly long expressions", () => {
     expect(() => validateExpression("x".repeat(10001))).toThrow(ValidationError);
+  });
+
+  it("rejects document.cookie (CRIT-002)", () => {
+    expect(() => validateExpression("document.cookie")).toThrow(ValidationError);
+    expect(() => validateExpression("document.cookie.split(';')")).toThrow(ValidationError);
+  });
+
+  it("rejects storage APIs (CRIT-002)", () => {
+    expect(() => validateExpression("localStorage.getItem('key')")).toThrow(ValidationError);
+    expect(() => validateExpression("sessionStorage.setItem('k', 'v')")).toThrow(ValidationError);
+    expect(() => validateExpression("indexedDB.open('db')")).toThrow(ValidationError);
+  });
+
+  it("rejects network APIs (CRIT-002)", () => {
+    expect(() => validateExpression("fetch('https://attacker.com')")).toThrow(ValidationError);
+    expect(() => validateExpression("new XMLHttpRequest()")).toThrow(ValidationError);
+    expect(() => validateExpression("new WebSocket('wss://evil.com')")).toThrow(ValidationError);
+  });
+
+  it("rejects code execution APIs (CRIT-002)", () => {
+    expect(() => validateExpression("eval('alert(1)')")).toThrow(ValidationError);
+    expect(() => validateExpression("Function('return 1')()")).toThrow(ValidationError);
   });
 });
 

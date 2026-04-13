@@ -23,16 +23,25 @@
 
 <p align="center">
   スクリーンショットもビジョンモデルも不要です。<br>
-  DOMを圧縮して、LLMに直接渡します。
+  TideSurfはライブDOMをトークン効率の良い構造化表現に変換し、LLMが理解・操作できるようにします。
 </p>
 
-<br>
+<p align="center">
+  TideSurfは、<a href="https://chromedevtools.github.io/devtools-protocol">Chrome DevTools Protocol</a>を介してChromiumをLLMエージェントに接続するTypeScriptライブラリです。ライブDOMをウォークし、50〜200トークンのトークン効率の良い構造化表現（スクリーンショットベースのアプローチより10〜100倍低いトークンコスト）に圧縮し、18個のツール定義をLLM関数呼び出し用に公開します。
+</p>
+
+<p align="center">
+  <a href="https://tidesurf.org/docs#getting-started">Getting started</a>
+  <a href="https://tidesurf.org/docs#page-format">Page format</a>
+  <a href="https://tidesurf.org/docs#token-budget">Token budget</a>
+  <a href="https://tidesurf.org/docs#agent-patterns">Agent patterns</a>
+  <a href="https://tidesurf.org/docs#security">Security</a>
+  <a href="https://tidesurf.org/docs#api-reference">API reference</a>
+</p>
 
 <p align="center">
   <img src="https://tidesurf.org/og.png" alt="TideSurf Social Preview">
 </p>
-
-<br>
 
 <p align="center">
   <a href="https://github.com/TideSurf/core/actions/workflows/ci.yml"><img src="https://github.com/TideSurf/core/actions/workflows/ci.yml/badge.svg" alt="CI"></a>

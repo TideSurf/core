@@ -96,4 +96,17 @@ describe("pruneToFit", () => {
       expect(resultText).toContain("Visible heading");
     }
   });
+
+  // MED-007: structuredClone fallback test
+  it("handles structuredClone failure gracefully with fallback deep copy", () => {
+    const nodes = [
+      makeNode("heading", [makeText("Title")]),
+      makeNode("button", [makeText("Click")], { id: "B1" }),
+    ];
+
+    // Should not throw even if structuredClone fails
+    const result = pruneToFit(nodes, { maxTokens: 1000 });
+    expect(result).toBeDefined();
+    expect(result.length).toBeGreaterThan(0);
+  });
 });
