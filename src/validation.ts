@@ -6,6 +6,37 @@ import { ValidationError } from "./errors.js";
 const ELEMENT_ID_PATTERN = /^[A-Z]\d+$/;
 const DEFAULT_FILE_ACCESS_ROOTS = [process.cwd(), tmpdir()];
 
+// 0.5.2: IPv4-mapped IPv6 unmap. Covers both dotted (::ffff:1.2.3.4) and
+// hex (::ffff:0102:0304) tails since Chrome accepts both in URLs.
+function unmapIPv4FromIPv6(host: string): string | null {
+  const lower = host.toLowerCase();
+  const dotted = /^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/.exec(lower);
+  if (dotted) return dotted[1];
+  const hex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(lower);
+  if (hex) {
+    const high = parseInt(hex[1], 16);
+    const low = parseInt(hex[2], 16);
+    if (Number.isFinite(high) && Number.isFinite(low)) {
+      return `${(high >> 8) & 0xff}.${high & 0xff}.${(low >> 8) & 0xff}.${low & 0xff}`;
+    }
+  }
+  return null;
+}
+
+// 0.5.2: reject reserved IPv6 ranges including the unspecified address (::)
+// which was previously missed. Covers loopback, unspecified, ULA (fc00::/7),
+// and link-local (fe80::/10).
+function isBlockedIPv6(host: string): boolean {
+  const lower = host.toLowerCase();
+  if (lower === "::" || lower === "::1") return true;
+  // all-zero v6 (::, 0:0:0:0:0:0:0:0, etc.)
+  if (/^0*(?::0*)+$/.test(lower)) return true;
+  if (/^fc[0-9a-f]{2}:/i.test(lower)) return true; // fc00::/8
+  if (/^fd[0-9a-f]{2}:/i.test(lower)) return true; // fd00::/8 (ULA other half)
+  if (/^fe[89ab][0-9a-f]:/i.test(lower)) return true; // fe80::/10
+  return false;
+}
+
 /**
  * Validate a URL string
  */
@@ -45,18 +76,18 @@ export function validateUrl(url: string): void {
     if (hostname.startsWith("[") && hostname.endsWith("]")) {
       hostname = hostname.slice(1, -1);
     }
-    // Block localhost and private IP ranges
+    // 0.5.2: IPv4-mapped IPv6 (::ffff:169.254.169.254) used to bypass the
+    // IPv4 checks below — unmap it so the v4-range regexes see the real v4.
+    const ipv4 = unmapIPv4FromIPv6(hostname) ?? hostname;
     if (
-      hostname === "localhost" ||
-      /^127\./.test(hostname) ||
-      /^10\./.test(hostname) ||
-      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname) ||
-      /^192\.168\./.test(hostname) ||
-      /^169\.254\./.test(hostname) || // Link-local
-      /^0\./.test(hostname) ||
-      hostname === "::1" || // IPv6 localhost
-      /^fc00:/i.test(hostname) || // IPv6 unique local
-      /^fe80:/i.test(hostname) // IPv6 link-local
+      ipv4 === "localhost" ||
+      /^127\./.test(ipv4) ||
+      /^10\./.test(ipv4) ||
+      /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(ipv4) ||
+      /^192\.168\./.test(ipv4) ||
+      /^169\.254\./.test(ipv4) || // Link-local
+      /^0\./.test(ipv4) ||
+      isBlockedIPv6(hostname)
     ) {
       throw new ValidationError(
         `Invalid URL: "${url}". Private IP addresses and localhost are not allowed`
@@ -99,12 +130,53 @@ export function validateSelector(selector: string): void {
  * Blocked patterns for dangerous JavaScript APIs
  * CRIT-002: Prevent access to cookies, storage, network, and code execution
  */
-const BLOCKED_PATTERNS = [
-  /document\.cookie/i,
-  /localStorage|sessionStorage|indexedDB/i,
-  /fetch\s*\(|XMLHttpRequest|WebSocket/i,
-  /eval\s*\(|Function\s*\(/i,
+const BLOCKED_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
+  { pattern: /\bdocument\s*\.\s*cookie\b/i, label: "document.cookie" },
+  {
+    pattern: /\b(?:localStorage|sessionStorage|indexedDB)\b/i,
+    label: "storage API",
+  },
+  { pattern: /\bfetch\s*\(/i, label: "fetch()" },
+  { pattern: /\b(?:XMLHttpRequest|WebSocket)\b/i, label: "network constructor" },
+  // 0.5.2: \beval\b (word boundary) catches (0,eval)(...) and window.eval
+  { pattern: /\beval\b/i, label: "eval" },
+  // Function constructor (case-sensitive — `function` keyword is fine)
+  { pattern: /\bFunction\s*\(/, label: "Function constructor" },
+  // 0.5.2: .constructor chain blocks "".constructor.constructor(...) bypass
+  { pattern: /\.\s*constructor\b/i, label: ".constructor" },
+  // 0.5.2: dynamic import
+  { pattern: /\bimport\s*\(/i, label: "import()" },
 ];
+
+// 0.5.2: decode common escape sequences so attackers can't hide identifiers
+// behind \uXXXX / \xXX / \u{XXXX}. Done BEFORE scanning so e.g. "\u0063ookie"
+// normalizes to "cookie".
+function decodeEscapes(expression: string): string {
+  return expression
+    .replace(/\\u\{([0-9a-fA-F]{1,6})\}/g, (_, h) => {
+      try {
+        return String.fromCodePoint(parseInt(h, 16));
+      } catch {
+        return "";
+      }
+    })
+    .replace(/\\u([0-9a-fA-F]{4})/g, (_, h) =>
+      String.fromCharCode(parseInt(h, 16))
+    )
+    .replace(/\\x([0-9a-fA-F]{2})/g, (_, h) =>
+      String.fromCharCode(parseInt(h, 16))
+    );
+}
+
+// 0.5.2: collapse static-string bracket indexing to dot access so
+// document["cookie"] and window[`eval`] normalize into the dot-notation the
+// denylist already covers.
+function normalizeBracketAccess(expression: string): string {
+  return expression.replace(
+    /\[\s*(["'`])([A-Za-z_$][\w$]*)\1\s*\]/g,
+    ".$2"
+  );
+}
 
 /**
  * Validate a JavaScript expression
@@ -119,11 +191,15 @@ export function validateExpression(expression: string): void {
     );
   }
 
-  // CRIT-002: Check for dangerous API patterns
-  for (const pattern of BLOCKED_PATTERNS) {
-    if (pattern.test(expression)) {
+  // CRIT-002 / 0.5.2: normalize bracket indexing + decoded escapes, then
+  // denylist-scan. Scanning BOTH the original and normalized forms ensures a
+  // pattern can't be hidden by partial normalization.
+  const decoded = decodeEscapes(expression);
+  const normalized = normalizeBracketAccess(decoded);
+  for (const { pattern, label } of BLOCKED_PATTERNS) {
+    if (pattern.test(expression) || pattern.test(normalized)) {
       throw new ValidationError(
-        `Expression contains disallowed pattern: ${pattern.source}`
+        `Expression contains disallowed pattern: ${label}`
       );
     }
   }

@@ -329,8 +329,11 @@ export class TideSurf {
       }
     }
 
-    // Cleanup any pages in the map that no longer exist as tabs (prevents memory leaks)
-    const validTabIds = new Set(remainingTabs.map(t => t.id));
+    // 0.5.2: re-list AFTER newTab so the stale-cleanup sees any tab just
+    // created (otherwise closing the last tab would immediately close the
+    // fresh about:blank that was just opened).
+    const currentTabs = await this.tabManager.listTabs();
+    const validTabIds = new Set(currentTabs.map(t => t.id));
     for (const [id, stalePage] of this.pages.entries()) {
       if (!validTabIds.has(id)) {
         try {

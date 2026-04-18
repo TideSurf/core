@@ -93,16 +93,40 @@ function countNodes(node: CDPNode): number {
 
 /**
  * Get the full DOM tree (pierces shadow DOM)
- * NEW-CRIT-005: Enforces 50,000 node limit to prevent memory exhaustion
+ * NEW-CRIT-005: Enforces 50,000 node limit to prevent memory exhaustion.
+ *
+ * 0.5.2: pre-check element count via Runtime.evaluate BEFORE calling
+ * DOM.getDocument, because chrome-remote-interface JSON.parses the full
+ * response into memory before returning — a post-parse count guard still
+ * OOMs. The post-parse guard stays as a secondary check (text/shadow/iframe
+ * nodes aren't in getElementsByTagName('*').length).
  */
 export async function getFullDOM(conn: CDPConnection, timeout?: number): Promise<CDPNode> {
+  const preCheck = await withTimeout(
+    conn.Runtime.evaluate({
+      expression: "document.getElementsByTagName('*').length",
+      returnByValue: true,
+    }),
+    timeout ?? 5_000,
+    "getFullDOM:preCount"
+  );
+  const elementCount = Number(preCheck.result?.value ?? 0);
+  if (Number.isFinite(elementCount) && elementCount > MAX_DOM_NODES) {
+    throw new Error(
+      `DOM exceeds maximum node count of ${MAX_DOM_NODES.toLocaleString()} (found ${elementCount.toLocaleString()} elements). ` +
+      `Use viewport mode or navigate to a simpler page.`
+    );
+  }
+
   const { root } = await withTimeout(
     conn.DOM.getDocument({ depth: -1, pierce: true }),
     timeout ?? 15_000,
     "getFullDOM"
   );
 
-  // NEW-CRIT-005: Check node count to prevent memory exhaustion
+  // Secondary check — catches text/shadow/iframe nodes that aren't in
+  // getElementsByTagName('*'). If we reach this it means the element count
+  // pre-check was under the limit, so the parse already succeeded.
   const nodeCount = countNodes(root as unknown as CDPNode);
   if (nodeCount > MAX_DOM_NODES) {
     throw new Error(
@@ -307,7 +331,11 @@ export async function evaluate(
  * Observes DOM changes and waits for a quiet period (no mutations for 300ms).
  * Resolves early (500ms) if no mutations observed at all.
  * Hard timeout cap prevents hanging.
- * Uses a shared observer instance to prevent accumulation (HIGH-013).
+ *
+ * 0.5.2: each call owns a private ctx object stored on window under a single
+ * slot. Entering a new call fully cancels the prior ctx (clears its timer,
+ * marks it cancelled) so a zombie setTimeout from the previous call can't
+ * disconnect the new observer and resolve prematurely.
  */
 export async function waitForStable(
   conn: CDPConnection,
@@ -316,31 +344,34 @@ export async function waitForStable(
   await withTimeout(
     conn.Runtime.evaluate({
       expression: `new Promise(resolve => {
-  // Use shared observer on window to prevent accumulation
-  if (window.__tidesurf_stable_observer) {
-    window.__tidesurf_stable_observer.disconnect();
+  const prior = window.__tidesurf_stable;
+  if (prior) {
+    prior.cancelled = true;
+    if (prior.timer) clearTimeout(prior.timer);
+    if (prior.observer) prior.observer.disconnect();
   }
-  let timer = null;
-  let resolved = false;
-  const done = () => { 
-    if (!resolved) { 
-      resolved = true; 
-      if (window.__tidesurf_stable_observer) {
-        window.__tidesurf_stable_observer.disconnect();
-        window.__tidesurf_stable_observer = null;
-      }
-      resolve(); 
-    } 
+  const ctx = { observer: null, timer: null, resolved: false, cancelled: false };
+  window.__tidesurf_stable = ctx;
+  const done = () => {
+    if (ctx.resolved || ctx.cancelled) return;
+    ctx.resolved = true;
+    if (ctx.timer) clearTimeout(ctx.timer);
+    if (ctx.observer) ctx.observer.disconnect();
+    if (window.__tidesurf_stable === ctx) {
+      window.__tidesurf_stable = null;
+    }
+    resolve();
   };
-  window.__tidesurf_stable_observer = new MutationObserver(() => {
-    clearTimeout(timer);
-    timer = setTimeout(done, 300);
+  ctx.observer = new MutationObserver(() => {
+    if (ctx.cancelled || ctx.resolved) return;
+    if (ctx.timer) clearTimeout(ctx.timer);
+    ctx.timer = setTimeout(done, 300);
   });
-  window.__tidesurf_stable_observer.observe(document.body || document.documentElement, {
+  ctx.observer.observe(document.body || document.documentElement, {
     childList: true, subtree: true, attributes: true, characterData: true
   });
   // Early resolve if no mutations at all within 500ms
-  timer = setTimeout(done, 500);
+  ctx.timer = setTimeout(done, 500);
 })`,
       awaitPromise: true,
     }),
@@ -429,6 +460,8 @@ export async function setFileInput(
  * HIGH-020: Rate limited to prevent data exfiltration
  */
 export async function clipboardRead(conn: CDPConnection): Promise<string> {
+  // 0.5.2: reserve the cooldown slot BEFORE awaiting the read so concurrent
+  // Promise.all() bursts can't all pass the stale-timestamp check (TOCTOU).
   const now = Date.now();
   const timeSinceLastRead = now - lastClipboardReadTime;
 
@@ -438,6 +471,7 @@ export async function clipboardRead(conn: CDPConnection): Promise<string> {
       `Clipboard read rate limit exceeded. Please wait ${remaining} second(s) before reading again.`
     );
   }
+  lastClipboardReadTime = now;
 
   const result = await conn.Runtime.evaluate({
     expression: "navigator.clipboard.readText()",
@@ -452,8 +486,7 @@ export async function clipboardRead(conn: CDPConnection): Promise<string> {
     );
   }
 
-  lastClipboardReadTime = Date.now();
-  return String(result.result.value ?? "");
+  return String(result.result?.value ?? "");
 }
 
 /**

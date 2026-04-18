@@ -58,10 +58,12 @@ describe("CDP Connection Fixes", () => {
   describe("HIGH-013: MutationObserver accumulation", () => {
     it("waitForStable should use shared observer on window", async () => {
       const content = fs.readFileSync("./src/cdp/connection.ts", "utf-8");
-      
-      // Verify the expression uses shared observer
-      expect(content).toContain("window.__tidesurf_stable_observer");
-      expect(content).toContain("Uses a shared observer instance to prevent accumulation");
+
+      // Verify the expression uses shared state slot and cancels prior work
+      // (0.5.2: ctx-per-call prevents zombie timers from disconnecting new observer)
+      expect(content).toContain("window.__tidesurf_stable");
+      expect(content).toContain("prior.cancelled = true");
+      expect(content).toContain("clearTimeout(prior.timer)");
     });
   });
 

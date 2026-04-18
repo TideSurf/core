@@ -280,7 +280,22 @@ export class SurfingPage {
     validateSearchQuery(query);
     validatePositiveInteger(maxResults, "maxResults");
     const needle = query.trim().toLowerCase();
-    const { nodes } = walkDOM(await cdp.getFullDOM(this.conn), { truncate: false });
+    const { nodes, nodeMap: freshNodeMap } = walkDOM(
+      await cdp.getFullDOM(this.conn),
+      { truncate: false }
+    );
+
+    // 0.5.2: cross-reference the fresh walk's IDs against lastNodeMap via
+    // backendNodeId. A fresh ID like "B3" may not exist (or may point at a
+    // different element) in lastNodeMap after DOM mutations, so we only
+    // surface elementIds that resolve to the same backendNodeId the caller
+    // would get through click()/type(). Otherwise we drop the ID to avoid
+    // silent mis-clicks.
+    const backendToStableId = new Map<number, string>();
+    for (const [id, backendNodeId] of this.lastNodeMap) {
+      backendToStableId.set(backendNodeId, id);
+    }
+
     const results: SearchResult[] = [];
 
     const walk = (node: OSNode, parentTag?: string, nearestId?: string): void => {
@@ -289,7 +304,19 @@ export class SurfingPage {
       }
 
       const currentTag = node.tag === "#text" ? parentTag ?? "text" : node.tag;
-      const currentId = node.id ?? nearestId;
+
+      let currentId = nearestId;
+      if (node.id) {
+        const backendId = freshNodeMap.get(node.id);
+        const stableId =
+          backendId !== undefined ? backendToStableId.get(backendId) : undefined;
+        if (stableId) {
+          currentId = stableId;
+        }
+        // If the element isn't in lastNodeMap (or has moved), keep the
+        // parent's nearestId rather than promoting a stale/unstable ID.
+      }
+
       const text = node.text?.trim();
 
       if (text && text.toLowerCase().includes(needle)) {
@@ -316,9 +343,6 @@ export class SurfingPage {
       }
     }
 
-    // Note: search() does NOT update lastNodeMap to avoid overwriting
-    // the main node map from getState(). IDs from search results reference
-    // the current getState() node map.
     return results;
   }
 
