@@ -1,5 +1,63 @@
 # Changelog
 
+## 0.5.2 (2026-04-18)
+
+### Security
+
+- **Expression denylist bypass** — `validateExpression()` can no longer be bypassed via bracket-notation indexing (`document["cookie"]`), the comma-operator eval trick (`(0,eval)(...)`), or the `"".constructor.constructor(...)` prototype walk. Unicode/hex escape sequences (`\uXXXX`, `\xXX`, `\u{XXXX}`) are decoded before scanning, `[ "name" ]`/`[ 'name' ]`/`[ \`name\` ]` are normalized to dot access, and `.constructor` and `import()` are now on the denylist.
+- **SSRF filter bypass** — IPv4-mapped IPv6 addresses (`::ffff:169.254.169.254`, the AWS metadata endpoint) are now unmapped and re-checked against the private-IPv4 ranges. The IPv6 unspecified address (`::`) and the full `fc00::/7` ULA range are also blocked; the previous filter only matched `fc00:` and missed `fd00:`.
+- **Clipboard rate-limit TOCTOU** — `clipboardRead()` now reserves the 5-second cooldown slot *before* awaiting the clipboard read, closing a TOCTOU where a `Promise.all` of N concurrent calls all passed the stale-timestamp check and read in parallel.
+
+### Fixed
+
+- **`waitForStable()` zombie timer** — Each call now owns a private context on `window.__tidesurf_stable` rather than sharing timer state. New calls cancel the prior context (clear its timer, mark cancelled), preventing a 500ms early-resolve timer from the previous call from disconnecting the new observer and silently reporting "stable".
+- **`closeTab()` bricking on last-tab close** — The stale-page cleanup loop no longer uses a pre-`newTab()` snapshot of the tab list, which previously caused it to immediately close the fresh `about:blank` created after closing the last tab, leaving `activePage` pointing at a dead connection.
+- **`search()` ID divergence from `lastNodeMap`** — Search results now cross-reference fresh IDs against `lastNodeMap` by `backendNodeId`. Only `elementId`s that resolve to the same node that `click()`/`type()` would hit are returned; otherwise the ID is dropped rather than silently pointing at the wrong element after DOM mutations.
+- **`getFullDOM()` OOM guard** — Element count is now pre-checked via `Runtime.evaluate` *before* `DOM.getDocument`, so `chrome-remote-interface` no longer `JSON.parse`s a 200k-node response into memory just to discover it's too large. The post-parse guard remains as a secondary check for shadow/iframe/text nodes.
+
+### Tests
+
+- 8 new regression tests covering every bypass and correctness fix above.
+
+## 0.5.1 (2026-04-14)
+
+### Fixed
+
+- **HIGH-002b: Fast typing** — Replace per-character `Input.dispatchKeyEvent` loop with single `Input.insertText` call. Typing 100 characters now takes 1 CDP round-trip instead of 200, providing ~200x speedup for text input operations.
+- **NEW-CRIT-004: URL length validation** — Add 2048-character limit to `validateUrl()` to prevent potential buffer overflow and DoS from extremely long URLs.
+- **NEW-CRIT-005: DOM node count limit** — Add 50,000-node limit check in `getFullDOM()` to prevent memory exhaustion on pages with extremely large DOMs. Returns helpful error message suggesting viewport mode or simpler page.
+
+### Security
+
+All 171 fixes documented for v0.5.x are now verified as implemented:
+
+| Severity | Count |
+|----------|-------|
+| Critical (P0) | 16 |
+| High (P1) | 43 |
+| Medium (P2) | 67 |
+| Low (P3) | 45 |
+
+Key security improvements in v0.5.x:
+- Restricted `evaluate()` tool blocks `document.cookie`, `localStorage`, `fetch()`, `eval()` patterns
+- `data:` URLs blocked to prevent XSS and data exfiltration
+- Clipboard read rate-limited to 1 read per 5 seconds
+- XSS prevention via HTML entity escaping in serializer output
+
+### Performance
+
+- Token budget algorithm: 172x speedup (O(n) vs O(n²))
+- Character typing: 200x speedup (1 vs 2N round-trips)
+- CDP calls per getState: 3x reduction (2 vs 6 calls)
+- collectText: 40x speedup via memoization
+
+### Stability
+
+- 13 race conditions fixed (browser init, tab switching, downloads, signal handlers)
+- Chrome crash detection with `isDead` flag
+- Stack overflow protection with `MAX_DEPTH = 500` in DOM walker and filters
+- Proper cleanup of CDP connections and Chrome processes
+
 ## 0.5.0 (2026-03-29)
 
 ### New

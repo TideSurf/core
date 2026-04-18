@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.5.2 (2026-04-18)
+
+### Security
+
+- **Expression denylist bypass** — `validateExpression()` can no longer be bypassed via bracket-notation indexing (`document["cookie"]`), the comma-operator eval trick (`(0,eval)(...)`), or the `"".constructor.constructor(...)` prototype walk. Unicode/hex escape sequences (`\uXXXX`, `\xXX`, `\u{XXXX}`) are decoded before scanning, `[ "name" ]`/`[ 'name' ]`/`[ \`name\` ]` are normalized to dot access, and `.constructor` and `import()` are now on the denylist.
+- **SSRF filter bypass** — IPv4-mapped IPv6 addresses (`::ffff:169.254.169.254`, the AWS metadata endpoint) are now unmapped and re-checked against the private-IPv4 ranges. The IPv6 unspecified address (`::`) and the full `fc00::/7` ULA range are also blocked; the previous filter only matched `fc00:` and missed `fd00:`.
+- **Clipboard rate-limit TOCTOU** — `clipboardRead()` now reserves the 5-second cooldown slot *before* awaiting the clipboard read, closing a TOCTOU where a `Promise.all` of N concurrent calls all passed the stale-timestamp check and read in parallel.
+
+### Fixed
+
+- **`waitForStable()` zombie timer** — Each call now owns a private context on `window.__tidesurf_stable` rather than sharing timer state. New calls cancel the prior context (clear its timer, mark cancelled), preventing a 500ms early-resolve timer from the previous call from disconnecting the new observer and silently reporting "stable".
+- **`closeTab()` bricking on last-tab close** — The stale-page cleanup loop no longer uses a pre-`newTab()` snapshot of the tab list, which previously caused it to immediately close the fresh `about:blank` created after closing the last tab, leaving `activePage` pointing at a dead connection.
+- **`search()` ID divergence from `lastNodeMap`** — Search results now cross-reference fresh IDs against `lastNodeMap` by `backendNodeId`. Only `elementId`s that resolve to the same node that `click()`/`type()` would hit are returned; otherwise the ID is dropped rather than silently pointing at the wrong element after DOM mutations.
+- **`getFullDOM()` OOM guard** — Element count is now pre-checked via `Runtime.evaluate` *before* `DOM.getDocument`, so `chrome-remote-interface` no longer `JSON.parse`s a 200k-node response into memory just to discover it's too large. The post-parse guard remains as a secondary check for shadow/iframe/text nodes.
+
+### Tests
+
+- 8 new regression tests covering every bypass and correctness fix above.
+
 ## 0.5.1 (2026-04-14)
 
 ### Fixed
