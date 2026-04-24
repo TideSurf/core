@@ -39,6 +39,33 @@ describe("validateUrl", () => {
     expect(() => validateUrl("http://[::1]/path")).toThrow(ValidationError);
   });
 
+  it("allows localhost only when explicitly requested", () => {
+    expect(() =>
+      validateUrl("http://localhost:5174/", { allowLocalhost: true })
+    ).not.toThrow();
+    expect(() =>
+      validateUrl("http://127.0.0.1:5174/", { allowLocalhost: true })
+    ).not.toThrow();
+    expect(() =>
+      validateUrl("http://[::1]:5174/", { allowLocalhost: true })
+    ).not.toThrow();
+    expect(() =>
+      validateUrl("http://192.168.1.1/", { allowLocalhost: true })
+    ).toThrow(ValidationError);
+  });
+
+  it("allows private hosts only when explicitly requested", () => {
+    expect(() =>
+      validateUrl("http://192.168.1.1/", { allowPrivateHosts: true })
+    ).not.toThrow();
+    expect(() =>
+      validateUrl("http://10.0.0.1/", { allowPrivateHosts: true })
+    ).not.toThrow();
+    expect(() =>
+      validateUrl("http://localhost/", { allowPrivateHosts: true })
+    ).not.toThrow();
+  });
+
   it("rejects IPv4-mapped IPv6 SSRF bypass (0.5.2)", () => {
     // ::ffff:169.254.169.254 → AWS metadata endpoint
     expect(() =>

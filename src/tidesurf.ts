@@ -1,7 +1,7 @@
 import type { ChildProcess } from "node:child_process";
 import type { TideSurfOptions, TideSurfConnectOptions, ToolResult, GetStateOptions, PageState } from "./types.js";
 import { launchChrome, discoverBrowser } from "./cdp/launcher.js";
-import { connect } from "./cdp/connection.js";
+import { connect, disconnect, type CDPConnection } from "./cdp/connection.js";
 import { SurfingPage } from "./cdp/page.js";
 import { TabManager, type TabInfo } from "./cdp/tab-manager.js";
 import { createToolExecutor } from "./tools/executor.js";
@@ -9,7 +9,7 @@ import { getToolDefinitions } from "./tools/definitions.js";
 import { withRetry } from "./cdp/retry.js";
 import { rmSync } from "node:fs";
 import { applyViewport } from "./cdp/viewport.js";
-import { resolveFileAccessRoots } from "./validation.js";
+import { resolveFileAccessRoots, validateUrl, type UrlValidationOptions } from "./validation.js";
 import { ReadOnlyError } from "./errors.js";
 
 /**
@@ -31,6 +31,7 @@ export class TideSurf {
   private readOnly: boolean;
   private defaultViewport?: TideSurfOptions["defaultViewport"];
   private fileAccessRoots: string[];
+  private urlValidationOptions: UrlValidationOptions;
   private exitHandler: (() => void) | null = null;
   private activeTabId: string | null;
 
@@ -44,7 +45,8 @@ export class TideSurf {
     readOnly: boolean = false,
     activeTabId: string | null = null,
     defaultViewport?: TideSurfOptions["defaultViewport"],
-    fileAccessRoots: string[] = resolveFileAccessRoots()
+    fileAccessRoots: string[] = resolveFileAccessRoots(),
+    urlValidationOptions: UrlValidationOptions = {}
   ) {
     this.chromeProcess = chromeProcess;
     this.activePage = page;
@@ -56,6 +58,7 @@ export class TideSurf {
     this.activeTabId = activeTabId;
     this.defaultViewport = defaultViewport;
     this.fileAccessRoots = fileAccessRoots;
+    this.urlValidationOptions = urlValidationOptions;
     this.executor = createToolExecutor(this, this.readOnly);
 
     if (activeTabId) {
@@ -84,6 +87,10 @@ export class TideSurf {
    */
   static async launch(options: TideSurfOptions = {}): Promise<TideSurf> {
     const fileAccessRoots = resolveFileAccessRoots(options.fileAccessRoots);
+    const urlValidationOptions: UrlValidationOptions = {
+      allowLocalhost: options.allowLocalhost,
+      allowPrivateHosts: options.allowPrivateHosts,
+    };
     const { process: proc, port, userDataDir, ownsTempDir } = await withRetry(
       () =>
         launchChrome({
@@ -95,32 +102,49 @@ export class TideSurf {
       { maxAttempts: 3 }
     );
 
-    const { targetId } = await withRetry(
-      () => discoverBrowser({ port, timeout: options.timeout }),
-      { maxAttempts: 3 }
-    );
-    const conn = await withRetry(
-      () => connect({ port, tab: targetId, timeout: options.timeout }),
-      { maxAttempts: 3 }
-    );
-    if (options.defaultViewport) {
-      await applyViewport(conn, options.defaultViewport);
-    }
-    const page = new SurfingPage(conn, fileAccessRoots);
-    const tabManager = new TabManager(port);
+    let conn: CDPConnection | null = null;
+    try {
+      const { targetId } = await withRetry(
+        () => discoverBrowser({ port, timeout: options.timeout }),
+        { maxAttempts: 3 }
+      );
+      conn = await withRetry(
+        () => connect({ port, tab: targetId, timeout: options.timeout }),
+        { maxAttempts: 3 }
+      );
+      if (options.defaultViewport) {
+        await applyViewport(conn, options.defaultViewport);
+      }
+      const page = new SurfingPage(conn, fileAccessRoots, urlValidationOptions);
+      const tabManager = new TabManager(port);
 
-    return new TideSurf(
-      proc,
-      page,
-      tabManager,
-      userDataDir,
-      ownsTempDir,
-      port,
-      options.readOnly ?? false,
-      targetId,
-      options.defaultViewport,
-      fileAccessRoots
-    );
+      return new TideSurf(
+        proc,
+        page,
+        tabManager,
+        userDataDir,
+        ownsTempDir,
+        port,
+        options.readOnly ?? false,
+        targetId,
+        options.defaultViewport,
+        fileAccessRoots,
+        urlValidationOptions
+      );
+    } catch (err) {
+      if (conn) {
+        await disconnect(conn).catch(() => {});
+      }
+      try {
+        proc.kill();
+      } catch {
+        // ignore cleanup failure
+      }
+      if (ownsTempDir) {
+        rmSync(userDataDir, { recursive: true, force: true });
+      }
+      throw err;
+    }
   }
 
   /**
@@ -137,6 +161,10 @@ export class TideSurf {
    */
   static async connect(options: TideSurfConnectOptions = {}): Promise<TideSurf> {
     const fileAccessRoots = resolveFileAccessRoots(options.fileAccessRoots);
+    const urlValidationOptions: UrlValidationOptions = {
+      allowLocalhost: options.allowLocalhost,
+      allowPrivateHosts: options.allowPrivateHosts,
+    };
     const { port, host, targetId } = await withRetry(
       () => discoverBrowser({
         port: options.port,
@@ -153,7 +181,7 @@ export class TideSurf {
     if (options.defaultViewport) {
       await applyViewport(conn, options.defaultViewport);
     }
-    const page = new SurfingPage(conn, fileAccessRoots);
+    const page = new SurfingPage(conn, fileAccessRoots, urlValidationOptions);
     const tabManager = new TabManager(port, host);
 
     return new TideSurf(
@@ -166,7 +194,8 @@ export class TideSurf {
       options.readOnly ?? false,
       targetId,
       options.defaultViewport,
-      fileAccessRoots
+      fileAccessRoots,
+      urlValidationOptions
     );
   }
 
@@ -218,6 +247,13 @@ export class TideSurf {
     return this.readOnly;
   }
 
+  /**
+   * URL navigation policy used by tools layered on top of the SDK.
+   */
+  getUrlValidationOptions(): UrlValidationOptions {
+    return this.urlValidationOptions;
+  }
+
   // --- Tab management ---
 
   /**
@@ -233,12 +269,15 @@ export class TideSurf {
    * @returns Info about the new tab
    */
   async newTab(url?: string): Promise<TabInfo> {
+    if (url) {
+      validateUrl(url, this.urlValidationOptions);
+    }
     const tab = await this.tabManager.createTab(url);
     const conn = await this.tabManager.connectToTab(tab.id);
     if (this.defaultViewport) {
       await applyViewport(conn, this.defaultViewport);
     }
-    const page = new SurfingPage(conn, this.fileAccessRoots);
+    const page = new SurfingPage(conn, this.fileAccessRoots, this.urlValidationOptions);
     this.pages.set(tab.id, page);
     this.activePage = page;
     this.activeTabId = tab.id;
@@ -259,7 +298,7 @@ export class TideSurf {
         if (this.defaultViewport) {
           await applyViewport(conn, this.defaultViewport);
         }
-        page = new SurfingPage(conn, this.fileAccessRoots);
+        page = new SurfingPage(conn, this.fileAccessRoots, this.urlValidationOptions);
         this.pages.set(tabId, page);
       } catch (err) {
         // Clean up connection if it was created but setup failed

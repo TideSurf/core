@@ -30,10 +30,13 @@ import {
   validateSearchQuery,
   validatePositiveInteger,
 } from "../src/validation.js";
-import { ValidationError } from "../src/errors.js";
+import { CDPConnectionError, ValidationError } from "../src/errors.js";
 
 const autoConnect = process.argv.includes("--auto-connect");
 const readOnly = process.argv.includes("--read-only");
+const allowLocalhost = process.argv.includes("--allow-localhost");
+const allowPrivateHosts = process.argv.includes("--allow-private-hosts");
+const urlValidationOptions = { allowLocalhost, allowPrivateHosts };
 
 function parsePort(): number | undefined {
   const idx = process.argv.indexOf("--port");
@@ -65,16 +68,19 @@ async function browser(): Promise<TideSurf> {
         if (autoConnect) {
           try {
             console.error(`[tidesurf-mcp] Connecting to running Chrome (port ${port ?? 9222})...`);
-            surfing = await TideSurf.connect({ port, readOnly });
+            surfing = await TideSurf.connect({ port, readOnly, ...urlValidationOptions });
             console.error("[tidesurf-mcp] Connected to existing browser.");
-          } catch {
+          } catch (err) {
+            if (!(err instanceof CDPConnectionError)) {
+              throw err;
+            }
             console.error("[tidesurf-mcp] No running Chrome found, launching a new instance...");
-            surfing = await TideSurf.launch({ headless, port, readOnly });
+            surfing = await TideSurf.launch({ headless, port, readOnly, ...urlValidationOptions });
             console.error("[tidesurf-mcp] Browser launched.");
           }
         } else {
           console.error(`[tidesurf-mcp] Launching browser (${headless ? "headless" : "headful"})...`);
-          surfing = await TideSurf.launch({ headless, port, readOnly });
+          surfing = await TideSurf.launch({ headless, port, readOnly, ...urlValidationOptions });
           console.error("[tidesurf-mcp] Browser ready.");
         }
         return surfing;
@@ -198,7 +204,7 @@ if (!readOnly) {
     async ({ url }) => {
       try {
         // HIGH-007: Missing input validation at MCP boundary
-        validateUrl(url);
+        validateUrl(url, urlValidationOptions);
         const s = await browser();
         await withTimeout(s.navigate(url), "Navigate");
         const state = await withTimeout(s.getState(), "Get state");
@@ -374,7 +380,7 @@ if (!readOnly) {
       try {
         // HIGH-007: Validate URL if provided
         if (url !== undefined) {
-          validateUrl(url);
+          validateUrl(url, urlValidationOptions);
         }
         const tab = await withTimeout((await browser()).newTab(url), "New tab");
         return text(JSON.stringify(tab));

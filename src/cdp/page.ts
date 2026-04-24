@@ -28,6 +28,7 @@ import {
   validateSearchQuery,
   validateUploadFilePath,
   resolveFileAccessRoots,
+  type UrlValidationOptions,
 } from "../validation.js";
 import { setupDownloads, setupDownloadListeners, waitForDownload } from "./download-manager.js";
 
@@ -59,13 +60,16 @@ export class SurfingPage {
   private conn: CDPConnection;
   private lastNodeMap: NodeMap = new Map();
   private fileAccessRoots: string[];
+  private urlValidationOptions: UrlValidationOptions;
 
   constructor(
     conn: CDPConnection,
-    fileAccessRoots: string[] = resolveFileAccessRoots()
+    fileAccessRoots: string[] = resolveFileAccessRoots(),
+    urlValidationOptions: UrlValidationOptions = {}
   ) {
     this.conn = conn;
     this.fileAccessRoots = fileAccessRoots;
+    this.urlValidationOptions = urlValidationOptions;
   }
 
   /**
@@ -255,7 +259,7 @@ export class SurfingPage {
    * @throws {NavigationError} if navigation fails
    */
   async navigate(url: string): Promise<void> {
-    validateUrl(url);
+    validateUrl(url, this.urlValidationOptions);
     await cdp.navigate(this.conn, url);
     await cdp.waitForStable(this.conn);
   }

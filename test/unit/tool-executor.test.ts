@@ -153,10 +153,10 @@ describe("createToolExecutor", () => {
 
     it("should validate URL format for navigate", async () => {
       const page = {
-        navigate: jest.fn(),
       };
       const instance = {
         getPage: () => page,
+        navigate: jest.fn().mockRejectedValue(new Error('Invalid URL: "not-a-url". Must be a valid absolute URL')),
         getState: jest.fn(),
       };
 

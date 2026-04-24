@@ -102,6 +102,11 @@ const translations: Translations = {
     ja: "このページの内容",
     ko: "이 페이지",
   },
+  "content.loading": {
+    en: "Loading documentation…",
+    ja: "ドキュメントを読み込み中…",
+    ko: "문서를 불러오는 중…",
+  },
   "error.missing.title": {
     en: "Page not found",
     ja: "ページが見つかりません",
@@ -433,26 +438,43 @@ function addCodeCopyButtons(): void {
   });
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function tokenClass(token: string): string {
+  if (token.startsWith("//")) return "tk-cm";
+  if (/^["'`]/.test(token)) return "tk-str";
+  if (/^\d/.test(token)) return "tk-num";
+  if (token.startsWith(".")) return "tk-fn";
+  if (/^[A-Z]/.test(token)) return "tk-type";
+  return "tk-kw";
+}
+
 function highlightCode(): void {
-  const rules: [RegExp, string][] = [
-    [/\/\/.*$/gm, "tk-cm"],
-    [/("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g, "tk-str"],
-    [/\b(\d+(?:\.\d+)?)\b/g, "tk-num"],
-    [/\b(const|let|var|import|export|from|await|async|return|if|else|new|function|class|extends|implements|interface|type|enum|throw|try|catch|for|of|in|while|do|switch|case|default|break|continue|void|null|undefined|true|false|this|super)\b/g, "tk-kw"],
-    [/\b([A-Z][A-Za-z0-9]*)\b/g, "tk-type"],
-    [/\.([a-zA-Z_]\w*)\s*\(/g, "tk-fn"],
-  ];
+  const tokenRe = /\/\/.*$|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|\b\d+(?:\.\d+)?\b|\b(?:const|let|var|import|export|from|await|async|return|if|else|new|function|class|extends|implements|interface|type|enum|throw|try|catch|for|of|in|while|do|switch|case|default|break|continue|void|null|undefined|true|false|this|super)\b|\b[A-Z][A-Za-z0-9]*\b|\.[a-zA-Z_]\w*(?=\s*\()/gm;
 
   contentEl.querySelectorAll("pre code").forEach((block) => {
-    let html = block.innerHTML;
-    const saved: string[] = [];
-    // Preserve existing HTML tags
-    html = html.replace(/<[^>]+>/g, (m) => { saved.push(m); return `\x00${saved.length - 1}\x00`; });
-    for (const [re, cls] of rules) {
-      html = html.replace(re, (match) => `<span class="${cls}">${match}</span>`);
-    }
-    // Restore saved tags
-    html = html.replace(/\x00(\d+)\x00/g, (_, i) => saved[Number(i)]);
+    const source = block.textContent ?? "";
+    let html = "";
+    let cursor = 0;
+
+    source.replace(tokenRe, (token, offset: number) => {
+      html += escapeHtml(source.slice(cursor, offset));
+      if (token.startsWith(".")) {
+        html += `.<span class="${tokenClass(token)}">${escapeHtml(token.slice(1))}</span>`;
+      } else {
+        html += `<span class="${tokenClass(token)}">${escapeHtml(token)}</span>`;
+      }
+      cursor = offset + token.length;
+      return token;
+    });
+
+    html += escapeHtml(source.slice(cursor));
     block.innerHTML = html;
   });
 }
@@ -538,6 +560,7 @@ function renderMissingPage(): void {
 
   wrapper.append(title, description, link);
   contentEl.replaceChildren(wrapper);
+  contentEl.setAttribute("aria-busy", "false");
 }
 
 function renderPage(pageName: string): void {
@@ -552,6 +575,7 @@ function renderPage(pageName: string): void {
   const html = marked.parse(md, { async: false }) as string;
   const fragment = sanitizeHtmlFragment(html);
   contentEl.replaceChildren(fragment);
+  contentEl.setAttribute("aria-busy", "false");
 
   // Wrap tables for horizontal scroll on mobile
   contentEl.querySelectorAll("table").forEach((table) => {
@@ -1104,18 +1128,69 @@ function updateLangButtons(): void {
   });
 }
 
-function initMobileMenu(): void {
+function closeMobileMenu(): void {
   const toggle = document.getElementById("mobile-menu-toggle");
-  const overlay = document.getElementById("mobile-overlay");
-
-  toggle?.addEventListener("click", () => {
-    document.body.classList.toggle("mobile-menu-open");
-  });
-  overlay?.addEventListener("click", closeMobileMenu);
+  const sidebar = document.getElementById("sidebar");
+  document.body.classList.remove("mobile-menu-open");
+  toggle?.setAttribute("aria-expanded", "false");
+  syncSidebarInteractive(sidebar, false);
 }
 
-function closeMobileMenu(): void {
-  document.body.classList.remove("mobile-menu-open");
+function syncSidebarInteractive(sidebar: Element | null, isOpen: boolean): void {
+  if (!sidebar) return;
+  const isMobile = window.matchMedia("(max-width: 768px)").matches;
+  const closedOnMobile = isMobile && !isOpen;
+  const inertSidebar = sidebar as HTMLElement & { inert?: boolean };
+  inertSidebar.inert = closedOnMobile;
+  sidebar.toggleAttribute("inert", closedOnMobile);
+  sidebar.setAttribute("aria-hidden", String(closedOnMobile));
+  const tabIndex = closedOnMobile ? -1 : 0;
+  sidebar.querySelectorAll<HTMLAnchorElement>("a").forEach((link) => {
+    link.tabIndex = tabIndex;
+  });
+  const input = sidebar.querySelector<HTMLInputElement>("input");
+  if (input) input.tabIndex = tabIndex;
+}
+
+function initMobileMenu(): void {
+  const toggle = document.getElementById("mobile-menu-toggle") as HTMLButtonElement | null;
+  const overlay = document.getElementById("mobile-overlay");
+  const sidebar = document.getElementById("sidebar");
+  if (!toggle || !sidebar) return;
+
+  const mobileQuery = window.matchMedia("(max-width: 768px)");
+
+  function openMobileMenu(): void {
+    document.body.classList.add("mobile-menu-open");
+    toggle!.setAttribute("aria-expanded", "true");
+    syncSidebarInteractive(sidebar, true);
+  }
+
+  syncSidebarInteractive(sidebar, false);
+
+  toggle.addEventListener("click", () => {
+    const isOpen = toggle.getAttribute("aria-expanded") === "true";
+    if (isOpen) closeMobileMenu();
+    else openMobileMenu();
+  });
+
+  overlay?.addEventListener("click", closeMobileMenu);
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && document.body.classList.contains("mobile-menu-open")) {
+      closeMobileMenu();
+      toggle.focus();
+    }
+  });
+
+  sidebar.querySelectorAll<HTMLAnchorElement>("a").forEach((link) => {
+    link.addEventListener("click", closeMobileMenu);
+  });
+
+  mobileQuery.addEventListener("change", () => {
+    const isOpen = document.body.classList.contains("mobile-menu-open");
+    syncSidebarInteractive(sidebar, isOpen);
+  });
 }
 
 async function initGitHubStars(): Promise<void> {

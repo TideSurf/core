@@ -26,14 +26,9 @@ const translations: Translations = {
   },
   "hero.scroll": { en: "Scroll", ja: "スクロール", ko: "아래로" },
   "hero.tagline": {
-    en: "Your agent does not need eyes to browse.",
-    ja: "LLM向けDOM圧縮。不要な要素を除去し、ナビゲート、操作、抽出を実現。",
-    ko: "LLM을 위한 DOM 압축. 불필요한 요소를 걷어내고 탐색, 조작, 추출을 제공합니다.",
-  },
-  "hero.oneliner": {
-    en: "DOM compression that keeps token costs 10\u2013100\u00d7 lower than screenshots.",
-    ja: "スクリーンショットよりトークンコストを10〜100倍削減するDOM圧縮。",
-    ko: "스크린샷 대비 토큰 비용을 10\u2013100배 절감하는 DOM 압축.",
+    en: "Compressed DOM for agents.",
+    ja: "エージェント向けの圧縮DOM。",
+    ko: "에이전트를 위한 압축 DOM.",
   },
   "compare.label": { en: "How it works", ja: "仕組み", ko: "동작 원리" },
   "compare.headline": {
@@ -190,9 +185,9 @@ const translations: Translations = {
     ko: "자동 연결",
   },
   "feature.autoconnect.desc": {
-    en: "Connect to an already-running Chrome instead of launching a new one. Re-use logged-in sessions, debug live pages, seamlessly hand off between manual browsing and agent control",
+    en: "Connect to an already-running Chrome instead of launching a new one. Re-use logged-in sessions, debug active pages, seamlessly hand off between manual browsing and agent control",
     ja: "新しいChromeを起動する代わりに、既に実行中のChromeに接続。ログイン済みセッションの再利用、ライブページのデバッグ、手動ブラウジングとエージェント制御のシームレスな切り替え",
-    ko: "새 Chrome을 실행하는 대신 이미 실행 중인 Chrome에 연결합니다. 로그인된 세션 재사용, 라이브 페이지 디버깅, 수동 브라우징과 에이전트 제어 간의 원활한 전환이 모두 가능합니다.",
+    ko: "새 Chrome을 실행하는 대신 이미 실행 중인 Chrome에 연결합니다. 로그인된 세션 재사용, 활성 페이지 디버깅, 수동 브라우징과 에이전트 제어 간의 원활한 전환이 모두 가능합니다.",
   },
   "patterns.label": { en: "Patterns", ja: "パターン", ko: "패턴" },
   "patterns.title": {
@@ -280,14 +275,14 @@ const translations: Translations = {
     ko: "시작",
   },
   "quickstart.title": {
-    en: "Three lines",
-    ja: "Three lines",
-    ko: "Three lines",
+    en: "Try it",
+    ja: "試す",
+    ko: "써보기",
   },
   "qs.cta.title": {
     en: "Surf deeper?",
-    ja: "Surf deeper?",
-    ko: "Surf deeper?",
+    ja: "さらに深く？",
+    ko: "더 깊이 살펴볼까요?",
   },
   "qs.cta.btn": {
     en: "Read the docs",
@@ -312,38 +307,36 @@ const translations: Translations = {
     ja: "ページをナビゲートして操作",
     ko: "페이지를 탐색하고 조작합니다",
   },
-  "bento.tools.title": { en: "Tools", ja: "ツール", ko: "도구" },
-  "bento.tools.desc": {
-    en: "18 tool schemas that map directly to LLM function calling. Click elements, fill forms, scroll, extract data. Works with OpenAI, Claude, Gemini, or local models.",
-    ja: "LLMの関数呼び出しに直接マッピングされる18のツールスキーマ。要素のクリック、フォーム入力、スクロール、データ抽出。OpenAI、Claude、Gemini、ローカルモデルに対応。",
-    ko: "LLM 함수 호출에 직접 매핑되는 18가지 도구 스키마. 요소 클릭, 폼 작성, 스크롤, 데이터 추출. OpenAI, Claude, Gemini, 로컬 모델과 호환.",
+  "mock.product.aria": {
+    en: "Rendered page compressed into TideSurf DOM output",
+    ja: "ライブページをTideSurfのDOM出力へ圧縮する例",
+    ko: "렌더링된 페이지를 TideSurf DOM 출력으로 압축하는 예시",
   },
-  "bento.budget.title": {
-    en: "Token Budget",
-    ja: "トークン予算",
-    ko: "토큰 예산",
+  "mock.output": {
+    en: "Compressed DOM output",
+    ja: "圧縮DOM出力",
+    ko: "압축 DOM 출력",
   },
-  "bento.budget.desc": {
-    en: "Set a ceiling. Buttons, links, and inputs survive. Wrappers and decoration get cut by priority.",
-    ja: "上限を設定。ボタン、リンク、入力は維持。ラッパーや装飾は優先度に基づいて削除。",
-    ko: "상한을 설정하면 버튼, 링크, 입력은 유지되고 래퍼와 장식은 우선순위에 따라 제거됩니다.",
+  "mock.tokens": { en: "~132 tokens", ja: "約132トークン", ko: "약 132 토큰" },
+  "mock.usage.aria": {
+    en: "TideSurf usage mock-up",
+    ja: "TideSurf利用例のモックアップ",
+    ko: "TideSurf 사용 예시 목업",
   },
-  "bento.autoconnect.title": {
-    en: "Auto-connect",
-    ja: "オートコネクト",
-    ko: "자동 연결",
+  "mock.chat": { en: "Chat", ja: "チャット", ko: "채팅" },
+  "mock.request": { en: "request", ja: "リクエスト", ko: "요청" },
+  "mock.agent": { en: "Agent", ja: "エージェント", ko: "에이전트" },
+  "mock.toolLoop": { en: "tool loop", ja: "ツールループ", ko: "도구 루프" },
+  "mock.browser": { en: "Browser", ja: "ブラウザ", ko: "브라우저" },
+  "mock.pageState": { en: "page state", ja: "ページ状態", ko: "페이지 상태" },
+  "try.aria": {
+    en: "TideSurf examples",
+    ja: "TideSurfの例",
+    ko: "TideSurf 예시",
   },
-  "bento.autoconnect.desc": {
-    en: "Skip the login flows. Attach to your running Chrome \u2014 sessions, cookies, and auth carry over.",
-    ja: "ログインフローをスキップ。実行中のChromeに接続 \u2014 セッション、Cookie、認証はそのまま引き継ぎ。",
-    ko: "로그인 과정을 건너뛰세요. 실행 중인 Chrome에 연결 \u2014 세션, 쿠키, 인증이 그대로 유지됩니다.",
-  },
-  "bento.plugin.title": { en: "Plug in", ja: "プラグイン", ko: "플러그인" },
-  "bento.plugin.desc": {
-    en: "Drop into any MCP-compatible agent.",
-    ja: "任意のMCP対応エージェントに導入。",
-    ko: "모든 MCP 호환 에이전트에 바로 연결.",
-  },
+  "try.launch": { en: "Launch", ja: "起動", ko: "실행" },
+  "try.connect": { en: "Connect", ja: "接続", ko: "연결" },
+  "try.mcp": { en: "MCP", ja: "MCP", ko: "MCP" },
   "hero.shortline": {
     en: "In the modern web era, the tide is strong. Let's surf.",
     ja: "現代のウェブ時代、潮流は激しい。波に乗ろう。",
@@ -558,8 +551,10 @@ function initNavScroll(): void {
 // ── Scroll Reveal ──
 
 function initScrollReveal(): void {
+  const revealEls = document.querySelectorAll(".reveal");
+
   if (prefersReducedMotion()) {
-    document.querySelectorAll(".reveal").forEach((el) => {
+    revealEls.forEach((el) => {
       el.classList.add("is-visible");
     });
     return;
@@ -576,230 +571,33 @@ function initScrollReveal(): void {
     },
     { threshold: 0.1, rootMargin: "0px 0px -40px 0px" },
   );
-  document.querySelectorAll(".reveal").forEach((el) => observer.observe(el));
+  revealEls.forEach((el) => {
+    el.classList.add("is-visible");
+    observer.observe(el);
+  });
 }
 
-// ── Code Wall ──
+// ── Story Motion Budget ──
 
-interface CodeLine {
-  tag: string;
-  attrs: string[];
-  content?: string;
-  isSemantic: boolean;
-  indent: number;
-}
+function initStoryMotion(): void {
+  const bands = Array.from(document.querySelectorAll<HTMLElement>(".story-band"));
+  if (!bands.length || prefersReducedMotion()) return;
 
-const codeTemplates: CodeLine[] = [
-  { tag: "!DOCTYPE", attrs: ['html'], isSemantic: false, indent: 0 },
-  { tag: "html", attrs: ['lang="en"', 'class="scroll-smooth"'], isSemantic: false, indent: 0 },
-  { tag: "head", attrs: [], isSemantic: false, indent: 1 },
-  { tag: "meta", attrs: ['charset="UTF-8"'], isSemantic: false, indent: 2 },
-  { tag: "title", attrs: [], isSemantic: true, indent: 2, content: "My Website" },
-  { tag: "/title", attrs: [], isSemantic: true, indent: 2 },
-  { tag: "link", attrs: ['rel="stylesheet"', 'href="/styles.css"'], isSemantic: false, indent: 2 },
-  { tag: "/head", attrs: [], isSemantic: false, indent: 1 },
-  { tag: "body", attrs: ['class="antialiased"'], isSemantic: false, indent: 1 },
-  { tag: "header", attrs: ['class="fixed top-0"'], isSemantic: true, indent: 2 },
-  { tag: "nav", attrs: ['class="container mx-auto"'], isSemantic: true, indent: 3 },
-  { tag: "a", attrs: ['href="/"', 'class="text-xl font-bold"'], isSemantic: true, indent: 4, content: "Logo" },
-  { tag: "ul", attrs: ['class="flex gap-8"'], isSemantic: true, indent: 4 },
-  { tag: "li", attrs: [], isSemantic: true, indent: 5 },
-  { tag: "a", attrs: ['href="/features"'], isSemantic: true, indent: 6, content: "Features" },
-  { tag: "/li", attrs: [], isSemantic: true, indent: 5 },
-  { tag: "li", attrs: [], isSemantic: true, indent: 5 },
-  { tag: "a", attrs: ['href="/pricing"'], isSemantic: true, indent: 6, content: "Pricing" },
-  { tag: "/li", attrs: [], isSemantic: true, indent: 5 },
-  { tag: "/ul", attrs: [], isSemantic: true, indent: 4 },
-  { tag: "button", attrs: ['type="button"', 'class="md:hidden"'], isSemantic: true, indent: 4 },
-  { tag: "/button", attrs: [], isSemantic: true, indent: 4 },
-  { tag: "/nav", attrs: [], isSemantic: true, indent: 3 },
-  { tag: "/header", attrs: [], isSemantic: true, indent: 2 },
-  { tag: "main", attrs: [], isSemantic: true, indent: 2 },
-  { tag: "section", attrs: ['class="py-20"'], isSemantic: true, indent: 3 },
-  { tag: "div", attrs: ['class="container"'], isSemantic: false, indent: 4 },
-  { tag: "h1", attrs: ['class="text-4xl font-bold"'], isSemantic: true, indent: 5, content: "Welcome" },
-  { tag: "/h1", attrs: [], isSemantic: true, indent: 5 },
-  { tag: "p", attrs: ['class="text-lg text-gray-600"'], isSemantic: true, indent: 5, content: "Build faster" },
-  { tag: "/p", attrs: [], isSemantic: true, indent: 5 },
-  { tag: "div", attrs: ['class="flex gap-4"'], isSemantic: false, indent: 5 },
-  { tag: "a", attrs: ['href="/signup"', 'class="btn btn-primary"'], isSemantic: true, indent: 6, content: "Get Started" },
-  { tag: "/a", attrs: [], isSemantic: true, indent: 6 },
-  { tag: "a", attrs: ['href="/demo"', 'class="btn btn-secondary"'], isSemantic: true, indent: 6, content: "View Demo" },
-  { tag: "/a", attrs: [], isSemantic: true, indent: 6 },
-  { tag: "/div", attrs: [], isSemantic: false, indent: 5 },
-  { tag: "/div", attrs: [], isSemantic: false, indent: 4 },
-  { tag: "/section", attrs: [], isSemantic: true, indent: 3 },
-  { tag: "section", attrs: ['class="py-20 bg-gray-50"'], isSemantic: true, indent: 3 },
-  { tag: "div", attrs: ['class="container"'], isSemantic: false, indent: 4 },
-  { tag: "h2", attrs: ['class="text-3xl font-bold"'], isSemantic: true, indent: 5, content: "Features" },
-  { tag: "/h2", attrs: [], isSemantic: true, indent: 5 },
-  { tag: "div", attrs: ['class="grid md:grid-cols-3 gap-8"'], isSemantic: false, indent: 5 },
-  { tag: "article", attrs: ['class="p-6 rounded-xl border"'], isSemantic: true, indent: 6 },
-  { tag: "h3", attrs: ['class="text-xl font-semibold"'], isSemantic: true, indent: 7, content: "Fast" },
-  { tag: "/h3", attrs: [], isSemantic: true, indent: 7 },
-  { tag: "p", attrs: ['class="text-gray-600"'], isSemantic: true, indent: 7, content: "Optimized" },
-  { tag: "/p", attrs: [], isSemantic: true, indent: 7 },
-  { tag: "/article", attrs: [], isSemantic: true, indent: 6 },
-  { tag: "/div", attrs: [], isSemantic: false, indent: 5 },
-  { tag: "/div", attrs: [], isSemantic: false, indent: 4 },
-  { tag: "/section", attrs: [], isSemantic: true, indent: 3 },
-  { tag: "section", attrs: ['class="py-20"'], isSemantic: true, indent: 3 },
-  { tag: "div", attrs: ['class="container max-w-md"'], isSemantic: false, indent: 4 },
-  { tag: "form", attrs: ['action="/subscribe"', 'method="POST"'], isSemantic: true, indent: 5 },
-  { tag: "label", attrs: ['for="email"'], isSemantic: true, indent: 6, content: "Email" },
-  { tag: "/label", attrs: [], isSemantic: true, indent: 6 },
-  { tag: "input", attrs: ['type="email"', 'id="email"', 'placeholder="you@example.com"'], isSemantic: true, indent: 6 },
-  { tag: "button", attrs: ['type="submit"'], isSemantic: true, indent: 6, content: "Subscribe" },
-  { tag: "/button", attrs: [], isSemantic: true, indent: 6 },
-  { tag: "/form", attrs: [], isSemantic: true, indent: 5 },
-  { tag: "/div", attrs: [], isSemantic: false, indent: 4 },
-  { tag: "/section", attrs: [], isSemantic: true, indent: 3 },
-  { tag: "section", attrs: ['class="py-20"'], isSemantic: true, indent: 3 },
-  { tag: "div", attrs: ['class="container"'], isSemantic: false, indent: 4 },
-  { tag: "table", attrs: ['class="w-full"'], isSemantic: true, indent: 5 },
-  { tag: "thead", attrs: [], isSemantic: true, indent: 6 },
-  { tag: "tr", attrs: [], isSemantic: true, indent: 7 },
-  { tag: "th", attrs: [], isSemantic: true, indent: 8, content: "Name" },
-  { tag: "/th", attrs: [], isSemantic: true, indent: 8 },
-  { tag: "th", attrs: [], isSemantic: true, indent: 8, content: "Status" },
-  { tag: "/th", attrs: [], isSemantic: true, indent: 8 },
-  { tag: "/tr", attrs: [], isSemantic: true, indent: 7 },
-  { tag: "/thead", attrs: [], isSemantic: true, indent: 6 },
-  { tag: "tbody", attrs: [], isSemantic: true, indent: 6 },
-  { tag: "tr", attrs: [], isSemantic: true, indent: 7 },
-  { tag: "td", attrs: [], isSemantic: true, indent: 8, content: "Alice" },
-  { tag: "/td", attrs: [], isSemantic: true, indent: 8 },
-  { tag: "td", attrs: [], isSemantic: true, indent: 8, content: "Active" },
-  { tag: "/td", attrs: [], isSemantic: true, indent: 8 },
-  { tag: "/tr", attrs: [], isSemantic: true, indent: 7 },
-  { tag: "/tbody", attrs: [], isSemantic: true, indent: 6 },
-  { tag: "/table", attrs: [], isSemantic: true, indent: 5 },
-  { tag: "/div", attrs: [], isSemantic: false, indent: 4 },
-  { tag: "/section", attrs: [], isSemantic: true, indent: 3 },
-  { tag: "footer", attrs: ['class="bg-gray-900 text-white py-12"'], isSemantic: true, indent: 2 },
-  { tag: "div", attrs: ['class="container"'], isSemantic: false, indent: 3 },
-  { tag: "p", attrs: ['class="text-center"'], isSemantic: true, indent: 4, content: "© 2025" },
-  { tag: "/p", attrs: [], isSemantic: true, indent: 4 },
-  { tag: "/div", attrs: [], isSemantic: false, indent: 3 },
-  { tag: "/footer", attrs: [], isSemantic: true, indent: 2 },
-  { tag: "/body", attrs: [], isSemantic: false, indent: 1 },
-  { tag: "/html", attrs: [], isSemantic: false, indent: 0 },
-];
-
-const interactiveTags = new Set(["a", "button", "input", "form", "select", "textarea", "label"]);
-
-function generateHTMLSnippet(startIndex: number, length: number): string {
-  let html = "";
-  for (let i = 0; i < length; i++) {
-    const template = codeTemplates[(startIndex + i) % codeTemplates.length];
-    const indent = "  ".repeat(Math.min(template.indent, 4));
-    const isClosing = template.tag.startsWith("/");
-    const isSelfClosing = ["input", "img", "br", "hr", "meta", "link", "path"].includes(template.tag);
-    
-    html += indent;
-    html += `&lt;`;
-    if (isClosing) {
-      html += `/${template.tag.slice(1)}`;
-    } else {
-      html += `${template.tag}`;
-    }
-    
-    const visibleAttrs = template.attrs.slice(0, 1 + (i % 2));
-    visibleAttrs.forEach(attr => {
-      const eqIndex = attr.indexOf("=");
-      if (eqIndex > 0) {
-        const name = attr.slice(0, eqIndex);
-        const value = attr.slice(eqIndex + 1);
-        const highlightedValue = value.replace(/"/g, '<span class="cw-string">"</span>');
-        html += ` <span class="cw-attr">${name}</span>=<span class="cw-value">${highlightedValue}</span>`;
-      } else {
-        html += ` <span class="cw-attr">${attr}</span>`;
-      }
-    });
-    
-    if (template.attrs.length > visibleAttrs.length) {
-      html += `<span class="cw-attr">...</span>`;
-    }
-    
-    html += `${isSelfClosing ? " /" : ""}&gt;`;
-    
-    if (template.content && !isClosing) {
-      html += `<span class="cw-content">${escapeHtml(template.content)}</span>`;
-      if (!isSelfClosing) {
-        html += `&lt;/${template.tag}&gt;`;
-      }
-    }
-    
-    html += "  ";
-  }
-  return html;
-}
-
-function initCodeWall(): void {
-  const container = document.getElementById("code-wall");
-  if (!container) return;
-
-  const stripCount = 10;
-  const snippetLength = 25;
-  
-  for (let i = 0; i < stripCount; i++) {
-    const strip = document.createElement("div");
-    strip.className = "code-wall-strip";
-    
-    const startOffset = Math.floor(Math.random() * codeTemplates.length);
-    
-    const hasSemantic = codeTemplates.slice(startOffset, startOffset + 5).some(t => t.isSemantic);
-    const hasInteractive = codeTemplates.slice(startOffset, startOffset + 5).some(t => interactiveTags.has(t.tag));
-    
-    if (hasSemantic) {
-      strip.classList.add("is-semantic");
-    }
-    if (hasInteractive) {
-      strip.classList.add("is-interactive");
-    }
-    
-    const content = document.createElement("div");
-    content.className = "code-wall-content";
-    
-    const snippet = generateHTMLSnippet(startOffset, snippetLength);
-    content.innerHTML = snippet + "    " + snippet;
-
-    const y = Math.round(i * (100 / stripCount));
-    
-    let baseOpacity = 0.12;
-    if (hasInteractive) baseOpacity = 0.22;
-    else if (hasSemantic) baseOpacity = 0.17;
-
-    const opacity = baseOpacity + Math.random() * 0.06;
-    
-    const duration = 600 + Math.random() * 400;
-    const startOffsetPx = Math.random() * -2000;
-    
-    strip.style.cssText = `
-      --y: ${y}vh;
-      --o: ${opacity};
-      --o-highlight: ${opacity + 0.15};
-      top: var(--y);
-    `;
-    
-    content.style.cssText = `
-      --duration: ${duration}s;
-      --start-offset: ${startOffsetPx}px;
-      --play-state: running;
-      padding-left: var(--start-offset);
-    `;
-    
-    strip.appendChild(content);
-    container.appendChild(strip);
+  if (!("IntersectionObserver" in window)) {
+    bands.forEach((band) => band.classList.add("is-motion-active"));
+    return;
   }
 
-  // Pause animations when hero is not visible (huge perf win)
-  const heroEl = document.querySelector(".hero");
-  if (heroEl) {
-    new IntersectionObserver((entries) => {
-      container.classList.toggle("paused", !entries[0].isIntersecting);
-    }).observe(heroEl);
-  }
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        entry.target.classList.toggle("is-motion-active", entry.isIntersecting);
+      });
+    },
+    { threshold: 0.08, rootMargin: "18% 0px 18% 0px" },
+  );
+
+  bands.forEach((band) => observer.observe(band));
 }
 
 // ── Mobile Menu ──
@@ -809,17 +607,31 @@ function initMobileMenu(): void {
   const menu = document.getElementById("mobile-menu") as HTMLElement | null;
   if (!btn || !menu) return;
 
+  const menuLinks = Array.from(menu.querySelectorAll<HTMLAnchorElement>("a"));
+
+  function setMenuInteractive(isOpen: boolean): void {
+    const inertMenu = menu as HTMLElement & { inert?: boolean };
+    inertMenu.inert = !isOpen;
+    menu.toggleAttribute("inert", !isOpen);
+    menu.setAttribute("aria-hidden", String(!isOpen));
+    menuLinks.forEach((link) => {
+      link.tabIndex = isOpen ? 0 : -1;
+    });
+  }
+
   function openMenu(): void {
     btn!.setAttribute("aria-expanded", "true");
+    setMenuInteractive(true);
     menu!.classList.add("is-open");
-    menu!.removeAttribute("aria-hidden");
   }
 
   function closeMenu(): void {
     btn!.setAttribute("aria-expanded", "false");
     menu!.classList.remove("is-open");
-    menu!.setAttribute("aria-hidden", "true");
+    setMenuInteractive(false);
   }
+
+  setMenuInteractive(false);
 
   btn.addEventListener("click", () => {
     const isOpen = btn!.getAttribute("aria-expanded") === "true";
@@ -833,7 +645,7 @@ function initMobileMenu(): void {
     }
   });
 
-  menu.querySelectorAll("a").forEach((link) => {
+  menuLinks.forEach((link) => {
     link.addEventListener("click", closeMenu);
   });
 }
@@ -971,115 +783,56 @@ function initBenchGraph(): void {
   if (chart) observer.observe(chart);
 }
 
-// ── Bento Popup ──
+// ── Try Tabs ──
 
-function initBentoPopup(): void {
-  const modal = document.getElementById("bento-modal");
-  const content = document.getElementById("bento-modal-content");
-  if (!modal || !content) return;
+function initTryTabs(): void {
+  const tabs = Array.from(
+    document.querySelectorAll<HTMLButtonElement>("[data-try-tab]"),
+  );
+  const panels = Array.from(
+    document.querySelectorAll<HTMLElement>("[data-try-panel]"),
+  );
+  if (!tabs.length || !panels.length) return;
 
-  let triggerEl: HTMLElement | null = null;
-  let trapHandler: ((e: KeyboardEvent) => void) | null = null;
+  function activateTab(tab: HTMLButtonElement, focus = false): void {
+    const key = tab.dataset.tryTab;
+    if (!key) return;
 
-  function getFocusable(): HTMLElement[] {
-    return Array.from(
-      modal!.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      )
-    ).filter((el) => !el.hasAttribute("disabled"));
-  }
-
-  function trapFocus(e: KeyboardEvent): void {
-    if (e.key !== "Tab") return;
-    const focusable = getFocusable();
-    if (!focusable.length) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    if (e.shiftKey) {
-      if (document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      }
-    } else {
-      if (document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    }
-  }
-
-  function openModal(card: HTMLElement): void {
-    triggerEl = card;
-    const clone = card.cloneNode(true) as HTMLElement;
-    clone.removeAttribute("role");
-    clone.removeAttribute("tabindex");
-    clone.removeAttribute("aria-label");
-    clone.querySelectorAll("[hidden]").forEach((el) => el.removeAttribute("hidden"));
-    const title = clone.querySelector(".bento-title")?.textContent ?? "";
-
-    content!.innerHTML =
-      '<button class="bento-modal-close" aria-label="Close dialog">\u00d7</button>' +
-      clone.innerHTML;
-    content!.querySelector(".bento-modal-close")?.addEventListener("click", closeModal);
-
-    modal!.setAttribute("role", "dialog");
-    modal!.setAttribute("aria-modal", "true");
-    modal!.setAttribute("aria-label", title);
-    modal!.classList.add("is-open");
-
-    trapHandler = trapFocus;
-    document.addEventListener("keydown", trapHandler);
-
-    requestAnimationFrame(() => {
-      (content!.querySelector(".bento-modal-close") as HTMLElement)?.focus();
-    });
-  }
-
-  function closeModal(): void {
-    modal!.classList.remove("is-open");
-    if (trapHandler) {
-      document.removeEventListener("keydown", trapHandler);
-      trapHandler = null;
-    }
-    const trigger = triggerEl;
-    triggerEl = null;
-    trigger?.focus();
-  }
-
-  document.querySelectorAll(".bento-card").forEach((card) => {
-    const el = card as HTMLElement;
-    el.setAttribute("role", "button");
-    el.setAttribute("tabindex", "0");
-    const title = el.querySelector(".bento-title")?.textContent ?? "feature";
-    el.setAttribute("aria-label", `Learn more about ${title}`);
-
-    el.addEventListener("click", (e) => {
-      if ((e.target as HTMLElement).closest("a")) return;
-      openModal(el);
+    tabs.forEach((item) => {
+      const active = item === tab;
+      item.classList.toggle("is-active", active);
+      item.setAttribute("aria-selected", String(active));
+      item.tabIndex = active ? 0 : -1;
     });
 
-    el.addEventListener("keydown", (e: Event) => {
-      const ke = e as KeyboardEvent;
-      if (ke.key === "Enter" || ke.key === " ") {
-        ke.preventDefault();
-        if (!(ke.target as HTMLElement).closest("a")) {
-          openModal(el);
-        }
-      }
+    panels.forEach((panel) => {
+      const active = panel.dataset.tryPanel === key;
+      panel.classList.toggle("is-active", active);
+      panel.hidden = !active;
     });
-  });
 
-  modal.addEventListener("click", (e) => {
-    if (e.target === modal) closeModal();
-  });
+    if (focus) tab.focus();
+  }
 
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && modal!.classList.contains("is-open")) closeModal();
+  tabs.forEach((tab, index) => {
+    tab.addEventListener("click", () => activateTab(tab));
+    tab.addEventListener("keydown", (event) => {
+      const last = tabs.length - 1;
+      let nextIndex = index;
+
+      if (event.key === "ArrowRight") nextIndex = index === last ? 0 : index + 1;
+      else if (event.key === "ArrowLeft") nextIndex = index === 0 ? last : index - 1;
+      else if (event.key === "Home") nextIndex = 0;
+      else if (event.key === "End") nextIndex = last;
+      else return;
+
+      event.preventDefault();
+      activateTab(tabs[nextIndex], true);
+    });
   });
 }
 
 async function init(): Promise<void> {
-  initCodeWall();
   initScrollMorph();
   initTheme();
   initLanguage();
@@ -1087,9 +840,10 @@ async function init(): Promise<void> {
   initNavScroll();
   initMobileMenu();
   initScrollReveal();
+  initStoryMotion();
   initCountUp();
   initBenchGraph();
-  initBentoPopup();
+  initTryTabs();
   initPkgCycle();
   updateLangButtons();
   await initGitHubStars();

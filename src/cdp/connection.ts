@@ -17,6 +17,7 @@ export interface CDPConnection {
   Runtime: Client["Runtime"];
   Input: Client["Input"];
   Emulation: Client["Emulation"];
+  Inspector?: Client["Inspector"];
   /** True if the connection is dead (Chrome crashed or disconnected) */
   isDead?: boolean;
 }
@@ -42,18 +43,26 @@ export async function connect(options: {
       "CDP connect"
     );
 
-    const { DOM, Page, Runtime, Input, Emulation } = client;
+    const { DOM, Page, Runtime, Input, Emulation, Inspector } = client;
 
-    await Promise.all([DOM.enable(), Page.enable(), Runtime.enable()]);
+    const domainEnables = [DOM.enable(), Page.enable(), Runtime.enable()];
+    if (Inspector?.enable) {
+      domainEnables.push(Inspector.enable());
+    }
+    await Promise.all(domainEnables);
 
-    const conn: CDPConnection = { client, DOM, Page, Runtime, Input, Emulation, isDead: false };
+    const conn: CDPConnection = { client, DOM, Page, Runtime, Input, Emulation, Inspector, isDead: false };
 
     // HIGH-018: Chrome crash/disconnect detection
-    // Type assertion needed because chrome-remote-interface types don't expose event methods
     (client as unknown as { on(event: string, handler: () => void): void }).on("disconnect", () => {
       conn.isDead = true;
     });
-    (Page as unknown as { on(event: string, handler: () => void): void }).on("targetCrashed", () => {
+    // Chrome exposes targetCrashed on the Inspector domain. Some protocol
+    // versions do not expose it at all, so register defensively.
+    Inspector?.targetCrashed?.(() => {
+      conn.isDead = true;
+    });
+    Inspector?.detached?.(() => {
       conn.isDead = true;
     });
 
@@ -521,10 +530,12 @@ export async function disconnect(conn: CDPConnection): Promise<void> {
     const DOM = conn.DOM as unknown as { disable(): Promise<void> };
     const Page = conn.Page as unknown as { disable(): Promise<void> };
     const Runtime = conn.Runtime as unknown as { disable(): Promise<void> };
+    const Inspector = conn.Inspector as { disable?: () => Promise<void> } | undefined;
     await Promise.all([
       DOM.disable().catch(() => {}),
       Page.disable().catch(() => {}),
       Runtime.disable().catch(() => {}),
+      Inspector?.disable?.().catch(() => {}),
     ]);
   } finally {
     await conn.client.close();

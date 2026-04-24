@@ -84,6 +84,10 @@ export interface TideSurfOptions {
   readOnly?: boolean;
   /** Allowed host filesystem roots for upload/download operations (defaults to cwd + tmpdir) */
   fileAccessRoots?: string[];
+  /** Allow navigation to localhost/loopback URLs. Intended for trusted local development. */
+  allowLocalhost?: boolean;
+  /** Allow navigation to private/link-local network URLs. Also allows localhost. */
+  allowPrivateHosts?: boolean;
 }
 
 /**
@@ -102,6 +106,10 @@ export interface TideSurfConnectOptions {
   readOnly?: boolean;
   /** Allowed host filesystem roots for upload/download operations (defaults to cwd + tmpdir) */
   fileAccessRoots?: string[];
+  /** Allow navigation to localhost/loopback URLs. Intended for trusted local development. */
+  allowLocalhost?: boolean;
+  /** Allow navigation to private/link-local network URLs. Also allows localhost. */
+  allowPrivateHosts?: boolean;
 }
 
 /**

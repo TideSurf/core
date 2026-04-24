@@ -2,6 +2,7 @@ import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { createServer, type Server } from "node:http";
 import { TideSurf } from "../../src/index.js";
 import { ElementNotFoundError } from "../../src/errors.js";
 
@@ -10,10 +11,7 @@ const fixturesDir = join(__dirname, "..", "fixtures");
 
 let surfing: TideSurf;
 let fixtureUrls: Record<string, string> = {};
-
-function toDataUrl(html: string): string {
-  return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
-}
+let fixtureServer: Server | null = null;
 
 async function canLaunchBrowser(): Promise<boolean> {
   let browser: TideSurf | null = null;
@@ -43,23 +41,56 @@ describeBrowser("Browser integration", () => {
       "iframe-parent.html",
       "advanced-tools.html",
     ] as const;
-    const entries = await Promise.all(
-      fixtureNames.map(async (name) => [name, toDataUrl(await readFile(join(fixturesDir, name), "utf-8"))] as const)
-    );
-    fixtureUrls = Object.fromEntries(entries);
+    const fixtureSet = new Set<string>(fixtureNames);
 
-    surfing = await TideSurf.launch({ headless: true, port: 9333 });
+    fixtureServer = createServer(async (req, res) => {
+      try {
+        const url = new URL(req.url ?? "/", "http://127.0.0.1");
+        const name = decodeURIComponent(url.pathname.replace(/^\/+/, ""));
+        if (!fixtureSet.has(name as typeof fixtureNames[number])) {
+          res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+          res.end("Not found");
+          return;
+        }
+        const html = await readFile(join(fixturesDir, name), "utf-8");
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        res.end(html);
+      } catch (err) {
+        res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+        res.end(err instanceof Error ? err.message : String(err));
+      }
+    });
+    await new Promise<void>((resolve) => {
+      fixtureServer!.listen(0, "127.0.0.1", resolve);
+    });
+    const address = fixtureServer.address();
+    if (!address || typeof address === "string") {
+      throw new Error("Fixture server did not bind to a TCP port");
+    }
+
+    fixtureUrls = Object.fromEntries(
+      fixtureNames.map((name) => [name, `http://127.0.0.1:${address.port}/${name}`] as const)
+    );
+
+    surfing = await TideSurf.launch({ headless: true, port: 9333, allowLocalhost: true });
   }, 60000);
 
   afterAll(async () => {
     await surfing?.close();
+    await new Promise<void>((resolve, reject) => {
+      if (!fixtureServer) {
+        resolve();
+        return;
+      }
+      fixtureServer.close((err) => (err ? reject(err) : resolve()));
+    });
   });
 
   it("navigates and gets page state", async () => {
     await surfing.navigate(fixtureUrls["basic.html"]);
     const state = await surfing.getState();
 
-    expect(state.url).toContain("data:text/html");
+    expect(state.url).toContain("basic.html");
     expect(state.title).toBe("Test Page");
     expect(state.content).toContain("# ");
     expect(state.content).toContain(">");
@@ -134,6 +165,7 @@ describeBrowser("Browser integration", () => {
 
   it("search returns nearest interactive element IDs", async () => {
     await surfing.navigate(fixtureUrls["interactive.html"]);
+    await surfing.getState();
 
     const results = await surfing.getPage().search("Action");
 
@@ -276,6 +308,7 @@ describeBrowser("Browser integration", () => {
       headless: true,
       port: 9334,
       defaultViewport: { width: 640, height: 480 },
+      allowLocalhost: true,
     });
 
     try {

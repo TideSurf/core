@@ -1,7 +1,6 @@
 import type { TideSurf } from "../tidesurf.js";
 import type { ToolResult } from "../types.js";
 import {
-  validateUrl,
   validateElementId,
   validateSelector,
   validateExpression,
@@ -56,8 +55,6 @@ export function createToolExecutor(
         };
       }
 
-      const page = instance.getPage();
-
       switch (tool.name) {
         case "get_state": {
           const maxTokens = tool.input["maxTokens"] as number | undefined;
@@ -80,8 +77,7 @@ export function createToolExecutor(
           if (typeof url !== "string") {
             throw new Error("URL is required and must be a string");
           }
-          validateUrl(url);
-          await page.navigate(url);
+          await instance.navigate(url);
           const state = await instance.getState();
           return { success: true, data: state.content };
         }
@@ -91,6 +87,7 @@ export function createToolExecutor(
             throw new Error("Element ID is required and must be a string");
           }
           validateElementId(id);
+          const page = instance.getPage();
           await page.click(id);
           const state = await instance.getState();
           return {
@@ -109,6 +106,7 @@ export function createToolExecutor(
           }
           validateElementId(id);
           const clear = (tool.input["clear"] as boolean) ?? false;
+          const page = instance.getPage();
           await page.type(id, text, clear);
           return {
             success: true,
@@ -125,6 +123,7 @@ export function createToolExecutor(
             throw new Error("Value is required and must be a string");
           }
           validateElementId(id);
+          const page = instance.getPage();
           await page.select(id, value);
           return {
             success: true,
@@ -140,6 +139,7 @@ export function createToolExecutor(
           if (amount !== undefined) {
             validatePositiveNumber(amount, "amount");
           }
+          const page = instance.getPage();
           await page.scroll(direction, amount);
           const state = await instance.getState();
           return {
@@ -153,6 +153,7 @@ export function createToolExecutor(
             throw new Error("Selector is required and must be a string");
           }
           validateSelector(selector);
+          const page = instance.getPage();
           const text = await page.extract(selector);
           return { success: true, data: text };
         }
@@ -162,6 +163,7 @@ export function createToolExecutor(
             throw new Error("Expression is required and must be a string");
           }
           validateExpression(expression);
+          const page = instance.getPage();
           const result = await page.evaluate(expression);
           return { success: true, data: result };
         }
@@ -174,9 +176,6 @@ export function createToolExecutor(
           const url = tool.input["url"] as string | undefined;
           if (url !== undefined && typeof url !== "string") {
             throw new Error("URL must be a string");
-          }
-          if (url) {
-            validateUrl(url);
           }
           const tab = await instance.newTab(url);
           return { success: true, data: tab };
@@ -216,6 +215,7 @@ export function createToolExecutor(
           if (maxResults !== undefined) {
             validatePositiveInteger(maxResults, "maxResults");
           }
+          const page = instance.getPage();
           const results = await page.search(query, maxResults);
           return { success: true, data: results };
         }
@@ -228,6 +228,7 @@ export function createToolExecutor(
           if (elementId) {
             validateElementId(elementId);
           }
+          const page = instance.getPage();
           const base64 = await page.screenshot({ elementId, fullPage });
           return { success: true, data: base64 };
         }
@@ -241,6 +242,7 @@ export function createToolExecutor(
             throw new Error("filePath is required and must be a string");
           }
           validateElementId(id);
+          const page = instance.getPage();
           await page.upload(id, [filePath]);
           return {
             success: true,
@@ -248,6 +250,7 @@ export function createToolExecutor(
           };
         }
         case "clipboard_read": {
+          const page = instance.getPage();
           const text = await page.clipboardRead();
           return { success: true, data: text };
         }
@@ -256,6 +259,7 @@ export function createToolExecutor(
           if (typeof text !== "string") {
             throw new Error("Text is required and must be a string");
           }
+          const page = instance.getPage();
           await page.clipboardWrite(text);
           return {
             success: true,
@@ -273,6 +277,7 @@ export function createToolExecutor(
           if (timeout !== undefined) {
             validatePositiveInteger(timeout, "timeout");
           }
+          const page = instance.getPage();
           const result = await page.download(id, { downloadDir, timeout });
           return { success: true, data: result };
         }

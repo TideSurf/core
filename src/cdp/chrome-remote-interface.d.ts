@@ -81,6 +81,11 @@ declare module "chrome-remote-interface" {
         mobile: boolean;
       }): Promise<void>;
     };
+    Inspector?: {
+      enable?(): Promise<void>;
+      targetCrashed?(callback: () => void): () => void;
+      detached?(callback: () => void): () => void;
+    };
     send(method: string, params?: Record<string, unknown>): Promise<unknown>;
     close(): Promise<void>;
   }

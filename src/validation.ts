@@ -6,6 +6,13 @@ import { ValidationError } from "./errors.js";
 const ELEMENT_ID_PATTERN = /^[A-Z]\d+$/;
 const DEFAULT_FILE_ACCESS_ROOTS = [process.cwd(), tmpdir()];
 
+export interface UrlValidationOptions {
+  /** Allow localhost and loopback addresses such as 127.0.0.1 and ::1. */
+  allowLocalhost?: boolean;
+  /** Allow private/link-local network addresses. Also allows localhost. */
+  allowPrivateHosts?: boolean;
+}
+
 // 0.5.2: IPv4-mapped IPv6 unmap. Covers both dotted (::ffff:1.2.3.4) and
 // hex (::ffff:0102:0304) tails since Chrome accepts both in URLs.
 function unmapIPv4FromIPv6(host: string): string | null {
@@ -26,9 +33,13 @@ function unmapIPv4FromIPv6(host: string): string | null {
 // 0.5.2: reject reserved IPv6 ranges including the unspecified address (::)
 // which was previously missed. Covers loopback, unspecified, ULA (fc00::/7),
 // and link-local (fe80::/10).
-function isBlockedIPv6(host: string): boolean {
+function isLocalhostIPv6(host: string): boolean {
+  return host.toLowerCase() === "::1";
+}
+
+function isPrivateIPv6(host: string): boolean {
   const lower = host.toLowerCase();
-  if (lower === "::" || lower === "::1") return true;
+  if (lower === "::") return true;
   // all-zero v6 (::, 0:0:0:0:0:0:0:0, etc.)
   if (/^0*(?::0*)+$/.test(lower)) return true;
   if (/^fc[0-9a-f]{2}:/i.test(lower)) return true; // fc00::/8
@@ -40,7 +51,7 @@ function isBlockedIPv6(host: string): boolean {
 /**
  * Validate a URL string
  */
-export function validateUrl(url: string): void {
+export function validateUrl(url: string, options: UrlValidationOptions = {}): void {
   if (!url || typeof url !== "string") {
     throw new ValidationError("URL must be a non-empty string");
   }
@@ -79,15 +90,21 @@ export function validateUrl(url: string): void {
     // 0.5.2: IPv4-mapped IPv6 (::ffff:169.254.169.254) used to bypass the
     // IPv4 checks below — unmap it so the v4-range regexes see the real v4.
     const ipv4 = unmapIPv4FromIPv6(hostname) ?? hostname;
-    if (
+    const isLocalhost =
       ipv4 === "localhost" ||
       /^127\./.test(ipv4) ||
+      isLocalhostIPv6(hostname);
+    const isPrivateHost =
       /^10\./.test(ipv4) ||
       /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(ipv4) ||
       /^192\.168\./.test(ipv4) ||
       /^169\.254\./.test(ipv4) || // Link-local
       /^0\./.test(ipv4) ||
-      isBlockedIPv6(hostname)
+      isPrivateIPv6(hostname);
+
+    if (
+      (isLocalhost && !options.allowLocalhost && !options.allowPrivateHosts) ||
+      (isPrivateHost && !options.allowPrivateHosts)
     ) {
       throw new ValidationError(
         `Invalid URL: "${url}". Private IP addresses and localhost are not allowed`

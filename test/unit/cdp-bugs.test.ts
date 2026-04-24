@@ -42,9 +42,9 @@ describe("CDP Connection Fixes", () => {
     it("connect should set up disconnect and targetCrashed listeners", async () => {
       const content = fs.readFileSync("./src/cdp/connection.ts", "utf-8");
       
-      // Verify event listeners are set up (using type assertions for chrome-remote-interface)
+      // Verify event listeners are set up on domains that expose them.
       expect(content).toContain('("disconnect"');
-      expect(content).toContain('("targetCrashed"');
+      expect(content).toContain("Inspector?.targetCrashed?.");
       expect(content).toContain("conn.isDead = true");
     });
 

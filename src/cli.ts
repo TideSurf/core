@@ -11,6 +11,7 @@
 import { TideSurf } from "./index.js";
 import { VERSION } from "./version.js";
 import { validateUrl } from "./validation.js";
+import { CDPConnectionError } from "./errors.js";
 
 const args = process.argv.slice(2);
 
@@ -29,6 +30,9 @@ Options:
                      launching a new one. Requires remote debugging enabled in
                      Chrome (chrome://inspect#remote-debugging or --remote-debugging-port)
   --read-only        Disable mutating and unsafe tools (click, type, evaluate, upload, etc.)
+  --allow-localhost  Allow navigation to localhost/loopback URLs
+  --allow-private-hosts
+                     Allow navigation to private/link-local network URLs
   --port <n>         CDP port (default: 9222). Used with --auto-connect to specify
                      which port to connect on, or with launch to set the debug port
 
@@ -55,10 +59,13 @@ async function inspect() {
     console.error("Error: missing URL. Usage: tidesurf inspect <url>");
     process.exit(1);
   }
+  const allowLocalhost = hasFlag("--allow-localhost");
+  const allowPrivateHosts = hasFlag("--allow-private-hosts");
+  const urlValidationOptions = { allowLocalhost, allowPrivateHosts };
 
   // NEW-CLI-004: Argument injection via URL - validate URL before use
   try {
-    validateUrl(url);
+    validateUrl(url, urlValidationOptions);
   } catch (err) {
     console.error(`Error: Invalid URL - ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);
@@ -87,8 +94,8 @@ async function inspect() {
   }
 
   const browser = autoConnect
-    ? await TideSurf.connect({ port, readOnly })
-    : await TideSurf.launch({ headless: !headful, port, readOnly });
+    ? await TideSurf.connect({ port, readOnly, ...urlValidationOptions })
+    : await TideSurf.launch({ headless: !headful, port, readOnly, ...urlValidationOptions });
   try {
     await browser.navigate(url);
     const state = await browser.getState(maxTokens ? { maxTokens } : undefined);
@@ -102,6 +109,9 @@ async function mcp() {
   const headful = hasFlag("--headful");
   const autoConnect = hasFlag("--auto-connect");
   const readOnly = hasFlag("--read-only");
+  const allowLocalhost = hasFlag("--allow-localhost");
+  const allowPrivateHosts = hasFlag("--allow-private-hosts");
+  const urlValidationOptions = { allowLocalhost, allowPrivateHosts };
   const portStr = parseFlag("--port");
   const port = portStr ? parseInt(portStr, 10) : undefined;
 
@@ -151,16 +161,19 @@ async function mcp() {
           if (autoConnect) {
             try {
               console.error(`[tidesurf] Connecting to running Chrome (port ${port ?? 9222})...`);
-              surfing = await TideSurf.connect({ port, readOnly });
+              surfing = await TideSurf.connect({ port, readOnly, ...urlValidationOptions });
               console.error("[tidesurf] Connected to existing browser.");
-            } catch {
+            } catch (err) {
+              if (!(err instanceof CDPConnectionError)) {
+                throw err;
+              }
               console.error("[tidesurf] No running Chrome found, launching a new instance...");
-              surfing = await TideSurf.launch({ headless, port, readOnly });
+              surfing = await TideSurf.launch({ headless, port, readOnly, ...urlValidationOptions });
               console.error("[tidesurf] Browser launched.");
             }
           } else {
             console.error(`[tidesurf] Launching browser (${headless ? "headless" : "headful"})...`);
-            surfing = await TideSurf.launch({ headless, port, readOnly });
+            surfing = await TideSurf.launch({ headless, port, readOnly, ...urlValidationOptions });
             console.error("[tidesurf] Browser ready.");
           }
           return surfing;

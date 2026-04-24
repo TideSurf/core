@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.3 (2026-04-25)
+
+### Fixed
+
+- **MCP browser boot** — Register Chrome crash listeners on the Inspector CDP domain instead of the Page domain, fixing launch/connect failures caused by unsupported `Page.targetCrashed` handlers.
+- **Launch cleanup** — Failed `TideSurf.launch()` setup now disconnects any opened CDP session, terminates the spawned Chrome process, and removes owned temporary profiles before rethrowing.
+- **Trusted local development URLs** — Added explicit `allowLocalhost` and `allowPrivateHosts` options for CLI, MCP, and SDK navigation. Local/private URLs remain blocked by default, while trusted MCP/dev sessions can opt in.
+- **Tool validation flow** — Removed duplicate URL validation in tool execution and routed navigation/new-tab tools through the authoritative `TideSurf` instance methods.
+- **Auto-connect fallback** — CLI and MCP auto-connect now fall back to launching only for CDP connection failures instead of swallowing unrelated errors.
+- **Tab policy preservation** — Switching to an untracked tab now preserves the instance URL policy and filesystem access roots.
+
+### Tests
+
+- Browser integration tests now use a real local HTTP fixture server instead of blocked `data:` URLs.
+- `verify:release` now includes browser integration tests before build and pack checks.
+
 ## 0.5.2 (2026-04-18)
 
 ### Security
