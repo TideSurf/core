@@ -1,67 +1,59 @@
 <svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="1200" height="630" fill="#09090b"/>
+  <rect width="1200" height="630" fill="#090A0C"/>
 
-  <!-- Subtle grid -->
-  <g opacity="0.04" stroke="white" stroke-width="0.5">
-    <line x1="0" y1="0" x2="0" y2="630"/><line x1="60" y1="0" x2="60" y2="630"/>
-    <line x1="120" y1="0" x2="120" y2="630"/><line x1="180" y1="0" x2="180" y2="630"/>
-    <line x1="240" y1="0" x2="240" y2="630"/><line x1="300" y1="0" x2="300" y2="630"/>
-    <line x1="360" y1="0" x2="360" y2="630"/><line x1="420" y1="0" x2="420" y2="630"/>
-    <line x1="480" y1="0" x2="480" y2="630"/><line x1="540" y1="0" x2="540" y2="630"/>
-    <line x1="600" y1="0" x2="600" y2="630"/><line x1="660" y1="0" x2="660" y2="630"/>
-    <line x1="720" y1="0" x2="720" y2="630"/><line x1="780" y1="0" x2="780" y2="630"/>
-    <line x1="840" y1="0" x2="840" y2="630"/><line x1="900" y1="0" x2="900" y2="630"/>
-    <line x1="960" y1="0" x2="960" y2="630"/><line x1="1020" y1="0" x2="1020" y2="630"/>
-    <line x1="1080" y1="0" x2="1080" y2="630"/><line x1="1140" y1="0" x2="1140" y2="630"/>
-    <line x1="0" y1="60" x2="1200" y2="60"/><line x1="0" y1="120" x2="1200" y2="120"/>
-    <line x1="0" y1="180" x2="1200" y2="180"/><line x1="0" y1="240" x2="1200" y2="240"/>
-    <line x1="0" y1="300" x2="1200" y2="300"/><line x1="0" y1="360" x2="1200" y2="360"/>
-    <line x1="0" y1="420" x2="1200" y2="420"/><line x1="0" y1="480" x2="1200" y2="480"/>
-    <line x1="0" y1="540" x2="1200" y2="540"/>
+  <g transform="translate(64 48)">
+    <path d="M2 5 C7 1, 11 1, 14 5 C17 9, 21 9, 26 5" stroke="#6B7280" stroke-width="1.4" stroke-linecap="round"/>
+    <path d="M2 10 C7 6, 11 6, 14 10 C17 14, 21 14, 26 10" stroke="#9CA3AF" stroke-width="1.8" stroke-linecap="round"/>
+    <path d="M2 15 C7 11, 11 11, 14 15 C17 19, 21 19, 26 15" stroke="#0B63FF" stroke-width="2.4" stroke-linecap="round"/>
+    <text x="46" y="18" fill="#DFE3E8" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="24">TideSurf</text>
   </g>
 
-  <!-- Large decorative waves -->
-  <g opacity="0.06">
-    <path d="M-100 350 C100 250, 300 250, 500 350 C700 450, 900 450, 1100 350 L1300 350" stroke="white" stroke-width="2" fill="none"/>
-    <path d="M-100 400 C100 300, 300 300, 500 400 C700 500, 900 500, 1100 400 L1300 400" stroke="white" stroke-width="2" fill="none"/>
-    <path d="M-100 450 C100 350, 300 350, 500 450 C700 550, 900 550, 1100 450 L1300 450" stroke="#0055FF" stroke-width="2.5" fill="none"/>
+  <g transform="translate(64 178)">
+    <text x="0" y="0" fill="#F4F5F6" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="116" font-style="italic" letter-spacing="-6">Surf</text>
+    <text x="0" y="104" fill="#F4F5F6" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="116" font-style="italic" letter-spacing="-6">the Tide</text>
+    <text x="0" y="176" fill="#A7ADB6" font-family="system-ui, -apple-system, sans-serif" font-size="30">DOM text for browser agents.</text>
+    <text x="0" y="216" fill="#A7ADB6" font-family="system-ui, -apple-system, sans-serif" font-size="30">Stable IDs, direct CDP, no screenshots.</text>
+    <rect x="0" y="260" width="472" height="68" rx="7" fill="#121518"/>
+    <text x="24" y="303" fill="#2F7CFF" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="24" font-weight="600">$</text>
+    <text x="58" y="303" fill="#DFE3E8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="24">bun add @tidesurf/core</text>
   </g>
 
-  <!-- Logo -->
-  <g transform="translate(540, 140)">
-    <rect width="120" height="120" rx="26" fill="#111111" stroke="#222222" stroke-width="1"/>
-    <path d="M22 46 C35 33, 50 33, 60 46 C70 59, 85 59, 98 46" stroke="white" stroke-width="3" stroke-linecap="round" opacity="0.1"/>
-    <path d="M22 63 C35 50, 50 50, 60 63 C70 76, 85 76, 98 63" stroke="white" stroke-width="3.5" stroke-linecap="round" opacity="0.25"/>
-    <path d="M22 80 C35 67, 50 67, 60 80 C70 93, 85 93, 98 80" stroke="#0055FF" stroke-width="4.5" stroke-linecap="round"/>
+  <g transform="translate(568 128)">
+    <rect width="568" height="374" rx="14" fill="#101214"/>
+    <g transform="translate(24 24)">
+      <rect width="252" height="118" rx="9" fill="#0B0D0F"/>
+      <text x="18" y="32" fill="#9BA3AD" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" font-weight="800">DOM</text>
+      <text x="126" y="32" fill="#F4F5F6" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" font-weight="800">486 tokens</text>
+      <text x="18" y="62" fill="#C8CDD4" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15">&lt;nav class="site-nav"&gt;</text>
+      <text x="18" y="84" fill="#C8CDD4" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15">&lt;a href="/docs"&gt;Docs&lt;/a&gt;</text>
+      <text x="18" y="106" fill="#C8CDD4" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15">&lt;button&gt;Get started&lt;/button&gt;</text>
+    </g>
+    <g transform="translate(292 24)">
+      <rect width="252" height="118" rx="9" fill="#0B0D0F"/>
+      <text x="18" y="32" fill="#8CB5FF" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" font-weight="800">TideSurf</text>
+      <text x="138" y="32" fill="#F4F5F6" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" font-weight="800">132 tokens</text>
+      <text x="18" y="62" fill="#8CB5FF" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15">L1 [LINK] Docs /docs</text>
+      <text x="18" y="84" fill="#8CB5FF" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15">B2 [BUTTON] Get started /start</text>
+      <text x="18" y="106" fill="#8CB5FF" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15">I1 [INPUT email] Your email</text>
+    </g>
+    <g transform="translate(24 158)">
+      <rect width="252" height="192" rx="9" fill="#080A0B"/>
+      <text x="20" y="36" fill="#F4F5F6" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="17">Example</text>
+      <rect x="160" y="15" width="32" height="28" rx="5" fill="#0B63FF"/>
+      <text x="167" y="35" fill="#FFFFFF" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-weight="800" font-size="16">L1</text>
+      <text x="198" y="35" fill="#8CB5FF" font-family="system-ui, -apple-system, sans-serif" font-size="17">Docs</text>
+      <text x="20" y="94" fill="#F4F5F6" font-family="system-ui, -apple-system, sans-serif" font-weight="800" font-size="34">Build faster with</text>
+      <text x="20" y="130" fill="#F4F5F6" font-family="system-ui, -apple-system, sans-serif" font-weight="800" font-size="34">reliable APIs</text>
+      <text x="20" y="166" fill="#9BA3AD" font-family="system-ui, -apple-system, sans-serif" font-size="20">Ship production apps with clear docs.</text>
+    </g>
+    <g transform="translate(292 158)">
+      <rect width="252" height="192" rx="9" fill="#080A0B"/>
+      <text x="20" y="38" fill="#D5D9DF" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18"># example.com</text>
+      <text x="20" y="64" fill="#D5D9DF" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18">URL: https://example.com/</text>
+      <text x="20" y="90" fill="#D5D9DF" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18">TITLE: Example</text>
+      <rect x="16" y="115" width="216" height="28" rx="4" fill="#071B40"/>
+      <text x="20" y="135" fill="#8CB5FF" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18">L1 [LINK] Docs /docs</text>
+      <text x="20" y="164" fill="#D5D9DF" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18">B2 [BUTTON] Get started</text>
+    </g>
   </g>
-
-  <!-- Title -->
-  <text x="600" y="320" text-anchor="middle" fill="white" font-family="system-ui, -apple-system, sans-serif" font-weight="800" font-size="72" letter-spacing="-2">TideSurf</text>
-
-  <!-- Tagline -->
-  <text x="600" y="375" text-anchor="middle" fill="#888888" font-family="system-ui, -apple-system, sans-serif" font-weight="400" font-size="24">The web, compressed for AI agents</text>
-
-  <!-- Stats bar -->
-  <g transform="translate(260, 430)">
-    <text x="0" y="0" fill="#0055FF" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="36">7.7x</text>
-    <text x="0" y="28" fill="#666666" font-family="system-ui, -apple-system, sans-serif" font-weight="400" font-size="14">compression</text>
-
-    <line x1="150" y1="-20" x2="150" y2="30" stroke="#222222" stroke-width="1"/>
-
-    <text x="220" y="0" fill="white" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="36">87%</text>
-    <text x="220" y="28" fill="#666666" font-family="system-ui, -apple-system, sans-serif" font-weight="400" font-size="14">reduction</text>
-
-    <line x1="370" y1="-20" x2="370" y2="30" stroke="#222222" stroke-width="1"/>
-
-    <text x="440" y="0" fill="white" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="36">18ms</text>
-    <text x="440" y="28" fill="#666666" font-family="system-ui, -apple-system, sans-serif" font-weight="400" font-size="14">parse time</text>
-
-    <line x1="590" y1="-20" x2="590" y2="30" stroke="#222222" stroke-width="1"/>
-
-    <text x="660" y="0" fill="white" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="36">12</text>
-    <text x="660" y="28" fill="#666666" font-family="system-ui, -apple-system, sans-serif" font-weight="400" font-size="14">tools</text>
-  </g>
-
-  <!-- URL -->
-  <text x="600" y="560" text-anchor="middle" fill="#444444" font-family="system-ui, -apple-system, sans-serif" font-weight="500" font-size="18">tidesurf.org</text>
 </svg>

@@ -312,11 +312,6 @@ const translations: Translations = {
     ja: "ライブページをTideSurfのDOM出力へ圧縮する例",
     ko: "렌더링된 페이지를 TideSurf DOM 출력으로 압축하는 예시",
   },
-  "mock.output": {
-    en: "Compressed DOM output",
-    ja: "圧縮DOM出力",
-    ko: "압축 DOM 출력",
-  },
   "mock.tokens": { en: "~132 tokens", ja: "約132トークン", ko: "약 132 토큰" },
   "mock.usage.aria": {
     en: "TideSurf usage mock-up",
@@ -342,6 +337,12 @@ const translations: Translations = {
     ja: "現代のウェブ時代、潮流は激しい。波に乗ろう。",
     ko: "현대 웹 시대, 조류는 거세다. 파도를 타자.",
   },
+  "privacy.cookie.text": {
+    en: "Cloudflare Analytics only.",
+    ja: "Cloudflare Analyticsのみ。",
+    ko: "Cloudflare Analytics만 사용합니다.",
+  },
+  "privacy.cookie.action": { en: "OK", ja: "OK", ko: "확인" },
 };
 
 // ── State ──
@@ -832,11 +833,118 @@ function initTryTabs(): void {
   });
 }
 
+function initHeroVerbCycle(): void {
+  const slot = document.querySelector<HTMLElement>(".hero-verb-slot");
+  const current = document.getElementById("hero-verb-current");
+  const next = document.getElementById("hero-verb-next");
+  if (!slot || !current || !next) return;
+
+  const verbs = ["SURF", "BROWSE", "INTERACT", "CLICK", "ENTER"];
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+  let index = 0;
+  let switching = false;
+  window.setInterval(() => {
+    if (switching) return;
+    const nextIndex = (index + 1) % verbs.length;
+    switching = true;
+    next.textContent = verbs[nextIndex];
+    slot.classList.add("is-switching");
+    window.setTimeout(() => {
+      index = nextIndex;
+      current.textContent = verbs[index];
+      next.textContent = "";
+      slot.classList.remove("is-switching");
+      switching = false;
+    }, 360);
+  }, 3000);
+}
+
+function initCookieNotice(): void {
+  const notice = document.getElementById("cookie-note");
+  const dismiss = document.getElementById("cookie-dismiss");
+  if (!notice || !dismiss) return;
+
+  if (safeStorageGet("tidesurf-cookie-note") === "dismissed") return;
+
+  notice.classList.remove("is-hidden");
+  dismiss.addEventListener("click", () => {
+    safeStorageSet("tidesurf-cookie-note", "dismissed");
+    notice.classList.add("is-hidden");
+  });
+}
+
+function initMotionModal(): void {
+  const modal = document.getElementById("motion-modal");
+  const title = document.getElementById("motion-modal-title");
+  const body = document.getElementById("motion-modal-body");
+  const triggers = Array.from(
+    document.querySelectorAll<HTMLElement>("[data-motion-modal]"),
+  );
+  if (!modal || !title || !body || !triggers.length) return;
+
+  let lastTrigger: HTMLElement | null = null;
+
+  function closeModal(): void {
+    modal.setAttribute("aria-hidden", "true");
+    modal.hidden = true;
+    document.body.classList.remove("modal-open");
+    lastTrigger?.focus();
+  }
+
+  function openModal(trigger: HTMLElement): void {
+    lastTrigger = trigger;
+    title.textContent = trigger.dataset.modalTitle || "";
+    body.textContent = trigger.dataset.modalBody || "";
+    modal.hidden = false;
+    modal.setAttribute("aria-hidden", "false");
+    document.body.classList.add("modal-open");
+    modal.querySelector<HTMLButtonElement>(".motion-modal-close")?.focus();
+  }
+
+  triggers.forEach((trigger) => {
+    trigger.addEventListener("click", () => openModal(trigger));
+    trigger.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      openModal(trigger);
+    });
+  });
+
+  modal.querySelectorAll<HTMLElement>("[data-motion-close]").forEach((item) => {
+    item.addEventListener("click", closeModal);
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && modal.getAttribute("aria-hidden") === "false") {
+      closeModal();
+    }
+  });
+}
+
+function initComparisonDemo(): void {
+  const demo = document.querySelector<HTMLElement>("[data-comparison-demo]");
+  if (!demo) return;
+
+  demo.addEventListener("click", () => {
+    demo.classList.toggle("is-comparing");
+  });
+
+  demo.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    demo.classList.toggle("is-comparing");
+  });
+}
+
 async function init(): Promise<void> {
   initScrollMorph();
   initTheme();
   initLanguage();
   initCopyButtons();
+  initHeroVerbCycle();
+  initMotionModal();
+  initComparisonDemo();
   initNavScroll();
   initMobileMenu();
   initScrollReveal();
@@ -845,6 +953,7 @@ async function init(): Promise<void> {
   initBenchGraph();
   initTryTabs();
   initPkgCycle();
+  initCookieNotice();
   updateLangButtons();
   await initGitHubStars();
 }
@@ -856,39 +965,30 @@ if (document.readyState === "loading") {
 }
 
 function initPkgCycle() {
-  const track = document.getElementById("pkg-track");
+  const cycle = document.querySelector<HTMLElement>(".pkg-cycle");
+  const commandText = document.getElementById("install-command-text");
   const copyBtn = document.getElementById("install-copy-btn");
-  if (!track || !copyBtn) return;
+  if (!cycle || !commandText || !copyBtn) return;
 
   const commands = [
     "bun add @tidesurf/core",
-    "npm i @tidesurf/core",
+    "npm install @tidesurf/core",
     "yarn add @tidesurf/core",
     "pnpm add @tidesurf/core",
   ];
 
   let currentIndex = 0;
-  const itemHeight =
-    track.firstElementChild?.clientHeight ||
-    track.getBoundingClientRect().height / 5 ||
-    24;
   let intervalId: ReturnType<typeof setInterval> | null = null;
 
   function step(): void {
-    currentIndex++;
-    track!.style.transition = "transform 0.45s cubic-bezier(0.23, 1, 0.32, 1)";
-    track!.style.transform = `translateY(-${currentIndex * itemHeight}px)`;
-
-    const cmdIndex = currentIndex % commands.length;
-    copyBtn!.setAttribute("data-copy", commands[cmdIndex]);
-
-    if (currentIndex === commands.length) {
-      setTimeout(() => {
-        track!.style.transition = "none";
-        track!.style.transform = "translateY(0)";
-        currentIndex = 0;
-      }, 500);
-    }
+    currentIndex = (currentIndex + 1) % commands.length;
+    cycle!.classList.add("is-switching");
+    window.setTimeout(() => {
+      const command = commands[currentIndex];
+      commandText!.textContent = command;
+      copyBtn!.setAttribute("data-copy", command);
+      cycle!.classList.remove("is-switching");
+    }, 170);
   }
 
   // Only run the cycle when the hero is visible — saves CPU on scroll

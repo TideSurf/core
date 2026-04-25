@@ -5,21 +5,21 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
         <meta
             http-equiv="Content-Security-Policy"
-            content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://tidesurf.org https://api.producthunt.com; connect-src 'self' https://api.github.com; object-src 'none'; base-uri 'self'; form-action 'self'"
+            content="default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://tidesurf.org https://api.producthunt.com; connect-src 'self' https://api.github.com https://cloudflareinsights.com; object-src 'none'; base-uri 'self'; form-action 'self'"
         />
-        <title>TideSurf</title>
+        <title>TideSurf - Surf the Tide</title>
         <meta
             name="description"
-            content="The web, compressed for AI agents. No screenshots, no vision models."
+            content="DOM text for browser agents. Browse, reason, and act without screenshots."
         />
-        <meta property="og:title" content="TideSurf">
-        <meta property="og:description" content="The web, compressed for AI agents. No screenshots, no vision models — just the DOM compressed for machines.">
+        <meta property="og:title" content="TideSurf - Surf the Tide">
+        <meta property="og:description" content="DOM text for browser agents. Stable IDs, direct CDP, no screenshots.">
         <meta property="og:image" content="https://tidesurf.org/og.png">
         <meta property="og:url" content="https://tidesurf.org">
         <meta property="og:type" content="website">
         <meta name="twitter:card" content="summary_large_image">
-        <meta name="twitter:title" content="TideSurf">
-        <meta name="twitter:description" content="The web, compressed for AI agents. 32x compression, 97% token reduction, 22ms parse time.">
+        <meta name="twitter:title" content="TideSurf - Surf the Tide">
+        <meta name="twitter:description" content="DOM text for browser agents. Stable IDs, direct CDP, no screenshots.">
         <meta name="twitter:image" content="https://tidesurf.org/og.png">
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -140,20 +140,21 @@
             <div class="hero-content">
                 <div class="hero-copy">
                     <h1 class="hero-title">
-                        <span class="hero-word hero-word-single">Surf the Tide</span>
+                        <span class="hero-word hero-word-single" aria-label="Surf the Tide">
+                            <span class="hero-verb-slot" aria-hidden="true">
+                                <span id="hero-verb-current">SURF</span>
+                                <span id="hero-verb-next"></span>
+                            </span>
+                            <span class="hero-title-fixed" aria-hidden="true">THE TIDE</span>
+                        </span>
                     </h1>
-                    <p class="hero-tagline" data-i18n="hero.tagline">Compressed DOM for agents.</p>
                     <div class="hero-utility-row">
                         <div class="hero-cta">
                             <div class="install-box">
                                 <span class="prompt">$</span>
                                 <div class="pkg-cycle">
                                     <div class="pkg-track" id="pkg-track">
-                                        <code>bun add @tidesurf/core</code>
-                                        <code>npm install @tidesurf/core</code>
-                                        <code class="pkg-extra-pad">yarn add @tidesurf/core</code>
-                                        <code>pnpm add @tidesurf/core</code>
-                                        <code>bun add @tidesurf/core</code>
+                                        <code id="install-command-text">bun add @tidesurf/core</code>
                                     </div>
                                 </div>
                                 <button
@@ -188,11 +189,43 @@
                     </div>
                 </div>
 
-                <div class="product-visual" role="group" aria-label="Rendered page compressed into TideSurf DOM output" data-i18n="mock.product.aria" data-i18n-attr="aria-label">
-                    <div class="mock-compare-switch" aria-hidden="true">
-                        <span>DOM</span>
-                        <span>TideSurf</span>
+                <div class="product-visual" role="group" tabindex="0" aria-label="Rendered page compressed into TideSurf DOM output" data-i18n="mock.product.aria" data-i18n-attr="aria-label" data-comparison-demo>
+                    <div class="mock-savings-strip" aria-hidden="true">
+                        <span class="mock-compare-lane mock-compare-lane--raw">
+                            <span class="mock-lane-head">
+                                <em>DOM</em>
+                                <strong>486 tokens</strong>
+                            </span>
+                            <span class="mock-fragments mock-fragments--raw">
+                                <i>&lt;nav class="site-nav"&gt;</i>
+                                <i>&lt;a href="/docs"&gt;Docs&lt;/a&gt;</i>
+                                <i>&lt;button aria-label="start"&gt;Get started&lt;/button&gt;</i>
+                            </span>
+                        </span>
+                        <span class="mock-compare-lane mock-compare-lane--surf">
+                            <span class="mock-lane-head">
+                                <em>TideSurf</em>
+                                <strong>132 tokens</strong>
+                            </span>
+                            <span class="mock-fragments mock-fragments--surf">
+                                <b>L1 [LINK] Docs /docs</b>
+                                <b>B2 [BUTTON] Get started /start</b>
+                                <b>I1 [INPUT email] Your email</b>
+                            </span>
+                        </span>
                     </div>
+                    <div class="agent-trace" aria-hidden="true">
+                        <span><em>Chat</em>Open Docs</span>
+                        <span><em>Agent</em>getState({ mode: "interactive" })</span>
+                        <span><em>Tool</em>click("L1")</span>
+                    </div>
+                    <div class="mock-compression-scan" aria-hidden="true"></div>
+                    <svg class="mock-link-trace" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                        <path class="mock-trace mock-trace--one" d="M39 34 C48 30 55 30 63 34" />
+                        <path class="mock-trace mock-trace--two" d="M39 61 C49 66 56 64 63 58" />
+                        <circle class="mock-trace-dot mock-trace-dot--one" cx="63" cy="34" r="0.75" />
+                        <circle class="mock-trace-dot mock-trace-dot--two" cx="63" cy="58" r="0.75" />
+                    </svg>
                     <div class="browser-card">
                         <div class="browser-chrome">
                             <span></span><span></span><span></span>
@@ -220,7 +253,6 @@
                     </div>
                     <div class="dom-card">
                         <div class="dom-head">
-                            <span data-i18n="mock.output">Compressed DOM output</span>
                             <span class="dom-tokens" data-i18n="mock.tokens">~132 tokens</span>
                         </div>
                         <pre><code># example.com
@@ -232,11 +264,12 @@ L2 [LINK] Pricing      /pricing
 L3 [LINK] Blog         /blog
 <span class="dom-row">B2 [BUTTON] Get started /start</span>
 I1 [INPUT email] Your email</code></pre>
-                        <div class="dom-foot">Tokens: ~132 <strong>72% reduction</strong></div>
                     </div>
                     <div class="mock-action-rail" aria-hidden="true">
-                        <span>getState()</span>
-                        <span>click("L1")</span>
+                        <span>1. scan state</span>
+                        <span>2. map IDs</span>
+                        <span>3. select L1</span>
+                        <span>4. click("L1")</span>
                     </div>
                 </div>
             </div>
@@ -501,7 +534,14 @@ URL: https://example.com/
                     </div>
                     <div class="safety-code">
                         <div class="safety-visuals" aria-label="Safety motion examples">
-                            <figure class="motion-card motion-card--lock">
+                            <figure
+                                class="motion-card motion-card--lock"
+                                role="button"
+                                tabindex="0"
+                                data-motion-modal
+                                data-modal-title="Read-only mode"
+                                data-modal-body="Write tools are blocked before dispatch. The agent can inspect compressed page state, but click, type, navigate, upload, and download calls are rejected when readOnly is enabled."
+                            >
                                 <svg viewBox="0 0 280 150" role="img" aria-label="Read-only mode blocks write actions">
                                     <rect class="svg-surface" x="8" y="8" width="264" height="134" rx="10" />
                                     <rect class="svg-lock-body" x="104" y="72" width="72" height="44" rx="8" />
@@ -512,15 +552,28 @@ URL: https://example.com/
                                 </svg>
                                 <figcaption>Writes stay blocked</figcaption>
                             </figure>
-                            <figure class="motion-card motion-card--local">
+                            <figure
+                                class="motion-card motion-card--local"
+                                role="button"
+                                tabindex="0"
+                                data-motion-modal
+                                data-modal-title="Local CDP loop"
+                                data-modal-body="TideSurf talks to Chrome through a loopback DevTools WebSocket. The agent receives compressed DOM text and stable element IDs without remote browser infrastructure or screenshots."
+                            >
                                 <svg viewBox="0 0 280 150" role="img" aria-label="CDP stays local over a loopback connection">
                                     <rect class="svg-surface" x="8" y="8" width="264" height="134" rx="10" />
-                                    <rect x="46" y="52" width="70" height="46" rx="8" />
-                                    <rect x="164" y="52" width="70" height="46" rx="8" />
-                                    <path class="svg-route" d="M116 75C134 55 146 55 164 75" />
-                                    <path class="svg-route svg-route--return" d="M164 84C146 104 134 104 116 84" />
-                                    <text x="62" y="80">Agent</text>
-                                    <text x="181" y="80">CDP</text>
+                                    <rect class="svg-terminal" x="26" y="38" width="70" height="58" rx="8" />
+                                    <rect class="svg-terminal" x="184" y="38" width="70" height="58" rx="8" />
+                                    <rect class="svg-input" x="112" y="50" width="52" height="34" rx="7" />
+                                    <path class="svg-route" d="M96 62C112 42 130 42 145 62" />
+                                    <path class="svg-route svg-route--return" d="M164 72C148 98 122 98 96 76" />
+                                    <path class="svg-key-line" d="M121 61H155" />
+                                    <circle class="svg-dot-pulse" cx="166" cy="72" r="5" />
+                                    <text x="42" y="60">Agent</text>
+                                    <text x="39" y="78">tools</text>
+                                    <text x="121" y="104">127.0.0.1</text>
+                                    <text x="199" y="60">Chrome</text>
+                                    <text x="204" y="78">CDP</text>
                                 </svg>
                                 <figcaption>Local loop only</figcaption>
                             </figure>
@@ -664,6 +717,20 @@ URL: https://example.com/
                 </div>
             </div>
         </footer>
+
+        <div class="motion-modal" id="motion-modal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="motion-modal-title" hidden>
+            <div class="motion-modal-backdrop" data-motion-close></div>
+            <div class="motion-modal-panel" role="document">
+                <button class="motion-modal-close" type="button" data-motion-close aria-label="Close detail">Close</button>
+                <h2 id="motion-modal-title"></h2>
+                <p id="motion-modal-body"></p>
+            </div>
+        </div>
+
+        <div class="cookie-note is-hidden" id="cookie-note" role="status" aria-live="polite">
+            <span data-i18n="privacy.cookie.text">Cloudflare Analytics only.</span>
+            <button type="button" id="cookie-dismiss" data-i18n="privacy.cookie.action">OK</button>
+        </div>
 
         <script type="module" src="/src/main.ts"></script>
     </body>
