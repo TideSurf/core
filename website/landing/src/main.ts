@@ -308,9 +308,9 @@ const translations: Translations = {
     ko: "페이지를 탐색하고 조작합니다",
   },
   "mock.product.aria": {
-    en: "Rendered page compressed into TideSurf DOM output",
-    ja: "ライブページをTideSurfのDOM出力へ圧縮する例",
-    ko: "렌더링된 페이지를 TideSurf DOM 출력으로 압축하는 예시",
+    en: "Page to DOM to TideSurf markdown",
+    ja: "ページからDOM、TideSurfマークダウンへ",
+    ko: "페이지에서 DOM, TideSurf 마크다운으로",
   },
   "mock.tokens": { en: "~132 tokens", ja: "約132トークン", ko: "약 132 토큰" },
   "mock.usage.aria": {

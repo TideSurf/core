@@ -1400,16 +1400,25 @@ footer::before {
   bottom: max(env(safe-area-inset-bottom, 0px), 1rem);
   z-index: 80;
   display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  max-width: min(20rem, calc(100vw - 2rem));
-  padding: 0.55rem 0.58rem 0.55rem 0.72rem;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--bg-elevated) 92%, var(--bg-primary));
+  align-items: stretch;
+  gap: 3px;
+  max-width: min(22rem, calc(100vw - 2rem));
+  padding: 3px;
+  border-radius: 3px;
+  background: var(--bg-elevated);
   color: var(--text-secondary);
-  box-shadow: var(--elevation-1);
-  font-size: 0.74rem;
+  box-shadow: none;
+  font-size: 0.78rem;
+  font-weight: 600;
   line-height: 1.35;
+}
+
+.cookie-note span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0.55rem 0.72rem;
+  border-radius: 3px;
 }
 
 .cookie-note.is-hidden {
@@ -1418,15 +1427,20 @@ footer::before {
 
 .cookie-note button {
   flex: 0 0 auto;
-  min-width: 2.2rem;
-  min-height: 1.8rem;
+  min-width: 52px;
+  min-height: 44px;
   border: 0;
-  border-radius: 4px;
-  background: var(--accent);
-  color: var(--on-accent);
+  border-radius: 3px;
+  background: var(--text-primary);
+  color: var(--bg-primary);
   font: inherit;
   font-weight: 700;
   cursor: pointer;
+  transition: opacity var(--duration) var(--ease);
+}
+
+.cookie-note button:hover {
+  opacity: 0.82;
 }
 
 /* ── Scroll Reveal ── */
@@ -1538,8 +1552,8 @@ footer::before {
     left: max(env(safe-area-inset-left, 0px), 0.7rem);
     right: max(env(safe-area-inset-right, 0px), 0.7rem);
     bottom: max(env(safe-area-inset-bottom, 0px), 0.7rem);
-    align-items: flex-start;
-    font-size: 0.72rem;
+    align-items: stretch;
+    font-size: 0.76rem;
   }
 
   .hero-cta {
@@ -2503,7 +2517,10 @@ footer::before {
   border-radius: 4px;
   background: color-mix(in srgb, var(--bg-secondary) 78%, var(--bg-primary));
   color: var(--accent-text);
-  font: inherit;
+  font-family: var(--font-sans);
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1;
   padding: 0.45rem 0.58rem;
   white-space: nowrap;
 }
@@ -2711,6 +2728,237 @@ footer::before {
 
 .mock-action-rail span:nth-child(4) {
   animation-delay: 1.44s;
+}
+
+/* Current hero product story: Page -> DOM -> TideSurf markdown. */
+.product-visual {
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: clamp(0.55rem, 1vw, 0.8rem);
+  aspect-ratio: 16 / 9;
+}
+
+.mock-stage {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-primary) 86%, var(--bg-secondary));
+}
+
+.mock-stage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 2.35rem;
+  padding: 0 0.78rem;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+
+.mock-stage-head strong {
+  color: var(--text-primary);
+  font-size: 0.74rem;
+  white-space: nowrap;
+}
+
+.mock-stage--markdown .mock-stage-head span,
+.mock-stage--markdown .mock-stage-head strong {
+  color: var(--accent-text);
+}
+
+.mock-stage pre {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0.8rem 0.85rem 0.9rem;
+  overflow: hidden;
+  color: var(--code-text);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  line-height: 1.62;
+  background: color-mix(in srgb, var(--bg-primary) 72%, var(--bg-secondary));
+}
+
+.mock-stage--dom pre {
+  color: var(--text-secondary);
+}
+
+.mock-stage--markdown pre {
+  font-size: 0.68rem;
+}
+
+.mock-stage .browser-card {
+  flex: 1;
+  border-radius: 0;
+  background: transparent;
+}
+
+.mock-stage .browser-chrome {
+  padding: 0.5rem 0.68rem;
+}
+
+.mock-stage .browser-page {
+  padding: 0.82rem;
+}
+
+.mock-stage .browser-topline {
+  margin-bottom: 0.95rem;
+}
+
+.mock-stage .browser-page h2 {
+  font-size: clamp(1rem, 1.25vw, 1.18rem);
+}
+
+.mock-stage .browser-page p {
+  font-size: 0.69rem;
+}
+
+.product-visual {
+  grid-template-columns: minmax(0, 1.22fr) minmax(0, 0.94fr);
+  grid-template-rows: minmax(0, 1fr);
+  aspect-ratio: 4 / 3;
+}
+
+.mock-stage--page {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.mock-stage--compare {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.mock-stage--page .browser-card,
+.mock-stage--compare .mock-compare-window {
+  height: 100%;
+  border-radius: inherit;
+}
+
+.mock-stage--page,
+.mock-stage--compare,
+.mock-code-pane,
+.mock-stage--page .browser-card {
+  background: color-mix(in srgb, var(--bg-primary) 86%, var(--bg-secondary));
+}
+
+.mock-compare-window {
+  flex: 1;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+.mock-code-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mock-code-pane + .mock-code-pane {
+  border-top: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+}
+
+.mock-code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  min-height: 1.25rem;
+  padding: 0.5rem 0.78rem 0;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.mock-code-head strong {
+  color: var(--text-primary);
+  font-size: 0.62rem;
+  white-space: nowrap;
+}
+
+.mock-code-pane--markdown .mock-code-head span,
+.mock-code-pane--markdown .mock-code-head strong {
+  color: var(--accent-text);
+}
+
+.mock-code-pane pre {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0.5rem 0.78rem 0.78rem;
+  overflow: hidden;
+  color: var(--code-text);
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  line-height: 1.45;
+  background: transparent;
+}
+
+.mock-code-pane--dom pre {
+  color: var(--text-secondary);
+}
+
+.mock-sync-target {
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  transition:
+    background-color var(--duration) var(--ease),
+    color var(--duration) var(--ease),
+    opacity var(--duration) var(--ease),
+    transform var(--duration) var(--ease);
+}
+
+.mock-sync-target--page {
+  padding: 0.12rem 0.18rem 0.12rem 0.12rem;
+  margin: -0.12rem -0.18rem -0.12rem -0.12rem;
+  color: var(--accent-text);
+}
+
+.mock-sync-target--dom {
+  display: inline-block;
+  max-width: 100%;
+  padding: 0 0.16rem;
+  margin-left: -0.16rem;
+  color: var(--accent-text);
+}
+
+.mock-code-pane--dom .mock-sync-target--dom {
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-primary));
+}
+
+.product-visual:has(.mock-sync-target:hover) .mock-sync-target,
+.product-visual:focus-visible .mock-sync-target,
+.product-visual.is-comparing .mock-sync-target {
+  background: color-mix(in srgb, var(--accent) 17%, var(--bg-primary));
+  color: var(--accent-text);
+}
+
+.product-visual:has(.mock-sync-target:hover) .mock-sync-target--page,
+.product-visual:focus-visible .mock-sync-target--page,
+.product-visual.is-comparing .mock-sync-target--page {
+  transform: translateY(-1px);
+}
+
+.product-visual:has(.mock-sync-target:hover) .mock-sync-target .browser-id,
+.product-visual:focus-visible .mock-sync-target .browser-id,
+.product-visual.is-comparing .mock-sync-target .browser-id {
+  background: var(--accent);
+  color: var(--on-accent);
 }
 
 @keyframes mock-trace-flow {
@@ -3007,8 +3255,8 @@ footer::before {
     min-height: auto;
     aspect-ratio: 4 / 3;
     display: grid;
-    grid-template-columns: minmax(0, 0.92fr) minmax(0, 1fr);
-    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1.22fr) minmax(0, 0.94fr);
+    grid-template-rows: minmax(0, 1fr) auto;
     gap: 1rem;
   }
 
@@ -3164,6 +3412,26 @@ footer::before {
   .mock-link-trace {
     display: none;
   }
+
+  .mock-stage {
+    min-height: 8.4rem;
+  }
+
+  .mock-stage--page,
+  .mock-stage--compare {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  .mock-stage--page {
+    min-height: 8.7rem;
+  }
+
+  .mock-stage pre {
+    font-size: 0.58rem;
+    line-height: 1.45;
+  }
+
 }
 
 @media (max-width: 480px) {
@@ -3381,6 +3649,50 @@ footer::before {
 
   .dom-foot {
     display: none;
+  }
+
+  .mock-stage .browser-chrome {
+    display: flex;
+  }
+
+  .mock-stage .browser-page h2 {
+    display: block;
+    font-size: 0.95rem;
+  }
+
+  .mock-stage .browser-form {
+    display: grid;
+  }
+
+  .mock-stage .mock-cursor {
+    display: inline-block;
+  }
+
+  .mock-stage .browser-page p {
+    display: none;
+    font-size: 0.66rem;
+    margin-bottom: 0.55rem;
+  }
+
+  .mock-stage-head {
+    min-height: 2rem;
+    padding-inline: 0.65rem;
+    font-size: 0.58rem;
+  }
+
+  .mock-code-head {
+    min-height: 1.8rem;
+    padding-inline: 0.65rem;
+    font-size: 0.58rem;
+  }
+
+  .mock-code-head strong {
+    font-size: 0.62rem;
+  }
+
+  .mock-code-pane pre {
+    padding: 0.52rem 0.65rem 0.62rem;
+    font-size: 0.56rem;
   }
 
   .mock-action-rail {

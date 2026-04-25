@@ -189,88 +189,58 @@
                     </div>
                 </div>
 
-                <div class="product-visual" role="group" tabindex="0" aria-label="Rendered page compressed into TideSurf DOM output" data-i18n="mock.product.aria" data-i18n-attr="aria-label" data-comparison-demo>
-                    <div class="mock-savings-strip" aria-hidden="true">
-                        <span class="mock-compare-lane mock-compare-lane--raw">
-                            <span class="mock-lane-head">
-                                <em>DOM</em>
-                                <strong>486 tokens</strong>
-                            </span>
-                            <span class="mock-fragments mock-fragments--raw">
-                                <i>&lt;nav class="site-nav"&gt;</i>
-                                <i>&lt;a href="/docs"&gt;Docs&lt;/a&gt;</i>
-                                <i>&lt;button aria-label="start"&gt;Get started&lt;/button&gt;</i>
-                            </span>
-                        </span>
-                        <span class="mock-compare-lane mock-compare-lane--surf">
-                            <span class="mock-lane-head">
-                                <em>TideSurf</em>
-                                <strong>132 tokens</strong>
-                            </span>
-                            <span class="mock-fragments mock-fragments--surf">
-                                <b>L1 [LINK] Docs /docs</b>
-                                <b>B2 [BUTTON] Get started /start</b>
-                                <b>I1 [INPUT email] Your email</b>
-                            </span>
-                        </span>
-                    </div>
-                    <div class="agent-trace" aria-hidden="true">
-                        <span><em>Chat</em>Open Docs</span>
-                        <span><em>Agent</em>getState({ mode: "interactive" })</span>
-                        <span><em>Tool</em>click("L1")</span>
-                    </div>
-                    <div class="mock-compression-scan" aria-hidden="true"></div>
-                    <svg class="mock-link-trace" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-                        <path class="mock-trace mock-trace--one" d="M39 34 C48 30 55 30 63 34" />
-                        <path class="mock-trace mock-trace--two" d="M39 61 C49 66 56 64 63 58" />
-                        <circle class="mock-trace-dot mock-trace-dot--one" cx="63" cy="34" r="0.75" />
-                        <circle class="mock-trace-dot mock-trace-dot--two" cx="63" cy="58" r="0.75" />
-                    </svg>
-                    <div class="browser-card">
-                        <div class="browser-chrome">
-                            <span></span><span></span><span></span>
-                            <div class="browser-url">example.com</div>
-                        </div>
-                        <div class="browser-page">
-                            <div class="browser-topline">
-                                <strong>Example</strong>
-                                <div class="browser-links" aria-hidden="true">
-                                    <span class="browser-link browser-link--docs is-active"><span class="browser-id">L1</span>Docs<span class="mock-cursor" aria-hidden="true"></span></span>
-                                    <span class="browser-link">Pricing</span>
-                                    <span class="browser-link">Blog</span>
+                <div class="product-visual" role="group" tabindex="0" aria-label="Page to DOM to TideSurf markdown" data-i18n="mock.product.aria" data-i18n-attr="aria-label" data-comparison-demo>
+                    <section class="mock-stage mock-stage--page" aria-label="Rendered page">
+                        <div class="browser-card">
+                            <div class="browser-chrome">
+                                <span></span><span></span><span></span>
+                                <div class="browser-url">example.com</div>
+                            </div>
+                            <div class="browser-page">
+                                <div class="browser-topline">
+                                    <strong>Example</strong>
+                                    <div class="browser-links" aria-hidden="true">
+                                        <span class="browser-link browser-link--docs is-active mock-sync-target mock-sync-target--page"><span class="browser-id">L1</span>Docs<span class="mock-cursor" aria-hidden="true"></span></span>
+                                        <span class="browser-link">Pricing</span>
+                                        <span class="browser-link">Blog</span>
+                                    </div>
+                                </div>
+                                <h2>Build faster with reliable APIs</h2>
+                                <p>Ship production apps with clear docs and stable endpoints.</p>
+                                <div class="browser-form">
+                                    <span>Your email</span>
+                                    <span class="browser-button"><span class="browser-id">B2</span>Get started</span>
                                 </div>
                             </div>
-                            <h2>Build faster with reliable APIs</h2>
-                            <p>Ship production apps with clear docs and stable endpoints.</p>
-                            <div class="browser-form">
-                                <span>Your email</span>
-                                <span class="browser-button"><span class="browser-id">B2</span>Get started</span>
-                            </div>
-                            <div class="browser-features">
-                                <span>Fast</span><span>Secure</span><span>Scalable</span>
-                            </div>
                         </div>
-                    </div>
-                    <div class="dom-card">
-                        <div class="dom-head">
-                            <span class="dom-tokens" data-i18n="mock.tokens">~132 tokens</span>
-                        </div>
-                        <pre><code># example.com
-URL: https://example.com/
-TITLE: Example
----
-<span class="dom-row dom-row--docs dom-row-active">L1 [LINK] Docs         /docs</span>
-L2 [LINK] Pricing      /pricing
-L3 [LINK] Blog         /blog
-<span class="dom-row">B2 [BUTTON] Get started /start</span>
+                    </section>
+                    <section class="mock-stage mock-stage--compare" aria-label="DOM compared with TideSurf markdown">
+                        <div class="mock-compare-window">
+                            <div class="mock-code-pane mock-code-pane--dom">
+                                <div class="mock-code-head">
+                                    <span>DOM</span>
+                                    <strong>486 tokens</strong>
+                                </div>
+                                <pre><code>&lt;nav class="site-nav"&gt;
+  <span class="mock-sync-target mock-sync-target--dom">&lt;a href="/docs"&gt;Docs&lt;/a&gt;</span>
+  &lt;a href="/pricing"&gt;Pricing&lt;/a&gt;
+  &lt;button aria-label="start"&gt;Get started&lt;/button&gt;
+  &lt;input placeholder="Your email" /&gt;
+&lt;/nav&gt;</code></pre>
+                            </div>
+                            <div class="mock-code-pane mock-code-pane--markdown">
+                                <div class="mock-code-head">
+                                    <span>TideSurf</span>
+                                    <strong>132 tokens</strong>
+                                </div>
+                                <pre><code># example.com
+<span class="dom-row dom-row-active mock-sync-target mock-sync-target--markdown">L1 [LINK] Docs      /docs</span>
+L2 [LINK] Pricing   /pricing
+B2 [BUTTON] Get started
 I1 [INPUT email] Your email</code></pre>
-                    </div>
-                    <div class="mock-action-rail" aria-hidden="true">
-                        <span>1. scan state</span>
-                        <span>2. map IDs</span>
-                        <span>3. select L1</span>
-                        <span>4. click("L1")</span>
-                    </div>
+                            </div>
+                        </div>
+                    </section>
                 </div>
             </div>
             <div class="scroll-hint" aria-hidden="true">
