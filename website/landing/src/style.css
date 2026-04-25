@@ -600,12 +600,12 @@ main {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  transition: opacity 0.17s var(--ease), transform 0.17s var(--ease-out);
+  transition: transform 0.17s var(--ease-out), color 0.17s var(--ease);
 }
 
 .pkg-cycle.is-switching code {
-  opacity: 0;
-  transform: translateY(-0.18rem);
+  color: var(--text-secondary);
+  transform: translateY(-0.08rem);
 }
 
 .copy-btn {
@@ -2065,8 +2065,8 @@ footer::before {
   flex: 0 0 auto;
   width: min(28rem, 100%);
   margin: 0;
-  opacity: 0;
-  animation: fade-up 0.6s var(--ease-out) 1s forwards;
+  opacity: 1;
+  transform: none;
 }
 
 /* ── Product Hero Illustration ── */
@@ -2083,9 +2083,9 @@ footer::before {
   border-radius: 8px;
   background: color-mix(in srgb, var(--bg-secondary) 70%, transparent);
   box-shadow: none;
-  opacity: 0;
-  transform: translateY(18px);
-  animation: fade-up 0.7s var(--ease-out) 1.08s forwards;
+  opacity: 1;
+  transform: none;
+  animation: none;
   overflow: hidden;
   z-index: 2;
 }
@@ -2458,6 +2458,8 @@ footer::before {
   flex: 1;
   min-height: 0;
   padding: 0.88rem 0.92rem;
+  display: flex;
+  flex-direction: column;
 }
 
 .browser-topline {
@@ -2517,7 +2519,7 @@ footer::before {
   border-radius: 4px;
   background: color-mix(in srgb, var(--bg-secondary) 78%, var(--bg-primary));
   color: var(--accent-text);
-  font-family: var(--font-sans);
+  font-family: var(--font);
   font-size: 0.78rem;
   font-weight: 600;
   line-height: 1;
@@ -2557,7 +2559,7 @@ footer::before {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 0.45rem;
-  margin-bottom: 0;
+  margin-bottom: 0.72rem;
 }
 
 .browser-form > span:not(.browser-button) {
@@ -2572,6 +2574,92 @@ footer::before {
 
 .browser-form .browser-button {
   min-height: 2rem;
+}
+
+.browser-resource-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.42rem;
+  margin-top: 0.78rem;
+}
+
+.browser-resource-grid span {
+  display: grid;
+  gap: 0.2rem;
+  min-height: 2.45rem;
+  padding: 0.46rem 0.5rem;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--bg-secondary) 55%, transparent);
+}
+
+.browser-resource-grid strong {
+  color: var(--text-primary);
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.browser-resource-grid em {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.55rem;
+  font-style: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.browser-site-details {
+  margin-top: 0.78rem;
+  padding-top: 0.76rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+}
+
+.browser-feature-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  color: var(--text-secondary);
+  font-size: 0.62rem;
+}
+
+.browser-feature-row span {
+  min-width: 0;
+  padding-inline: 0.42rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.browser-feature-row span:first-child {
+  padding-left: 0;
+}
+
+.browser-feature-row span + span {
+  border-left: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+}
+
+.browser-proof {
+  display: grid;
+  gap: 0.46rem;
+  margin-top: 0.8rem;
+  color: var(--text-muted);
+  font-size: 0.56rem;
+}
+
+.browser-proof div {
+  display: flex;
+  align-items: center;
+  gap: 0.56rem;
+  min-width: 0;
+}
+
+.browser-proof b {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 0.58rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .browser-features {
@@ -2879,15 +2967,17 @@ footer::before {
   min-height: 1.25rem;
   padding: 0.5rem 0.78rem 0;
   color: var(--text-secondary);
-  font-family: var(--font-mono);
-  font-size: 0.6rem;
+  font-family: var(--font);
+  font-size: 0.76rem;
   font-weight: 700;
   letter-spacing: 0;
 }
 
 .mock-code-head strong {
   color: var(--text-primary);
-  font-size: 0.62rem;
+  font-family: var(--font);
+  font-size: 0.78rem;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -3626,7 +3716,9 @@ footer::before {
   }
 
   .browser-page p,
-  .browser-features {
+  .browser-features,
+  .browser-resource-grid,
+  .browser-site-details {
     display: none;
   }
 
