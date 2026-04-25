@@ -851,12 +851,17 @@ function initHeroVerbCycle(): void {
     next.textContent = verbs[nextIndex];
     slot.classList.add("is-switching");
     window.setTimeout(() => {
+      slot.classList.add("is-resetting");
       index = nextIndex;
       current.textContent = verbs[index];
       next.textContent = "";
       slot.classList.remove("is-switching");
-      switching = false;
-    }, 360);
+      void slot.offsetHeight;
+      window.requestAnimationFrame(() => {
+        slot.classList.remove("is-resetting");
+        switching = false;
+      });
+    }, 460);
   }, 3000);
 }
 
