@@ -69,7 +69,7 @@ bun scripts/benchmark-live.ts
 bun run test:bench
 ```
 
-The live benchmark tests 8 sites by default. Edit the `SITES` array in `scripts/benchmark-live.ts` to add your own.
+The live benchmark tests 8 sites by default. Edit the `SITES` array in `scripts/benchmark-live.ts` to add your own. Unit-level compression benchmarks serve trusted local HTTP fixtures so navigation follows the same URL policy as normal browser sessions.
 
 ## Methodology
 

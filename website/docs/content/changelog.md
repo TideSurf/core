@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.4 (2026-04-26)
+
+### Fixed
+
+- **Read-only tool policy** — `TideSurf.getToolDefinitions({ readOnly: true })` now matches the documented security model and excludes `clipboard_read`. The tool executor also rejects `clipboard_read` in read-only sessions.
+- **MCP action responses** — Packaged CLI MCP tools for `click`, `scroll`, `switch_tab`, and `close_tab` now return updated page or tab state instead of only reporting success.
+- **Headless MCP clipboard access** — MCP clipboard read/write now grant the required Chrome permissions and focus the active page before using `navigator.clipboard`.
+- **Benchmark fixtures** — Compression benchmarks now serve local HTTP fixtures instead of navigating to blocked `data:` URLs.
+- **Token budget pruning** — Pruning now treats token estimates consistently and handles large dominant containers without preserving an oversized page state.
+
+### Tests
+
+- Added MCP stdio smoke coverage that connects to the CLI server and exercises the documented browser tools.
+- Restored `test:bench` coverage under the same trusted-local URL policy used by browser integration tests.
+
 ## 0.5.3 (2026-04-25)
 
 ### Fixed
