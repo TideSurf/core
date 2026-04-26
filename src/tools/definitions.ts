@@ -1,6 +1,6 @@
 import type { ToolDefinition } from "../types.js";
 
-const WRITE_TOOLS = new Set([
+const READ_ONLY_DISABLED_TOOLS = new Set([
   "navigate",
   "click",
   "type",
@@ -10,6 +10,7 @@ const WRITE_TOOLS = new Set([
   "new_tab",
   "close_tab",
   "upload",
+  "clipboard_read",
   "clipboard_write",
   "download",
 ]);
@@ -319,7 +320,7 @@ export function getToolDefinitions(options?: {
   ];
 
   if (options?.readOnly) {
-    return allTools.filter((t) => !WRITE_TOOLS.has(t.name));
+    return allTools.filter((t) => !READ_ONLY_DISABLED_TOOLS.has(t.name));
   }
 
   return allTools;

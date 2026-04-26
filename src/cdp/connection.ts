@@ -10,6 +10,39 @@ import { withTimeout } from "./timeout.js";
 let lastClipboardReadTime = 0;
 const CLIPBOARD_READ_COOLDOWN_MS = 5000; // 5 seconds between reads
 
+async function grantClipboardPermissions(conn: CDPConnection): Promise<void> {
+  const originResult = await withTimeout(
+    conn.Runtime.evaluate({
+      expression: "location.origin",
+      returnByValue: true,
+    }),
+    5_000,
+    "clipboard:origin"
+  );
+  const origin =
+    typeof originResult.result?.value === "string" &&
+    originResult.result.value !== "null"
+      ? originResult.result.value
+      : undefined;
+  const params: Record<string, unknown> = {
+    permissions: ["clipboardReadWrite", "clipboardSanitizedWrite"],
+  };
+  if (origin) {
+    params.origin = origin;
+  }
+
+  await withTimeout(
+    conn.client.send("Browser.grantPermissions", params),
+    5_000,
+    "clipboard:grantPermissions"
+  );
+  await withTimeout(
+    conn.client.send("Page.bringToFront"),
+    5_000,
+    "clipboard:bringToFront"
+  );
+}
+
 export interface CDPConnection {
   client: Client;
   DOM: Client["DOM"];
@@ -482,6 +515,8 @@ export async function clipboardRead(conn: CDPConnection): Promise<string> {
   }
   lastClipboardReadTime = now;
 
+  await grantClipboardPermissions(conn);
+
   const result = await conn.Runtime.evaluate({
     expression: "navigator.clipboard.readText()",
     awaitPromise: true,
@@ -505,6 +540,8 @@ export async function clipboardWrite(
   conn: CDPConnection,
   text: string
 ): Promise<void> {
+  await grantClipboardPermissions(conn);
+
   const result = await conn.Runtime.evaluate({
     expression: `navigator.clipboard.writeText(${JSON.stringify(text)})`,
     awaitPromise: true,

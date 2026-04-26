@@ -7,6 +7,7 @@
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
+import { createServer, type Server } from "node:http";
 import { TideSurf } from "../../src/index.js";
 import { estimateTokens } from "../../src/parser/token-budget.js";
 
@@ -15,6 +16,8 @@ const fixturesDir = join(__dirname, "..", "fixtures");
 
 let surfing: TideSurf;
 let fixtureHtml: Record<string, string> = {};
+let fixtureUrls: Record<string, string> = {};
+let fixtureServer: Server | null = null;
 
 interface BenchResult {
   page: string;
@@ -33,10 +36,6 @@ const results: BenchResult[] = [];
 function countInteractiveIds(content: string): number {
   const matches = content.match(/\b[LBISTFD]\d+\b/g);
   return matches ? matches.length : 0;
-}
-
-function toDataUrl(html: string): string {
-  return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
 }
 
 async function canLaunchBrowser(): Promise<boolean> {
@@ -59,22 +58,61 @@ if (!browserAvailable) {
 }
 
 describeBench("Compression benchmarks", () => {
+  const pages = [
+    { name: "basic", file: "basic.html", desc: "Simple page (form + nav)" },
+    { name: "interactive", file: "interactive.html", desc: "Interactive elements" },
+    { name: "ecommerce", file: "bench-ecommerce.html", desc: "E-commerce (9 products)" },
+    { name: "news", file: "bench-news.html", desc: "News site (articles + sidebar)" },
+  ] as const;
+
   beforeAll(async () => {
-    const pageFiles = [
-      "basic.html",
-      "interactive.html",
-      "bench-ecommerce.html",
-      "bench-news.html",
-    ] as const;
+    const pageFiles = pages.map((page) => page.file);
     const entries = await Promise.all(
       pageFiles.map(async (name) => [name, await readFile(join(fixturesDir, name), "utf-8")] as const)
     );
     fixtureHtml = Object.fromEntries(entries);
-    surfing = await TideSurf.launch({ headless: true, port: 9555 });
+    const fixtureSet = new Set<string>(pageFiles);
+
+    fixtureServer = createServer(async (req, res) => {
+      try {
+        const url = new URL(req.url ?? "/", "http://127.0.0.1");
+        const name = decodeURIComponent(url.pathname.replace(/^\/+/, ""));
+        if (!fixtureSet.has(name)) {
+          res.writeHead(404, { "content-type": "text/plain; charset=utf-8" });
+          res.end("Not found");
+          return;
+        }
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        res.end(fixtureHtml[name]);
+      } catch (err) {
+        res.writeHead(500, { "content-type": "text/plain; charset=utf-8" });
+        res.end(err instanceof Error ? err.message : String(err));
+      }
+    });
+
+    await new Promise<void>((resolve) => {
+      fixtureServer!.listen(0, "127.0.0.1", resolve);
+    });
+    const address = fixtureServer.address();
+    if (!address || typeof address === "string") {
+      throw new Error("Fixture server did not bind to a TCP port");
+    }
+    fixtureUrls = Object.fromEntries(
+      pageFiles.map((name) => [name, `http://127.0.0.1:${address.port}/${name}`] as const)
+    );
+
+    surfing = await TideSurf.launch({ headless: true, port: 9555, allowLocalhost: true });
   }, 30000);
 
   afterAll(async () => {
     await surfing?.close();
+    await new Promise<void>((resolve, reject) => {
+      if (!fixtureServer) {
+        resolve();
+        return;
+      }
+      fixtureServer.close((err) => (err ? reject(err) : resolve()));
+    });
 
     // Print results table
     console.log("\n");
@@ -138,19 +176,12 @@ describeBench("Compression benchmarks", () => {
     console.log("");
   });
 
-  const pages = [
-    { name: "basic", file: "basic.html", desc: "Simple page (form + nav)" },
-    { name: "interactive", file: "interactive.html", desc: "Interactive elements" },
-    { name: "ecommerce", file: "bench-ecommerce.html", desc: "E-commerce (9 products)" },
-    { name: "news", file: "bench-news.html", desc: "News site (articles + sidebar)" },
-  ];
-
   for (const page of pages) {
     it(`${page.name}: compresses ${page.desc}`, async () => {
       const sourceHtml = fixtureHtml[page.file];
 
       // Navigate first
-      await surfing.navigate(toDataUrl(sourceHtml));
+      await surfing.navigate(fixtureUrls[page.file]);
 
       // Get source HTML (what the page loaded from)
       const sourceHtmlTokens = estimateTokens(sourceHtml);
@@ -193,7 +224,7 @@ describeBench("Compression benchmarks", () => {
   }
 
   it("token budget: ecommerce within 300 tokens", async () => {
-    await surfing.navigate(toDataUrl(fixtureHtml["bench-ecommerce.html"]));
+    await surfing.navigate(fixtureUrls["bench-ecommerce.html"]);
 
     const full = await surfing.getState();
     const budgeted = await surfing.getState({ maxTokens: 300 });
@@ -213,7 +244,7 @@ describeBench("Compression benchmarks", () => {
   }, 15000);
 
   it("speed: getState < 500ms average", async () => {
-    await surfing.navigate(toDataUrl(fixtureHtml["bench-ecommerce.html"]));
+    await surfing.navigate(fixtureUrls["bench-ecommerce.html"]);
 
     // Warm up
     await surfing.getState();

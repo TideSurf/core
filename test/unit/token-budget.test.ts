@@ -1,4 +1,5 @@
 import { estimateTokens, pruneToFit } from "../../src/parser/token-budget.js";
+import { serialize } from "../../src/parser/serializer.js";
 import type { OSNode } from "../../src/types.js";
 
 describe("estimateTokens", () => {
@@ -95,6 +96,23 @@ describe("pruneToFit", () => {
     if (resultText.includes("truncated")) {
       expect(resultText).toContain("Visible heading");
     }
+  });
+
+  it("prunes children inside one dominant container", () => {
+    const nodes = [
+      makeNode(
+        "main",
+        Array.from({ length: 40 }, (_, i) =>
+          makeNode("heading", [makeText(`Long low-priority content block ${i} `.repeat(8))])
+        )
+      ),
+    ];
+
+    const result = pruneToFit(nodes, { maxTokens: 120 });
+    const serialized = serialize(result);
+
+    expect(estimateTokens(serialized)).toBeLessThanOrEqual(140);
+    expect(serialized).toContain("truncated");
   });
 
   // MED-007: structuredClone fallback test

@@ -23,7 +23,7 @@ describe("createToolExecutor", () => {
     expect(page.evaluate).not.toHaveBeenCalled();
   });
 
-  it("allows clipboard_read in read-only mode (it's a read tool)", async () => {
+  it("blocks clipboard_read in read-only mode", async () => {
     const page = {
       clipboardRead: jest.fn().mockResolvedValue("clipboard content"),
     };
@@ -38,10 +38,30 @@ describe("createToolExecutor", () => {
     });
 
     expect(result).toEqual({
-      success: true,
-      data: "clipboard content",
+      success: false,
+      error: 'Tool "clipboard_read" is disabled in read-only mode',
     });
-    expect(page.clipboardRead).toHaveBeenCalled();
+    expect(page.clipboardRead).not.toHaveBeenCalled();
+  });
+
+  it("allows switch_tab in read-only mode", async () => {
+    const instance = {
+      getPage: () => ({}),
+      switchTab: jest.fn().mockResolvedValue(undefined),
+      getState: jest.fn().mockResolvedValue({ content: "switched state" }),
+    };
+
+    const executor = createToolExecutor(instance as never, true);
+    const result = await executor({
+      name: "switch_tab",
+      input: { tabId: "tab-1" },
+    });
+
+    expect(result).toEqual({
+      success: true,
+      data: "Switched to tab tab-1. Page state:\n\nswitched state",
+    });
+    expect(instance.switchTab).toHaveBeenCalledWith("tab-1");
   });
 
   describe("HIGH-006: Error type preservation", () => {

@@ -28,7 +28,7 @@ export function estimateTokens(xml: string, charsPerToken: number = 4): number {
  * Estimate token size for a single OSNode without full serialization.
  * This is O(1) per node vs O(n) for full serialization.
  */
-function estimateNodeTokens(node: OSNode): number {
+function estimateNodeTokens(node: OSNode, charsPerToken: number = 4): number {
   let size = node.tag.length + 2; // Tag name + brackets
   if (node.id) size += node.id.length + 3; // [id]
   for (const [k, v] of Object.entries(node.attributes)) {
@@ -37,20 +37,23 @@ function estimateNodeTokens(node: OSNode): number {
   if (node.text) size += node.text.length;
   // Rough estimate for serialization overhead (indentation, newlines)
   size += 10;
-  return Math.ceil(size / 4);
+  return Math.ceil(size / charsPerToken);
 }
 
 /**
  * Pre-calculate token sizes for all nodes in a list.
  * Returns a map of node reference to estimated token count.
  */
-function preCalculateTokenSizes(nodes: OSNode[]): Map<OSNode, number> {
+function preCalculateTokenSizes(
+  nodes: OSNode[],
+  charsPerToken: number = 4
+): Map<OSNode, number> {
   const cache = new Map<OSNode, number>();
   
   function calculateSubtreeSize(node: OSNode): number {
     if (cache.has(node)) return cache.get(node)!;
     
-    let size = estimateNodeTokens(node);
+    let size = estimateNodeTokens(node, charsPerToken);
     for (const child of node.children) {
       size += calculateSubtreeSize(child);
     }
@@ -95,7 +98,11 @@ function scoreSubtree(node: OSNode): number {
  * 
  * Uses pre-calculated token sizes for O(n log n) complexity instead of O(n²).
  */
-function pruneChildren(node: OSNode, maxTokens: number, charsPerToken: number): OSNode {
+function pruneChildren(
+  node: OSNode,
+  maxTokens: number,
+  charsPerToken: number
+): OSNode {
   if (node.children.length === 0) return node;
 
   interface Scored {
@@ -106,25 +113,25 @@ function pruneChildren(node: OSNode, maxTokens: number, charsPerToken: number): 
   }
 
   // Pre-calculate token sizes for O(1) lookup
-  const tokenSizeMap = preCalculateTokenSizes(node.children);
+  const tokenSizeMap = preCalculateTokenSizes(node.children, charsPerToken);
 
   const scored: Scored[] = node.children.map((child, i) => ({
     node: child,
     score: scoreSubtree(child),
     originalIndex: i,
-    tokenSize: tokenSizeMap.get(child) ?? estimateNodeTokens(child),
+    tokenSize: tokenSizeMap.get(child) ?? estimateNodeTokens(child, charsPerToken),
   }));
 
   scored.sort((a, b) => b.score - a.score);
 
   const kept: Scored[] = [];
   let removedCount = 0;
-  let currentTokens = estimateNodeTokens(node); // Base size of parent node
+  let currentTokens = estimateNodeTokens(node, charsPerToken); // Base size of parent node
 
   for (const item of scored) {
     const tentativeSize = currentTokens + item.tokenSize;
 
-    if (tentativeSize <= maxTokens * charsPerToken) {
+    if (tentativeSize <= maxTokens) {
       kept.push(item);
       currentTokens = tentativeSize;
     } else {
@@ -161,11 +168,11 @@ export function pruneToFit(
   const { maxTokens, charsPerToken = 4 } = options;
 
   // Pre-calculate token sizes for O(1) lookup instead of O(n) serialization
-  const tokenSizeMap = preCalculateTokenSizes(nodes);
+  const tokenSizeMap = preCalculateTokenSizes(nodes, charsPerToken);
   
   // Check if already under budget using pre-calculated sizes
   const totalSize = nodes.reduce((sum, node) => sum + (tokenSizeMap.get(node) ?? 0), 0);
-  if (Math.ceil(totalSize / charsPerToken) <= maxTokens) {
+  if (totalSize <= maxTokens) {
     return nodes;
   }
 
@@ -177,6 +184,7 @@ export function pruneToFit(
   } catch {
     remaining = deepCopyNodes(nodes);
   }
+  const remainingTokenSizeMap = preCalculateTokenSizes(remaining, charsPerToken);
 
   // Score each top-level subtree and attach pre-calculated token sizes
   interface Scored {
@@ -190,7 +198,7 @@ export function pruneToFit(
     node,
     score: scoreSubtree(node),
     originalIndex: i,
-    tokenSize: tokenSizeMap.get(node) ?? estimateNodeTokens(node),
+    tokenSize: remainingTokenSizeMap.get(node) ?? estimateNodeTokens(node, charsPerToken),
   }));
 
   // Sort by score descending — keep highest priority first
@@ -204,7 +212,7 @@ export function pruneToFit(
   for (const item of scored) {
     const tentativeSize = currentTokens + item.tokenSize;
 
-    if (Math.ceil(tentativeSize / charsPerToken) <= maxTokens) {
+    if (tentativeSize <= maxTokens) {
       kept.push(item);
       currentTokens = tentativeSize;
     } else {
@@ -227,12 +235,11 @@ export function pruneToFit(
   // If still over budget after top-level pruning (e.g. one dominant container),
   // recurse into the largest remaining container's children
   const resultSize = result.reduce((sum, node) => {
-    // Use cached size if original node, otherwise estimate
-    const size = tokenSizeMap.get(node) ?? estimateNodeTokens(node);
+    const size = remainingTokenSizeMap.get(node) ?? estimateNodeTokens(node, charsPerToken);
     return sum + size;
   }, 0);
   
-  if (Math.ceil(resultSize / charsPerToken) > maxTokens) {
+  if (resultSize > maxTokens) {
     // Find the container with the most children to prune into
     let largestIdx = -1;
     let largestChildCount = 0;

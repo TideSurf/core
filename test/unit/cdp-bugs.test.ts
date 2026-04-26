@@ -78,6 +78,18 @@ describe("CDP Connection Fixes", () => {
       expect(content).toContain("NEW-CDP-004");
     });
   });
+
+  describe("Clipboard permissions", () => {
+    it("clipboard read/write should grant browser clipboard permissions first", async () => {
+      const content = fs.readFileSync("./src/cdp/connection.ts", "utf-8");
+
+      expect(content).toContain("grantClipboardPermissions");
+      expect(content).toContain("Browser.grantPermissions");
+      expect(content).toContain("Page.bringToFront");
+      expect(content).toContain("clipboardReadWrite");
+      expect(content).toContain("clipboardSanitizedWrite");
+    });
+  });
 });
 
 describe("Download Manager Fixes", () => {

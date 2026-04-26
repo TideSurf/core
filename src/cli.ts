@@ -10,7 +10,7 @@
 
 import { TideSurf } from "./index.js";
 import { VERSION } from "./version.js";
-import { validateUrl } from "./validation.js";
+import { validatePositiveInteger, validateUrl } from "./validation.js";
 import { CDPConnectionError } from "./errors.js";
 
 const args = process.argv.slice(2);
@@ -218,9 +218,12 @@ async function mcp() {
       includeHidden: z.boolean().optional().describe("Include elements hidden by CSS (opacity:0, visibility:hidden, display:none). Useful for debugging. Default: false."),
     },
   }, async ({ maxTokens, viewport, mode, includeHidden }: { maxTokens?: number; viewport?: boolean; mode?: "full" | "minimal" | "interactive"; includeHidden?: boolean }) => {
+    if (maxTokens !== undefined) {
+      validatePositiveInteger(maxTokens, "maxTokens");
+    }
     const s = await browser();
     const state = await s.getState({
-      ...(maxTokens ? { maxTokens } : {}),
+      ...(maxTokens !== undefined ? { maxTokens } : {}),
       ...(viewport !== undefined ? { viewport } : {}),
       ...(mode ? { mode } : {}),
       ...(includeHidden !== undefined ? { includeHidden } : {}),
@@ -240,12 +243,14 @@ async function mcp() {
     });
 
     server.registerTool("click", {
-      description: "Click an interactive element by its ID (e.g. B1 for button, L3 for link).",
+      description: "Click an interactive element by its ID (e.g. B1 for button, L3 for link). Returns the updated page state after clicking.",
       inputSchema: { id: z.string().describe("Element ID from get_state (e.g. B1, L3, I2)") },
     }, async ({ id }: { id: string }) => {
-      const page = (await browser()).getPage();
+      const s = await browser();
+      const page = s.getPage();
       await page.click(id);
-      return text(`Clicked ${id}`);
+      const state = await s.getState();
+      return text(`Clicked ${id}. Page state after click:\n\n${state.content}`);
     });
 
     server.registerTool("type", {
@@ -274,15 +279,17 @@ async function mcp() {
     });
 
     server.registerTool("scroll", {
-      description: "Scroll the page up or down.",
+      description: "Scroll the page up or down. Returns the updated page state after scrolling.",
       inputSchema: {
         direction: z.enum(["up", "down"]).describe("Scroll direction"),
         amount: z.number().optional().describe("Pixels to scroll (default: 500)"),
       },
     }, async ({ direction, amount }: { direction: "up" | "down"; amount?: number }) => {
-      const page = (await browser()).getPage();
+      const s = await browser();
+      const page = s.getPage();
       await page.scroll(direction, amount);
-      return text(`Scrolled ${direction}`);
+      const state = await s.getState();
+      return text(`Scrolled ${direction}. Page state after scroll:\n\n${state.content}`);
     });
   }
 
@@ -327,20 +334,24 @@ async function mcp() {
   }
 
   server.registerTool("switch_tab", {
-    description: "Switch to a different browser tab by its ID.",
+    description: "Switch to a different browser tab by its ID. Returns the page state of the tab you switched to.",
     inputSchema: { tabId: z.string().describe("Tab ID from list_tabs") },
   }, async ({ tabId }: { tabId: string }) => {
-    await (await browser()).switchTab(tabId);
-    return text(`Switched to tab ${tabId}`);
+    const s = await browser();
+    await s.switchTab(tabId);
+    const state = await s.getState();
+    return text(`Switched to tab ${tabId}. Page state:\n\n${state.content}`);
   });
 
   if (!readOnly) {
     server.registerTool("close_tab", {
-      description: "Close a browser tab by its ID.",
+      description: "Close a browser tab by its ID. Returns the remaining open tabs.",
       inputSchema: { tabId: z.string().describe("Tab ID from list_tabs") },
     }, async ({ tabId }: { tabId: string }) => {
-      await (await browser()).closeTab(tabId);
-      return text(`Closed tab ${tabId}`);
+      const s = await browser();
+      await s.closeTab(tabId);
+      const tabs = await s.listTabs();
+      return text(`Closed tab ${tabId}. Remaining tabs:\n${JSON.stringify(tabs, null, 2)}`);
     });
   }
 

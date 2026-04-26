@@ -14,7 +14,7 @@ interface ToolInput {
   input: Record<string, unknown>;
 }
 
-const WRITE_TOOLS = new Set([
+const READ_ONLY_DISABLED_TOOLS = new Set([
   "navigate",
   "click",
   "type",
@@ -24,18 +24,9 @@ const WRITE_TOOLS = new Set([
   "new_tab",
   "close_tab",
   "upload",
+  "clipboard_read",
   "clipboard_write",
   "download",
-]);
-
-// Read-only tools that should work even in read-only mode
-const READ_TOOLS = new Set([
-  "get_state",
-  "extract",
-  "list_tabs",
-  "search",
-  "screenshot",
-  "clipboard_read",
 ]);
 
 /**
@@ -48,7 +39,7 @@ export function createToolExecutor(
 ) {
   return async (tool: ToolInput): Promise<ToolResult> => {
     try {
-      if (readOnly && WRITE_TOOLS.has(tool.name)) {
+      if (readOnly && READ_ONLY_DISABLED_TOOLS.has(tool.name)) {
         return {
           success: false,
           error: `Tool "${tool.name}" is disabled in read-only mode`,
