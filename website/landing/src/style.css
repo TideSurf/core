@@ -5633,6 +5633,98 @@ footer::before {
   }
 }
 
+@media (max-width: 768px) {
+  .hero .product-visual {
+    display: none;
+  }
+
+  .hero-content {
+    min-height: 100svh;
+    align-content: center;
+    padding-bottom: 3.5rem;
+  }
+
+  .compression-lab,
+  .usage-mock--main,
+  .try-shell {
+    padding: 0.62rem;
+    border-radius: 8px;
+  }
+
+  .compression-lab,
+  .usage-mock--main,
+  .story-art-row,
+  .story-art-row--three,
+  .safety-visuals,
+  .try-visuals {
+    gap: 0.55rem;
+  }
+
+  .lab-pane,
+  .usage-pane,
+  .motion-card,
+  .mock-stage,
+  .try-shell .code-block {
+    border-radius: 6px;
+  }
+
+  .lab-head,
+  .usage-pane-head {
+    padding: 0.5rem 0.62rem;
+    font-size: 0.62rem;
+  }
+
+  .lab-pane pre,
+  .usage-pane pre,
+  .quickstart-simple code,
+  .try-shell .code-block code {
+    font-size: 0.62rem;
+    line-height: 1.55;
+  }
+
+  .lab-pane pre,
+  .usage-pane pre,
+  .try-shell .code-block pre {
+    padding: 0.7rem 0.75rem;
+  }
+
+  .usage-message {
+    margin: 0.62rem;
+    padding: 0.62rem 0.7rem;
+    font-size: 0.74rem;
+  }
+
+  .motion-card figcaption {
+    padding: 0 0.75rem 0.7rem;
+    font-size: 0.68rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .hero-content {
+    padding-top: 5.25rem;
+  }
+
+  .hero-title {
+    margin-bottom: 0.35rem;
+  }
+
+  .hero-utility-row {
+    margin-top: 0.7rem;
+  }
+
+  .lab-pane pre,
+  .usage-pane pre,
+  .quickstart-simple code,
+  .try-shell .code-block code {
+    font-size: 0.58rem;
+  }
+
+  .motion-card svg {
+    max-height: 9.75rem;
+  }
+}
+
 @keyframes lab-flow-y {
   0%, 100% {
     opacity: 0.28;
