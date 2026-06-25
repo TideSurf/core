@@ -1,16 +1,16 @@
 /* TideSurf Docs: Mercurius editorial stylesheet with flat color, human reading rhythm, and no decorative lines. */
 
 :root {
-  --paper:      #ECEDEA;
-  --paper-2:    #E0E1DD;
-  --paper-3:    #D2D3CF;
-  --ink:        #161716;
-  --ink-2:      #2B2C2A;
-  --ink-3:      #3D3E3B;
-  --grey-1:     #5F5E58;
-  --grey-2:     #8E8D86;
-  --accent:       #4F7B86;
-  --accent-soft:  #8FB7BF;
+  --paper:      #E7EBEF;
+  --paper-2:    #DAE0E6;
+  --paper-3:    #CAD2DA;
+  --ink:        #0F1820;
+  --ink-2:      #222E38;
+  --ink-3:      #384450;
+  --grey-1:     #566472;
+  --grey-2:     #84929E;
+  --accent:       #265F7E;
+  --accent-soft:  #4E8AAA;
   --on-accent:    #ffffff;
 
   --sidebar-w: 280px;
@@ -25,9 +25,12 @@
   --fs-xs:      0.75rem;
   --gutter:     clamp(1.25rem, 4vw, 2.5rem);
 
-  --c-teal:   #4F7B86;
-  --c-green:  #6F7D63;
-  --c-gold:   #8A6D4E;
+  --c-teal:   #265F7E;
+  --c-green:  #4F7E84;
+  --c-gold:   #8A8166;
+  --c-rust:   #C76B5C;
+  --c-rose:   #B86A8E;
+  --c-violet: #3A5A78;
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
   --pill: 0.45s;
@@ -37,15 +40,16 @@
 }
 
 [data-theme="dark"] {
-  --paper:      #1A1A18;
-  --paper-2:    #242422;
-  --paper-3:    #2E2E2C;
-  --ink:        #E8E9E6;
-  --ink-2:      #D2D3CF;
-  --ink-3:      #B8B9B5;
-  --grey-1:     #9E9D97;
-  --grey-2:     #6E6D67;
-  --accent-soft: #8FB2FF;
+  --paper:      #0D1218;
+  --paper-2:    #131A22;
+  --paper-3:    #1B2430;
+  --ink:        #E7EBEF;
+  --ink-2:      #CFD8DF;
+  --ink-3:      #A4B2BD;
+  --grey-1:     #94A4B0;
+  --grey-2:     #6A7884;
+  --accent:       #6BA3C4;
+  --accent-soft:  #265F7E;
   color-scheme: dark;
 }
 

@@ -1,59 +1,16 @@
 <svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="1200" height="630" fill="#090A0C"/>
-
-  <g transform="translate(64 48)">
-    <path d="M2 5 C7 1, 11 1, 14 5 C17 9, 21 9, 26 5" stroke="#6B7280" stroke-width="1.4" stroke-linecap="round"/>
-    <path d="M2 10 C7 6, 11 6, 14 10 C17 14, 21 14, 26 10" stroke="#9CA3AF" stroke-width="1.8" stroke-linecap="round"/>
-    <path d="M2 15 C7 11, 11 11, 14 15 C17 19, 21 19, 26 15" stroke="#0B63FF" stroke-width="2.4" stroke-linecap="round"/>
-    <text x="46" y="18" fill="#DFE3E8" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="24">TideSurf</text>
+  <rect width="1200" height="630" fill="#E7EBEF"/>
+  <!-- calm square mosaic, colour-diff only -->
+  <g fill="#CAD2DA" fill-opacity="0.34">
+    <rect x="0" y="0" width="42" height="42"/><rect x="84" y="0" width="42" height="42"/><rect x="168" y="0" width="42" height="42"/><rect x="252" y="0" width="42" height="42"/><rect x="336" y="0" width="42" height="42"/><rect x="420" y="0" width="42" height="42"/><rect x="504" y="0" width="42" height="42"/><rect x="588" y="0" width="42" height="42"/><rect x="672" y="0" width="42" height="42"/><rect x="756" y="0" width="42" height="42"/><rect x="840" y="0" width="42" height="42"/><rect x="924" y="0" width="42" height="42"/><rect x="1008" y="0" width="42" height="42"/><rect x="1092" y="0" width="42" height="42"/><rect x="1176" y="0" width="24" height="42"/>
+    <rect x="42" y="42" width="42" height="42"/><rect x="126" y="42" width="42" height="42"/><rect x="210" y="42" width="42" height="42"/><rect x="294" y="42" width="42" height="42"/><rect x="378" y="42" width="42" height="42"/><rect x="462" y="42" width="42" height="42"/><rect x="546" y="42" width="42" height="42"/><rect x="630" y="42" width="42" height="42"/><rect x="714" y="42" width="42" height="42"/><rect x="798" y="42" width="42" height="42"/><rect x="882" y="42" width="42" height="42"/><rect x="966" y="42" width="42" height="42"/><rect x="1050" y="42" width="42" height="42"/><rect x="1134" y="42" width="42" height="42"/>
   </g>
-
-  <g transform="translate(64 178)">
-    <text x="0" y="0" fill="#F4F5F6" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="116" font-style="italic" letter-spacing="-6">Surf</text>
-    <text x="0" y="104" fill="#F4F5F6" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="116" font-style="italic" letter-spacing="-6">the Tide</text>
-    <text x="0" y="176" fill="#A7ADB6" font-family="system-ui, -apple-system, sans-serif" font-size="30">DOM text for browser agents.</text>
-    <text x="0" y="216" fill="#A7ADB6" font-family="system-ui, -apple-system, sans-serif" font-size="30">Stable IDs, direct CDP, no screenshots.</text>
-    <rect x="0" y="260" width="472" height="68" rx="7" fill="#121518"/>
-    <text x="24" y="303" fill="#2F7CFF" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="24" font-weight="600">$</text>
-    <text x="58" y="303" fill="#DFE3E8" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="24">bun add @tidesurf/core</text>
+  <g font-family="'Zalando Sans','Gothic A1',system-ui,sans-serif">
+    <text x="80" y="330" fill="#0F1820" font-weight="500" font-size="212" letter-spacing="-9.5">TideSurf</text>
+    <text x="82" y="398" fill="#0F1820" font-weight="500" font-size="56" letter-spacing="-1">The live page, distilled for agents.</text>
   </g>
-
-  <g transform="translate(568 128)">
-    <rect width="568" height="374" rx="14" fill="#101214"/>
-    <g transform="translate(24 24)">
-      <rect width="252" height="118" rx="9" fill="#0B0D0F"/>
-      <text x="18" y="32" fill="#9BA3AD" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" font-weight="800">DOM</text>
-      <text x="126" y="32" fill="#F4F5F6" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" font-weight="800">486 tokens</text>
-      <text x="18" y="62" fill="#C8CDD4" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15">&lt;nav class="site-nav"&gt;</text>
-      <text x="18" y="84" fill="#C8CDD4" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15">&lt;a href="/docs"&gt;Docs&lt;/a&gt;</text>
-      <text x="18" y="106" fill="#C8CDD4" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15">&lt;button&gt;Get started&lt;/button&gt;</text>
-    </g>
-    <g transform="translate(292 24)">
-      <rect width="252" height="118" rx="9" fill="#0B0D0F"/>
-      <text x="18" y="32" fill="#8CB5FF" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" font-weight="800">TideSurf</text>
-      <text x="138" y="32" fill="#F4F5F6" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="17" font-weight="800">132 tokens</text>
-      <text x="18" y="62" fill="#8CB5FF" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15">L1 [LINK] Docs /docs</text>
-      <text x="18" y="84" fill="#8CB5FF" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15">B2 [BUTTON] Get started /start</text>
-      <text x="18" y="106" fill="#8CB5FF" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15">I1 [INPUT email] Your email</text>
-    </g>
-    <g transform="translate(24 158)">
-      <rect width="252" height="192" rx="9" fill="#080A0B"/>
-      <text x="20" y="36" fill="#F4F5F6" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="17">Example</text>
-      <rect x="160" y="15" width="32" height="28" rx="5" fill="#0B63FF"/>
-      <text x="167" y="35" fill="#FFFFFF" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-weight="800" font-size="16">L1</text>
-      <text x="198" y="35" fill="#8CB5FF" font-family="system-ui, -apple-system, sans-serif" font-size="17">Docs</text>
-      <text x="20" y="94" fill="#F4F5F6" font-family="system-ui, -apple-system, sans-serif" font-weight="800" font-size="34">Build faster with</text>
-      <text x="20" y="130" fill="#F4F5F6" font-family="system-ui, -apple-system, sans-serif" font-weight="800" font-size="34">reliable APIs</text>
-      <text x="20" y="166" fill="#9BA3AD" font-family="system-ui, -apple-system, sans-serif" font-size="20">Ship production apps with clear docs.</text>
-    </g>
-    <g transform="translate(292 158)">
-      <rect width="252" height="192" rx="9" fill="#080A0B"/>
-      <text x="20" y="38" fill="#D5D9DF" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18"># example.com</text>
-      <text x="20" y="64" fill="#D5D9DF" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18">URL: https://example.com/</text>
-      <text x="20" y="90" fill="#D5D9DF" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18">TITLE: Example</text>
-      <rect x="16" y="115" width="216" height="28" rx="4" fill="#071B40"/>
-      <text x="20" y="135" fill="#8CB5FF" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18">L1 [LINK] Docs /docs</text>
-      <text x="20" y="164" fill="#D5D9DF" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="18">B2 [BUTTON] Get started</text>
-    </g>
-  </g>
+  <rect x="80" y="438" width="478" height="64" fill="#DAE0E6"/>
+  <text x="108" y="481" fill="#265F7E" font-family="'Zalando Sans','Gothic A1',system-ui,sans-serif" font-weight="600" font-size="30">$</text>
+  <text x="138" y="481" fill="#0F1820" font-family="'Zalando Sans','Gothic A1',system-ui,sans-serif" font-weight="500" font-size="30">bun add @tidesurf/core</text>
+  <text x="82" y="544" fill="#566472" font-family="'Zalando Sans','Gothic A1',system-ui,sans-serif" font-size="24">Live pages as text for browser agents · <tspan fill="#265F7E" font-weight="600">stable handles</tspan> · local CDP</text>
 </svg>
