@@ -72,24 +72,27 @@
             </section>
 
             <section class="thesis reveal" aria-labelledby="thesis-title">
-                <h2 id="thesis-title">Keep the page real. Make the context smaller.<span class="title-mark" style="--mark: var(--c-teal)" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="22" height="22"/><rect x="12" y="12" width="8" height="8"/></svg></span></h2>
-                <p class="thesis-body">
-                    TideSurf reads the rendered page, keeps the parts an agent can use, and gives
-                    every actionable thing a short handle. The model chooses a handle;
-                    <span class="hl" style="--hl: var(--c-gold)">DevTools</span> carries it back
-                    to Chromium. Less selector ceremony, more actual browsing.
-                </p>
-                <p class="process" aria-label="TideSurf pipeline">
-                    <span class="proc-step" style="--p: var(--c-teal)">rendered</span>
-                    <span class="proc-arrow" aria-hidden="true">→</span>
-                    <span class="proc-step" style="--p: var(--c-green)">pruned</span>
-                    <span class="proc-arrow" aria-hidden="true">→</span>
-                    <span class="proc-step" style="--p: var(--c-rust)">stable</span>
-                    <span class="proc-arrow" aria-hidden="true">→</span>
-                    <span class="proc-step" style="--p: var(--c-gold)">local</span>
-                    <span class="proc-arrow" aria-hidden="true">→</span>
-                    <span class="proc-step" style="--p: var(--grey-1)">mcp</span>
-                </p>
+                <div class="thesis-content">
+                    <h2 id="thesis-title">Keep the page real. Make the context smaller.</h2>
+                    <p class="thesis-body">
+                        TideSurf reads the rendered page, keeps the parts an agent can use, and gives
+                        every actionable thing a short handle. The model chooses a handle;
+                        <span class="hl" style="--hl: var(--c-gold)">DevTools</span> carries it back
+                        to Chromium. Less selector ceremony, more actual browsing.
+                    </p>
+                    <p class="process" aria-label="TideSurf pipeline">
+                        <span class="proc-step" style="--p: var(--c-teal)">rendered</span>
+                        <span class="proc-arrow" aria-hidden="true">→</span>
+                        <span class="proc-step" style="--p: var(--c-green)">pruned</span>
+                        <span class="proc-arrow" aria-hidden="true">→</span>
+                        <span class="proc-step" style="--p: var(--c-rust)">stable</span>
+                        <span class="proc-arrow" aria-hidden="true">→</span>
+                        <span class="proc-step" style="--p: var(--c-gold)">local</span>
+                        <span class="proc-arrow" aria-hidden="true">→</span>
+                        <span class="proc-step" style="--p: var(--grey-1)">mcp</span>
+                    </p>
+                </div>
+                <span class="thesis-mark" style="--mark: var(--c-teal)" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="22" height="22"/><rect x="12" y="12" width="8" height="8"/></svg></span>
             </section>
 
             <section class="evidence reveal" aria-label="TideSurf proof points">
