@@ -359,30 +359,22 @@ button:focus-visible {
   display: block;
 }
 
-/* GitHub + stars cluster: the stars badge sits attached to the GitHub button,
-   deliberately smaller than the button itself. */
-.gh-cluster {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
+/* GitHub button contains the stars count as a smaller inset badge. */
+.gh-btn {
+  gap: 0.45rem;
 }
 
 .gh-stars {
   display: inline-flex;
   align-items: center;
   gap: 0.2rem;
-  min-height: 1.7rem;
-  padding: 0.1rem 0.5rem;
-  font-size: 0.78rem;
+  min-height: 1.5rem;
+  padding: 0.05rem 0.45rem;
+  font-size: 0.72rem;
   font-weight: 500;
   color: var(--ink);
-  background: color-mix(in srgb, var(--c-gold) 22%, var(--paper));
-  transition: background-color 0.45s var(--ease), transform 0.45s var(--ease);
-}
-
-.gh-stars:hover {
-  background: color-mix(in srgb, var(--c-gold) 44%, var(--paper));
-  transform: scale(1.06);
+  background: color-mix(in srgb, var(--c-gold) 34%, var(--paper));
+  transition: background-color 0.45s var(--ease);
 }
 
 /* ==========================================================================
