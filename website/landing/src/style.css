@@ -238,8 +238,8 @@ button:focus-visible {
 
 .principle-mark {
   flex: 0 0 auto;
-  width: clamp(2.8rem, 5vw, 4rem);
-  height: clamp(2.8rem, 5vw, 4rem);
+  width: clamp(5.6rem, 10vw, 8rem);
+  height: clamp(5.6rem, 10vw, 8rem);
   color: var(--mark, var(--accent));
   opacity: 0.92;
 }
