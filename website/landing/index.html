@@ -24,143 +24,151 @@
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
         <link
-            href="https://fonts.googleapis.com/css2?family=Zalando+Sans:wght@400;500;600&family=Gothic+A1:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+            href="https://fonts.googleapis.com/css2?family=Zalando+Sans:wght@400;500;600&family=Gothic+A1:wght@400;500;600&display=swap"
             rel="stylesheet"
         />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <script src="/theme-init.js"></script>
     </head>
     <body>
+        <canvas class="waves-canvas" aria-hidden="true"></canvas>
         <a href="#main" class="skip-link">Skip to content</a>
 
-        <main id="main" class="page">
-            <section class="hero reveal" aria-labelledby="hero-title">
-                <p class="eyebrow mono">@tidesurf/core / local Chromium / agent-readable pages</p>
-                <h1 id="hero-title">TideSurf</h1>
-                <p class="hero-thesis">Live pages become text agents can trust.</p>
-                <p class="hero-lede">
-                    A browser agent does not need another screenshot. It needs the page distilled into readable text, with handles that still point back to real things in Chromium. TideSurf sits in that gap.
-                </p>
-                <div class="hero-actions" aria-label="Primary actions">
-                    <div class="install">
-                        <span class="prompt mono">$</span>
-                        <code id="install-command-text" class="mono">bun add @tidesurf/core</code>
-                        <button type="button" class="copy-btn" id="install-copy-btn" data-copy="bun add @tidesurf/core" aria-label="Copy install command">
-                            <span class="copy-label">copy</span>
-                        </button>
-                    </div>
-                    <a class="patch-link" href="https://tidesurf.org/docs" style="--patch-color: var(--c-teal)">Docs</a>
+        <nav class="topnav" aria-label="Primary">
+            <a class="topnav-brand" href="#main">TideSurf</a>
+            <div class="topnav-links">
+                <a class="patch-link" href="https://tidesurf.org/docs" style="--patch-color: var(--c-teal)">Docs</a>
+                <span class="gh-cluster">
                     <a class="patch-link" href="https://github.com/TideSurf/core" style="--patch-color: var(--c-green)">GitHub</a>
-                    <span class="github-star mono" id="github-star" hidden>
+                    <span class="gh-stars" id="github-star" hidden>
                         <span id="star-count"></span>
                         <span>stars</span>
                     </span>
+                </span>
+                <a class="patch-link" href="https://www.npmjs.com/package/@tidesurf/core" style="--patch-color: var(--c-rust)">npm</a>
+            </div>
+        </nav>
+
+        <main id="main" class="page">
+            <section class="hero reveal" aria-labelledby="hero-title">
+                <h1 id="hero-title">TideSurf</h1>
+                <p class="hero-thesis">The live page, distilled for agents.</p>
+                <p class="hero-lede">
+                    A browser agent does not need another screenshot. It needs the page
+                    distilled into <span class="hl" style="--hl: var(--c-teal)" data-alt="token-thin text"><span class="hl-i">readable text</span></span>,
+                    with <span class="hl" style="--hl: var(--c-rust)" data-alt="little nametags"><span class="hl-i">handles</span></span> that still
+                    point back to real things in <span class="hl" style="--hl: var(--c-green)" data-alt="a live, breathing browser"><span class="hl-i">Chromium</span></span>.
+                    TideSurf sits in that gap.
+                </p>
+                <div class="hero-actions" aria-label="Primary actions">
+                    <div class="install">
+                        <span class="prompt">$</span>
+                        <code id="install-command-text">bun add @tidesurf/core</code>
+                        <button type="button" class="copy-btn" id="install-copy-btn" data-copy="bun add @tidesurf/core" aria-label="Copy install command">
+                            <svg class="icon-copy" viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M3.5 10.5H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h6.5a1 1 0 0 1 1 1v.5"/></svg>
+                            <svg class="icon-check" viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6.5"/></svg>
+                        </button>
+                    </div>
                 </div>
             </section>
 
-            <section class="material" aria-labelledby="material-title">
-                <div class="material-copy">
-                    <p class="eyebrow mono">what changes</p>
-                    <h2 id="material-title">Keep the page real. Make the context smaller.</h2>
-                    <p>
-                        TideSurf reads the rendered page, keeps the parts an agent can use, and gives every actionable thing a short handle. Models choose a handle. DevTools carries it back to Chromium.
-                    </p>
-                </div>
-                <div class="material-field" aria-label="TideSurf material map">
-                    <div class="field-cell field-cell-a">
-                        <span class="mono">rendered</span>
-                        <strong>Chromium state</strong>
-                    </div>
-                    <div class="field-cell field-cell-b">
-                        <span class="mono">pruned</span>
-                        <strong>visible text</strong>
-                    </div>
-                    <div class="field-cell field-cell-c">
-                        <span class="mono">stable</span>
-                        <strong>L1 B2 I3</strong>
-                    </div>
-                    <div class="field-cell field-cell-d">
-                        <span class="mono">local</span>
-                        <strong>CDP action</strong>
-                    </div>
-                    <div class="field-cell field-cell-e">
-                        <span class="mono">mcp</span>
-                        <strong>agent tools</strong>
-                    </div>
-                </div>
+            <section class="thesis reveal" aria-labelledby="thesis-title">
+                <h2 id="thesis-title">Keep the page real. Make the context smaller.</h2>
+                <p class="thesis-body">
+                    TideSurf reads the rendered page, keeps the parts an agent can use, and gives
+                    every actionable thing a short handle. The model chooses a handle;
+                    <span class="hl" style="--hl: var(--c-gold)">DevTools</span> carries it back
+                    to Chromium. Less selector ceremony, more actual browsing.
+                </p>
+                <p class="process" aria-label="TideSurf pipeline">
+                    <span class="proc-step" style="--p: var(--c-teal)">rendered</span>
+                    <span class="proc-arrow" aria-hidden="true">→</span>
+                    <span class="proc-step" style="--p: var(--c-green)">pruned</span>
+                    <span class="proc-arrow" aria-hidden="true">→</span>
+                    <span class="proc-step" style="--p: var(--c-rust)">stable</span>
+                    <span class="proc-arrow" aria-hidden="true">→</span>
+                    <span class="proc-step" style="--p: var(--c-gold)">local</span>
+                    <span class="proc-arrow" aria-hidden="true">→</span>
+                    <span class="proc-step" style="--p: var(--grey-1)">mcp</span>
+                </p>
             </section>
 
             <section class="evidence reveal" aria-label="TideSurf proof points">
-                <article style="--tile-color: var(--grey-1)">
-                    <span class="mono">raw page</span>
-                    <strong class="mono">84,236</strong>
-                    <p>tokens from a real GitHub issues page before TideSurf compresses the DOM.</p>
-                </article>
-                <article style="--tile-color: var(--c-teal)">
-                    <span class="mono">after TideSurf</span>
-                    <strong class="mono">2,593</strong>
-                    <p>tokens with headings, links, buttons, inputs, tables, and visible copy preserved.</p>
-                </article>
-                <article style="--tile-color: var(--c-rust)">
-                    <span class="mono">agent handles</span>
-                    <strong class="mono">L1 B2 I3</strong>
-                    <p>short IDs that stay connected to the elements the model wants to use.</p>
-                </article>
+                <div class="evidence-band">
+                    <div class="evidence-figures">
+                        <span class="figure">84,236</span>
+                        <span class="figure-arrow" aria-hidden="true">→</span>
+                        <span class="figure figure-after">2,593</span>
+                    </div>
+                    <p class="evidence-note">
+                        tokens from a real GitHub issues page, before and after TideSurf compresses
+                        the DOM. Headings, links, buttons, inputs, tables, and visible copy stay —
+                        with stable handles like
+                        <span class="hl" style="--hl: var(--c-rust)">L1&nbsp;B2&nbsp;I3</span>
+                        that stay connected to the elements the model wants to use.
+                    </p>
+                </div>
             </section>
 
             <section class="statement reveal" aria-labelledby="statement-title">
-                <p class="eyebrow mono">why it feels calmer</p>
                 <h2 id="statement-title">Browser automation reads better when the browser is still alive.</h2>
                 <p>
-                    TideSurf does not ask the model to invent selectors or parse a visual guess. It hands over a compact text surface, then routes the chosen handle through DevTools.
+                    TideSurf does not ask the model to invent selectors or parse a visual guess. It
+                    hands over a compact text surface, then routes the chosen handle through
+                    DevTools — so the page the agent reads is the page that is actually there.
                 </p>
             </section>
 
             <section class="principles reveal" aria-label="TideSurf design principles">
-                <article>
-                    <span class="mono">01</span>
+                <article class="principle">
+                    <span class="principle-no">01</span>
                     <h3>Compress the page, not the meaning.</h3>
                     <p>
-                        Wrapper markup, generated classes, scripts, and presentational noise recede. Anything a person can read and use remains visible to the agent.
+                        Wrapper markup, generated classes, scripts, and presentational noise recede.
+                        Anything a person can <span class="hl" style="--hl: var(--c-teal)">read and use</span>
+                        remains visible to the agent.
                     </p>
                 </article>
-                <article>
-                    <span class="mono">02</span>
+                <article class="principle">
+                    <span class="principle-no">02</span>
                     <h3>Let handles become actions.</h3>
                     <p>
-                        The same ID the model reads can click, type, select, scroll, extract, and move across tabs. Less selector ceremony, more actual browsing.
+                        The same ID the model reads can
+                        <span class="hl" style="--hl: var(--c-green)">click, type, select, scroll,</span>
+                        extract, and move across tabs. Less selector ceremony, more actual browsing.
                     </p>
                 </article>
-                <article>
-                    <span class="mono">03</span>
+                <article class="principle">
+                    <span class="principle-no">03</span>
                     <h3>Keep control close to home.</h3>
                     <p>
-                        Launch Chrome from TideSurf or attach to a running session. Cookies, auth state, and local debugging stay where developers expect them.
+                        Launch Chrome from TideSurf or attach to a running session. Cookies, auth
+                        state, and <span class="hl" style="--hl: var(--c-gold)">local debugging</span>
+                        stay where developers expect them.
                     </p>
                 </article>
             </section>
 
             <section class="runtime reveal" aria-label="Runtime details">
-                <div>
-                    <span class="mono">read-only mode</span>
+                <div class="runtime-cell">
+                    <span>read-only mode</span>
                     <p>Expose safer tool definitions when an agent only needs to inspect a page.</p>
                 </div>
-                <div>
-                    <span class="mono">token budgets</span>
+                <div class="runtime-cell">
+                    <span>token budgets</span>
                     <p>Prune lower-priority content while keeping actionable elements addressable.</p>
                 </div>
-                <div>
-                    <span class="mono">MCP server</span>
+                <div class="runtime-cell">
+                    <span>MCP server</span>
                     <p>Use the same browser layer from Claude Code and other MCP clients.</p>
                 </div>
-                <div>
-                    <span class="mono">Bun + Node</span>
+                <div class="runtime-cell">
+                    <span>Bun + Node</span>
                     <p>Small TypeScript package, direct CDP, optional MCP dependencies.</p>
                 </div>
             </section>
 
             <section class="closing reveal" aria-labelledby="closing-title">
-                <p class="eyebrow mono">start small</p>
                 <h2 id="closing-title">Give the model the page, then let it use the page.</h2>
                 <div class="closing-actions">
                     <a class="patch-link" href="https://tidesurf.org/docs" style="--patch-color: var(--c-teal)">Read docs</a>
@@ -170,24 +178,25 @@
         </main>
 
         <footer class="site-footer">
-            <div>
+            <div class="footer-id">
                 <strong>TideSurf</strong>
                 <span>DOM-to-text runtime for browser agents.</span>
             </div>
-            <nav class="footer-links" aria-label="Footer links">
+            <nav class="footer-links" aria-label="Footer">
                 <a class="patch-link" href="https://tidesurf.org/docs" style="--patch-color: var(--c-teal)">Docs</a>
                 <a class="patch-link" href="https://github.com/TideSurf/core" style="--patch-color: var(--c-green)">GitHub</a>
                 <a class="patch-link" href="https://www.npmjs.com/package/@tidesurf/core" style="--patch-color: var(--c-rust)">npm</a>
             </nav>
-            <div class="theme-selector" role="group" aria-label="Theme">
-                <button type="button" class="theme-btn" data-theme="light">light</button>
-                <button type="button" class="theme-btn" data-theme="dark">dark</button>
-            </div>
         </footer>
 
+        <div class="theme-float" role="group" aria-label="Theme">
+            <button type="button" class="theme-btn" data-theme="light">light</button>
+            <button type="button" class="theme-btn" data-theme="dark">dark</button>
+        </div>
+
         <div id="cookie-notice" class="cookie-notice" hidden>
-            <span>Cloudflare Analytics only.</span>
-            <button id="cookie-dismiss">OK</button>
+            <p class="cookie-text">We use Cloudflare Analytics to understand traffic.</p>
+            <button id="cookie-dismiss" class="cookie-ok">OK</button>
         </div>
 
         <script type="module" src="/src/main.ts"></script>
