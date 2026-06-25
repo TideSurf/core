@@ -233,9 +233,11 @@ function initWaves(): void {
         const wave = 0.5 + 0.5 * Math.sin((c - phase) * 0.1067 + r * 0.0433); // 3x more gradual
         const j = cellJitter(c, r) * 0.14 - 0.07;
         const m = Math.max(0, Math.min(1, wave + j));
-        // Stay within the paper family: mostly paper -> paper-3, a whisper of accent.
-        let col = mixColor(paper, paper3, m * 0.72 + scrollProgress * 0.05);
-        col = mixColor(col, accent, m * 0.09 + scrollProgress * 0.07);
+        // Stay within the paper family. The hero stays light; as the reader
+        // descends, the field darkens (more paper-3) and takes on a touch more
+        // accent so the lower sections read more easily.
+        let col = mixColor(paper, paper3, m * 0.55 + scrollProgress * 0.32);
+        col = mixColor(col, accent, m * 0.08 + scrollProgress * 0.12);
         ctx.fillStyle = `rgb(${col[0] | 0},${col[1] | 0},${col[2] | 0})`;
         ctx.fillRect(c * SQUARE, y, size, size);
       }
