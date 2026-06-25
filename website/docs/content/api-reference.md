@@ -31,7 +31,7 @@ Launches a new Chrome instance and connects to it via CDP. Returns a `TideSurf` 
 static connect(options?: TideSurfConnectOptions): Promise<TideSurf>
 ```
 
-Connects to an already-running Chrome instance via CDP. Does not launch or manage the Chrome process — `close()` will only disconnect CDP, not kill the browser.
+Connects to an already-running Chrome instance via CDP. Does not launch or manage the Chrome process: `close()` will only disconnect CDP, not kill the browser.
 
 Requires Chrome to have remote debugging enabled (Chrome 144+: `chrome://inspect#remote-debugging`, or launch with `--remote-debugging-port`).
 
@@ -75,7 +75,7 @@ Returns the compressed text representation of the active tab's DOM. The returned
 
 Modes compose: `getState({ viewport: true, mode: "interactive", maxTokens: 200 })` filters to visible interactive elements, then prunes to 200 tokens.
 
-The internal `OSNode` tree used during serialization includes a `state` field on each node. This field carries the element's runtime state flags (e.g. `disabled`, `inert`, `obscured`, `checked`, `required`, `readonly`) and toggle state (`expanded`/`collapsed` from `aria-expanded`), which are serialized inline in the compressed output — disabled/inert as `~~strikethrough~~`, toggle as `open`/`closed` keywords. See the [page format](#page-format) documentation for details on how state flags appear in the text representation.
+The internal `OSNode` tree used during serialization includes a `state` field on each node. This field carries the element's runtime state flags (e.g. `disabled`, `inert`, `obscured`, `checked`, `required`, `readonly`) and toggle state (`expanded`/`collapsed` from `aria-expanded`), which are serialized inline in the compressed output: disabled/inert as `~~strikethrough~~`, toggle as `open`/`closed` keywords. See the [page format](#page-format) documentation for details on how state flags appear in the text representation.
 
 ## Types
 
@@ -183,7 +183,7 @@ Returns a `SurfingPage` instance for the currently active tab, which provides el
 getToolExecutor(): (tool: { name: string; input: Record<string, unknown> }) => Promise<ToolResult>
 ```
 
-Returns a function that executes TideSurf tools by name. Designed for use in LLM agent loops — pass the tool call from your LLM directly to this executor.
+Returns a function that executes TideSurf tools by name. Designed for use in LLM agent loops: pass the tool call from your LLM directly to this executor.
 
 ### `getToolDefinitions()`
 
@@ -263,7 +263,7 @@ Navigates the current page to a new URL. Equivalent to calling `browser.navigate
 evaluate(expression: string): Promise<unknown>
 ```
 
-Executes arbitrary JavaScript in the page context and returns the result. Use with caution — this bypasses TideSurf's structured interaction model, but is useful for edge cases where the standard tools don't cover your needs. `evaluate` is not available when `readOnly: true` is enabled.
+Executes arbitrary JavaScript in the page context and returns the result. Use with caution because this bypasses TideSurf's structured interaction model. It is useful for edge cases where the standard tools don't cover your needs. `evaluate` is not available when `readOnly: true` is enabled.
 
 ### `search(query, maxResults?)`
 
@@ -333,13 +333,13 @@ The `get_state` tool description informs the LLM that elements in `~~strikethrou
 | `scroll` | `direction`, `amount?` | Scroll the page up or down |
 | `extract` | `selector` | Extract text content via CSS selector |
 | `evaluate` | `expression` | Execute JavaScript in the page |
-| `list_tabs` | — | List all open browser tabs |
+| `list_tabs` | none | List all open browser tabs |
 | `new_tab` | `url?` | Open a new tab |
 | `switch_tab` | `tabId` | Switch to a different tab |
 | `close_tab` | `tabId` | Close a tab |
 | `search` | `query`, `maxResults?` | Find text snippets on the page with nearest interactive IDs |
 | `screenshot` | `elementId?`, `fullPage?` | Capture a PNG screenshot |
 | `upload` | `id`, `filePath` | Set a file on a file input |
-| `clipboard_read` | — | Read clipboard text |
+| `clipboard_read` | none | Read clipboard text |
 | `clipboard_write` | `text` | Write text to clipboard |
 | `download` | `id`, `downloadDir?`, `timeout?` | Download a file |

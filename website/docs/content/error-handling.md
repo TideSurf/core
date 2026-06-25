@@ -28,14 +28,14 @@ try {
 } catch (err) {
   if (err instanceof ElementNotFoundError) {
     // The element ID from a previous getState() call is no longer valid,
-    // likely because the page content changed — re-fetch state and retry
+    // likely because the page content changed, so re-fetch state and retry
     const freshState = await browser.getState();
     // ... find the right element in freshState.content and try again
   } else if (err instanceof CDPTimeoutError) {
-    // The operation took too long — the page may be unresponsive
+    // The operation took too long. The page may be unresponsive.
     // or loading a heavy resource
   } else if (err instanceof NavigationError) {
-    // The URL couldn't be reached — could be a DNS issue,
+    // The URL couldn't be reached: could be a DNS issue,
     // an invalid URL, or a page that returned an error status
   }
 }
@@ -46,10 +46,10 @@ try {
 | Error | Common causes | Recovery approach |
 |---|---|---|
 | `ChromeLaunchError` | Chrome binary not found, insufficient permissions, or port already in use | Check `CHROME_PATH`, verify Chrome is installed, try a different port |
-| `CDPConnectionError` | Chrome launched but CDP WebSocket connection failed | Usually transient — TideSurf retries automatically up to 3 times |
+| `CDPConnectionError` | Chrome launched but CDP WebSocket connection failed | Usually transient: TideSurf retries automatically up to 3 times |
 | `CDPTimeoutError` | An operation (navigation, evaluation, etc.) exceeded its timeout | The page may be hung or loading very slowly; consider increasing the timeout or skipping the page |
 | `NavigationError` | DNS failure, invalid URL, or server error (4xx/5xx) | Validate the URL, check network connectivity, or handle as a dead link |
-| `ElementNotFoundError` | The element ID from a previous `getState()` doesn't match the current DOM | The page changed since the last state snapshot — call `getState()` again to get fresh IDs |
+| `ElementNotFoundError` | The element ID from a previous `getState()` doesn't match the current DOM | The page changed since the last state snapshot. Call `getState()` again to get fresh IDs |
 | `ValidationError` | Invalid input passed to a TideSurf method (e.g. empty string for URL) | Fix the input before retrying |
 
 ## Automatic retry behavior

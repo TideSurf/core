@@ -37,7 +37,7 @@ while (true) {
   messages.push({ role: "assistant", content: response.content });
 
   if (response.stop_reason === "end_turn") {
-    // LLM is done — print final text
+    // LLM is done: print final text
     const text = response.content.find(b => b.type === "text");
     if (text) console.log(text.text);
     break;
@@ -69,7 +69,7 @@ Monitor a page without risk of modification:
 const browser = await TideSurf.connect({ readOnly: true });
 const state = await browser.getState();
 // Feed state.content to your LLM for analysis
-// The agent can observe, search, and screenshot — but cannot click, type, or navigate
+// The agent can observe, search, and screenshot, but cannot click, type, or navigate
 await browser.close();
 ```
 

@@ -7,590 +7,328 @@
             http-equiv="Content-Security-Policy"
             content="default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://tidesurf.org https://api.producthunt.com; connect-src 'self' https://api.github.com https://cloudflareinsights.com; object-src 'none'; base-uri 'self'; form-action 'self'"
         />
-        <title>TideSurf - Surf the Tide</title>
+        <title>TideSurf | DOM-to-text runtime for browser agents</title>
         <meta
             name="description"
-            content="DOM text for browser agents. Browse, reason, and act without screenshots."
+            content="TideSurf turns Chromium pages into compact text for LLM agents, with 32x fewer tokens, stable element IDs, and direct local CDP control."
         />
-        <meta property="og:title" content="TideSurf - Surf the Tide">
-        <meta property="og:description" content="DOM text for browser agents. Stable IDs, direct CDP, no screenshots.">
-        <meta property="og:image" content="https://tidesurf.org/og.png">
-        <meta property="og:url" content="https://tidesurf.org">
-        <meta property="og:type" content="website">
-        <meta name="twitter:card" content="summary_large_image">
-        <meta name="twitter:title" content="TideSurf - Surf the Tide">
-        <meta name="twitter:description" content="DOM text for browser agents. Stable IDs, direct CDP, no screenshots.">
-        <meta name="twitter:image" content="https://tidesurf.org/og.png">
+        <meta property="og:title" content="TideSurf - Surf the Tide" />
+        <meta property="og:description" content="Compact DOM text for browser agents, with stable IDs and direct local CDP control." />
+        <meta property="og:image" content="https://tidesurf.org/og.png" />
+        <meta property="og:url" content="https://tidesurf.org" />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="TideSurf - Surf the Tide" />
+        <meta name="twitter:description" content="Compact DOM text for browser agents, with stable IDs and direct local CDP control." />
+        <meta name="twitter:image" content="https://tidesurf.org/og.png" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;700&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet" />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Zalando+Sans:wght@400;500&family=Gothic+A1:wght@400;500&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+            rel="stylesheet"
+        />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <script src="/theme-init.js"></script>
-        <link rel="stylesheet" href="/src/style.css" />
     </head>
     <body>
-        <nav class="nav">
-            <div class="nav-left">
-                <a href="/" class="nav-logo" aria-label="TideSurf home">
-                    <svg class="logo-mark" width="28" height="20" viewBox="0 0 28 20" fill="none">
-                        <path d="M2 5 C7 1, 11 1, 14 5 C17 9, 21 9, 26 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity="0.12"/>
-                        <path d="M2 10 C7 6, 11 6, 14 10 C17 14, 21 14, 26 10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity="0.3"/>
-                        <path d="M2 15 C7 11, 11 11, 14 15 C17 19, 21 19, 26 15" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
-                    </svg>
-                </a>
-                <div class="nav-links">
-                    <a href="https://tidesurf.org/docs" data-i18n="nav.docs"
-                        >Docs</a
-                    >
-                    <a
-                        href="https://www.npmjs.com/package/@tidesurf/core"
-                        data-i18n="nav.npm"
-                        >npm</a
-                    >
-                </div>
-                <button
-                    id="mobile-menu-btn"
-                    class="control-btn mobile-menu-btn"
-                    aria-label="Open navigation menu"
-                    aria-expanded="false"
-                    aria-controls="mobile-menu"
-                >
-                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
-                        <line x1="2" y1="4.5" x2="16" y2="4.5"/>
-                        <line x1="2" y1="9" x2="16" y2="9"/>
-                        <line x1="2" y1="13.5" x2="16" y2="13.5"/>
-                    </svg>
-                </button>
-            </div>
-            <div class="nav-controls">
-                <button
-                    id="theme-toggle"
-                    class="control-btn"
-                    aria-label="Toggle theme"
-                >
-                    <svg
-                        class="theme-icon theme-moon"
-                        width="18"
-                        height="18"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                    >
-                        <path
-                            d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"
-                        />
-                    </svg>
-                    <svg
-                        class="theme-icon theme-sun"
-                        width="18"
-                        height="18"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                    >
-                        <circle cx="12" cy="12" r="5" />
-                        <line x1="12" y1="1" x2="12" y2="3" />
-                        <line x1="12" y1="21" x2="12" y2="23" />
-                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-                        <line x1="1" y1="12" x2="3" y2="12" />
-                        <line x1="21" y1="12" x2="23" y2="12" />
-                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-                    </svg>
-                </button>
-                <div class="lang-switcher">
-                    <button
-                        class="lang-btn"
-                        data-lang="en"
-                        aria-label="English"
-                    >
-                        EN
-                    </button>
-                    <button
-                        class="lang-btn"
-                        data-lang="ja"
-                        aria-label="Japanese"
-                    >
-                        JP
-                    </button>
-                    <button class="lang-btn" data-lang="ko" aria-label="Korean">
-                        KR
-                    </button>
-                </div>
-                <a href="https://github.com/TideSurf/core" class="github-star" aria-label="Star TideSurf on GitHub">
-                    <span class="gh-logo"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="m 12.301 0 h 0.093 c 2.242 0 4.34 0.613 6.137 1.68 l -0.055 -0.031 c 1.871 1.094 3.386 2.609 4.449 4.422 l 0.031 0.058 c 1.04 1.769 1.654 3.896 1.654 6.166 c 0 5.406 -3.483 10 -8.327 11.658 l -0.087 0.026 c -0.063 0.02 -0.135 0.031 -0.209 0.031 c -0.162 0 -0.312 -0.054 -0.433 -0.144 l 0.002 0.001 c -0.128 -0.115 -0.208 -0.281 -0.208 -0.466 c 0 -0.005 0 -0.01 0 -0.014 v 0.001 q 0 -0.048 0.008 -1.226 t 0.008 -2.154 c 0.007 -0.075 0.011 -0.161 0.011 -0.249 c 0 -0.792 -0.323 -1.508 -0.844 -2.025 c 0.618 -0.061 1.176 -0.163 1.718 -0.305 l -0.076 0.017 c 0.573 -0.16 1.073 -0.373 1.537 -0.642 l -0.031 0.017 c 0.508 -0.28 0.938 -0.636 1.292 -1.058 l 0.006 -0.007 c 0.372 -0.476 0.663 -1.036 0.84 -1.645 l 0.009 -0.035 c 0.209 -0.683 0.329 -1.468 0.329 -2.281 c 0 -0.045 0 -0.091 -0.001 -0.136 v 0.007 c 0 -0.022 0.001 -0.047 0.001 -0.072 c 0 -1.248 -0.482 -2.383 -1.269 -3.23 l 0.003 0.003 c 0.168 -0.44 0.265 -0.948 0.265 -1.479 c 0 -0.649 -0.145 -1.263 -0.404 -1.814 l 0.011 0.026 c -0.115 -0.022 -0.246 -0.035 -0.381 -0.035 c -0.334 0 -0.649 0.078 -0.929 0.216 l 0.012 -0.005 c -0.568 0.21 -1.054 0.448 -1.512 0.726 l 0.038 -0.022 l -0.609 0.384 c -0.922 -0.264 -1.981 -0.416 -3.075 -0.416 s -2.153 0.152 -3.157 0.436 l 0.081 -0.02 q -0.256 -0.176 -0.681 -0.433 c -0.373 -0.214 -0.814 -0.421 -1.272 -0.595 l -0.066 -0.022 c -0.293 -0.154 -0.64 -0.244 -1.009 -0.244 c -0.124 0 -0.246 0.01 -0.364 0.03 l 0.013 -0.002 c -0.248 0.524 -0.393 1.139 -0.393 1.788 c 0 0.531 0.097 1.04 0.275 1.509 l -0.01 -0.029 c -0.785 0.844 -1.266 1.979 -1.266 3.227 c 0 0.025 0 0.051 0.001 0.076 v -0.004 c -0.001 0.039 -0.001 0.084 -0.001 0.13 c 0 0.809 0.12 1.591 0.344 2.327 l -0.015 -0.057 c 0.189 0.643 0.476 1.202 0.85 1.693 l -0.009 -0.013 c 0.354 0.435 0.782 0.793 1.267 1.062 l 0.022 0.011 c 0.432 0.252 0.933 0.465 1.46 0.614 l 0.046 0.011 c 0.466 0.125 1.024 0.227 1.595 0.284 l 0.046 0.004 c -0.431 0.428 -0.718 1 -0.784 1.638 l -0.001 0.012 c -0.207 0.101 -0.448 0.183 -0.699 0.236 l -0.021 0.004 c -0.256 0.051 -0.549 0.08 -0.85 0.08 c -0.022 0 -0.044 0 -0.066 0 h 0.003 c -0.394 -0.008 -0.756 -0.136 -1.055 -0.348 l 0.006 0.004 c -0.371 -0.259 -0.671 -0.595 -0.881 -0.986 l -0.007 -0.015 c -0.198 -0.336 -0.459 -0.614 -0.768 -0.827 l -0.009 -0.006 c -0.225 -0.169 -0.49 -0.301 -0.776 -0.38 l -0.016 -0.004 l -0.32 -0.048 c -0.023 -0.002 -0.05 -0.003 -0.077 -0.003 c -0.14 0 -0.273 0.028 -0.394 0.077 l 0.007 -0.003 q -0.128 0.072 -0.08 0.184 c 0.039 0.086 0.087 0.16 0.145 0.225 l -0.001 -0.001 c 0.061 0.072 0.13 0.135 0.205 0.19 l 0.003 0.002 l 0.112 0.08 c 0.283 0.148 0.516 0.354 0.693 0.603 l 0.004 0.006 c 0.191 0.237 0.359 0.505 0.494 0.792 l 0.01 0.024 l 0.16 0.368 c 0.135 0.402 0.38 0.738 0.7 0.981 l 0.005 0.004 c 0.3 0.234 0.662 0.402 1.057 0.478 l 0.016 0.002 c 0.33 0.064 0.714 0.104 1.106 0.112 h 0.007 c 0.045 0.002 0.097 0.002 0.15 0.002 c 0.261 0 0.517 -0.021 0.767 -0.062 l -0.027 0.004 l 0.368 -0.064 q 0 0.609 0.008 1.418 t 0.008 0.873 v 0.014 c 0 0.185 -0.08 0.351 -0.208 0.466 h -0.001 c -0.119 0.089 -0.268 0.143 -0.431 0.143 c -0.075 0 -0.147 -0.011 -0.214 -0.032 l 0.005 0.001 c -4.929 -1.689 -8.409 -6.283 -8.409 -11.69 c 0 -2.268 0.612 -4.393 1.681 -6.219 l -0.032 0.058 c 1.094 -1.871 2.609 -3.386 4.422 -4.449 l 0.058 -0.031 c 1.739 -1.034 3.835 -1.645 6.073 -1.645 h 0.098 h -0.005 Z m -7.64 17.666 q 0.048 -0.112 -0.112 -0.192 q -0.16 -0.048 -0.208 0.032 q -0.048 0.112 0.112 0.192 q 0.144 0.096 0.208 -0.032 Z m 0.497 0.545 q 0.112 -0.08 -0.032 -0.256 q -0.16 -0.144 -0.256 -0.048 q -0.112 0.08 0.032 0.256 q 0.159 0.157 0.256 0.047 Z m 0.48 0.72 q 0.144 -0.112 0 -0.304 q -0.128 -0.208 -0.272 -0.096 q -0.144 0.08 0 0.288 t 0.272 0.112 Z m 0.672 0.673 q 0.128 -0.128 -0.064 -0.304 q -0.192 -0.192 -0.32 -0.048 q -0.144 0.128 0.064 0.304 q 0.192 0.192 0.32 0.044 Z m 0.913 0.4 q 0.048 -0.176 -0.208 -0.256 q -0.24 -0.064 -0.304 0.112 t 0.208 0.24 q 0.24 0.097 0.304 -0.096 Z m 1.009 0.08 q 0 -0.208 -0.272 -0.176 q -0.256 0 -0.256 0.176 q 0 0.208 0.272 0.176 q 0.256 0.001 0.256 -0.175 Z m 0.929 -0.16 q -0.032 -0.176 -0.288 -0.144 q -0.256 0.048 -0.224 0.24 t 0.288 0.128 t 0.225 -0.224 Z"/></svg></span>
-                    <span class="gh-stars"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><span class="star-count" id="star-count"></span></span>
-                </a>
-            </div>
-            <div id="mobile-menu" class="mobile-menu" aria-hidden="true" inert>
-                <a href="https://tidesurf.org/docs" data-i18n="nav.docs">Docs</a>
-                <a href="https://www.npmjs.com/package/@tidesurf/core" data-i18n="nav.npm">npm</a>
-                <a href="https://github.com/TideSurf/core" data-i18n="nav.github">GitHub</a>
-            </div>
-        </nav>
+        <a href="#main" class="skip-link">Skip to content</a>
 
-        <header class="hero">
-            <div class="hero-content">
-                <div class="hero-copy">
-                    <h1 class="hero-title">
-                        <span class="hero-word hero-word-single" aria-label="Surf the Tide">
-                            <span class="hero-verb-slot" aria-hidden="true">
-                                <span id="hero-verb-current">SURF</span>
+        <main id="main" class="page">
+            <!-- TideSurf-first hero -->
+            <header class="hero reveal-group" aria-labelledby="hero-title">
+                <div class="hero-split">
+                    <div class="hero-type reveal" style="--reveal-delay: 0ms">
+                        <div class="hero-mark">
+                            <svg class="logo-mark" width="44" height="30" viewBox="0 0 28 20" fill="none" aria-hidden="true">
+                                <path
+                                    d="M2 5 C7 1, 11 1, 14 5 C17 9, 21 9, 26 5"
+                                    stroke="currentColor"
+                                    stroke-width="1.4"
+                                    stroke-linecap="round"
+                                    opacity="0.12"
+                                />
+                                <path
+                                    d="M2 10 C7 6, 11 6, 14 10 C17 14, 21 14, 26 10"
+                                    stroke="currentColor"
+                                    stroke-width="1.8"
+                                    stroke-linecap="round"
+                                    opacity="0.3"
+                                />
+                                <path
+                                    d="M2 15 C7 11, 11 11, 14 15 C17 19, 21 19, 26 15"
+                                    stroke="currentColor"
+                                    stroke-width="2.4"
+                                    stroke-linecap="round"
+                                />
+                            </svg>
+                            <span class="hero-handle mono">npm @tidesurf/core</span>
+                        </div>
+
+                        <h1 id="hero-title" class="hero-wordmark" aria-label="TideSurf">
+                            <span>Tide</span><span class="hero-wordmark-accent">Surf</span>
+                        </h1>
+
+                        <p class="hero-motion-line" aria-label="TideSurf lets browser agents browse, compress, reason, and act on live pages as text.">
+                            <span>Agents can</span>
+                            <span class="hero-verb-slot mono" aria-hidden="true">
+                                <span id="hero-verb-current">browse</span>
                                 <span id="hero-verb-next"></span>
                             </span>
-                            <span class="hero-title-fixed" aria-hidden="true">THE TIDE</span>
-                        </span>
-                    </h1>
-                    <div class="hero-utility-row">
+                            <span>live pages as text.</span>
+                        </p>
+                    </div>
+
+                    <div class="hero-aside reveal" style="--reveal-delay: 120ms">
+                        <p class="hero-identity" data-i18n="hero.tagline">
+                            TideSurf is the DOM-to-text runtime for engineers building function-calling browser agents.
+                        </p>
+                        <p class="hero-lede" data-i18n="hero.lede">
+                            A compression layer between Chromium and your LLM. Live pages become token-efficient text
+                            with stable element IDs, so agents can browse, reason, and act without brittle selectors.
+                        </p>
+
+                        <div class="hero-proof" aria-label="TideSurf proof points">
+                            <span><strong class="mono">32x</strong> more page context</span>
+                            <span><strong class="mono">L1 B2</strong> click by ID</span>
+                            <span><strong class="mono">local</strong> CDP control</span>
+                        </div>
+
+                        <div class="hero-state" aria-label="TideSurf compressed page state example">
+                            <div class="hero-state-head">
+                                <span class="mono">browser.getState()</span>
+                                <strong class="mono">142 tokens</strong>
+                            </div>
+                            <pre><code>H1 TideSurf
+P  DOM-to-text for browser agents.
+L1 Docs
+B1 Copy install command
+MAIN Same page. Fewer tokens.</code></pre>
+                        </div>
+
                         <div class="hero-cta">
-                            <div class="install-box">
-                                <span class="prompt">$</span>
-                                <div class="pkg-cycle">
-                                    <div class="pkg-track" id="pkg-track">
-                                        <code id="install-command-text">bun add @tidesurf/core</code>
-                                    </div>
-                                </div>
-                                <button
-                                    class="copy-btn"
-                                    id="install-copy-btn"
-                                    data-copy="bun add @tidesurf/core"
-                                    aria-label="Copy to clipboard"
-                                >
-                                    <svg
-                                        width="18"
-                                        height="18"
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        stroke-width="2"
-                                    >
-                                        <rect
-                                            x="9"
-                                            y="9"
-                                            width="13"
-                                            height="13"
-                                            rx="2"
-                                            ry="2"
-                                        ></rect>
-                                        <path
-                                            d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"
-                                        ></path>
-                                    </svg>
+                            <div class="install install--hero">
+                                <span class="prompt mono">$</span>
+                                <code id="install-command-text" class="mono">bun add @tidesurf/core</code>
+                                <button type="button" class="copy-btn pill" id="install-copy-btn" data-copy="bun add @tidesurf/core" aria-label="Copy install command">
+                                    <span class="copy-label">copy</span>
                                 </button>
                             </div>
+                            <a href="https://tidesurf.org/docs" class="footer-btn" style="--btn-color: var(--c-teal)" data-i18n="nav.docs">docs</a>
                         </div>
                     </div>
                 </div>
+            </header>
 
-                <div class="product-visual" role="group" tabindex="0" aria-label="Page to DOM to TideSurf markdown" data-i18n="mock.product.aria" data-i18n-attr="aria-label" data-comparison-demo>
-                    <section class="mock-stage mock-stage--page" aria-label="Rendered page">
-                        <div class="browser-card">
-                            <div class="browser-chrome">
-                                <span></span><span></span><span></span>
-                                <div class="browser-url">example.com</div>
-                            </div>
-                            <div class="browser-page">
-                                <div class="browser-topline">
-                                    <strong>Example</strong>
-                                    <div class="browser-links" aria-hidden="true">
-                                        <span class="browser-link browser-link--docs is-active mock-sync-target mock-sync-target--page"><span class="browser-id">L1</span>Docs<span class="mock-cursor" aria-hidden="true"></span></span>
-                                        <span class="browser-link">Pricing</span>
-                                        <span class="browser-link">Blog</span>
-                                    </div>
-                                </div>
-                                <h2>Build faster with reliable APIs</h2>
-                                <p>Ship production apps with clear docs and stable endpoints.</p>
-                                <div class="browser-form">
-                                    <span>Your email</span>
-                                    <span class="browser-button"><span class="browser-id">B2</span>Get started</span>
-                                </div>
-                                <div class="browser-resource-grid" aria-hidden="true">
-                                    <span><strong>Docs</strong><em>Guides</em></span>
-                                    <span><strong>API</strong><em>Reference</em></span>
-                                </div>
-                                <div class="browser-site-details" aria-hidden="true">
-                                    <div class="browser-feature-row">
-                                        <span>Fast</span>
-                                        <span>Secure</span>
-                                        <span>Scalable</span>
-                                    </div>
-                                    <div class="browser-proof">
-                                        <span>Trusted by teams worldwide</span>
-                                        <div>
-                                            <b>Acme</b>
-                                            <b>Globex</b>
-                                            <b>Hexa</b>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
-                    <section class="mock-stage mock-stage--compare" aria-label="DOM compared with TideSurf markdown">
-                        <div class="mock-compare-window">
-                            <div class="mock-code-pane mock-code-pane--dom">
-                                <div class="mock-code-head">
-                                    <span>DOM</span>
-                                    <strong>486 tokens</strong>
-                                </div>
-                                <pre><code>&lt;nav class="site-nav"&gt;
-  <span class="mock-sync-target mock-sync-target--dom">&lt;a href="/docs"&gt;Docs&lt;/a&gt;</span>
-  &lt;a href="/pricing"&gt;Pricing&lt;/a&gt;
-  &lt;button aria-label="start"&gt;Get started&lt;/button&gt;
-  &lt;input placeholder="Your email" /&gt;
-  &lt;section class="features"&gt;Fast Secure Scalable&lt;/section&gt;
-&lt;/nav&gt;</code></pre>
-                            </div>
-                            <div class="mock-code-pane mock-code-pane--markdown">
-                                <div class="mock-code-head">
-                                    <span>TideSurf</span>
-                                    <strong>132 tokens</strong>
-                                </div>
-                                <pre><code># example.com
-<span class="dom-row dom-row-active mock-sync-target mock-sync-target--markdown">L1 [LINK] Docs      /docs</span>
-L2 [LINK] Pricing   /pricing
-B2 [BUTTON] Get started
-I1 [INPUT email] Your email
-S1 [SECTION] Fast / Secure / Scalable</code></pre>
-                            </div>
-                        </div>
-                    </section>
+            <!-- Typographic proof ribbon -->
+            <div class="stat-ribbon reveal" style="--reveal-delay: 200ms" aria-label="GitHub issues benchmark">
+                <div class="stat-ribbon-inner">
+                    <span class="stat-ribbon-item">
+                        <span class="stat-ribbon-label" data-i18n="compare.raw">raw DOM</span>
+                        <span class="stat-ribbon-num mono">84,236</span>
+                    </span>
+                    <span class="stat-ribbon-sep mono" aria-hidden="true">→</span>
+                    <span class="stat-ribbon-item stat-ribbon-item--accent">
+                        <span class="stat-ribbon-label" data-i18n="compare.tidesurf">TideSurf</span>
+                        <span class="stat-ribbon-num mono">2,593</span>
+                    </span>
+                    <span class="stat-ribbon-mult mono">32×</span>
+                    <span class="stat-ribbon-meta">cl100k_base · live pages · GitHub issues</span>
                 </div>
             </div>
-            <div class="scroll-hint" aria-hidden="true">
-                <span data-i18n="hero.scroll">Scroll</span>
-                <div class="scroll-line"></div>
-            </div>
-        </header>
 
-        <main class="story-main">
-            <section class="story-band story-band--compression" id="compression">
-                <div class="story-label">
-                    <span data-i18n="bench.label">Compression</span>
-                    <span>01</span>
+            <!-- Edge-bleed compare -->
+            <section class="section section--proof reveal" aria-labelledby="proof-title">
+                <div class="section-lead">
+                    <h2 id="proof-title" data-i18n="bench.title">Same page. Fewer tokens.</h2>
+                    <p data-i18n="bench.why.body">
+                        Every token your agent reads costs money and eats into the context window. A GitHub page that takes 84,236 tokens raw fits in just 2,593 with TideSurf. That is 32x compression.
+                    </p>
                 </div>
-                <div class="compression-system reveal">
-                    <div class="compression-copy">
-                        <h2 data-i18n="compare.headline">HTML in, text out</h2>
-                        <p>Same page. Fewer tokens. Stable IDs remain visible so the agent can act without pixels.</p>
-                    </div>
-                    <div class="compression-lab" aria-label="Raw page compressed into TideSurf output">
-                        <div class="lab-pane lab-pane--raw">
-                            <div class="lab-head"><span>raw.html</span><span>12 lines</span></div>
-                            <pre><code>&lt;nav class="main-nav"&gt;
-  &lt;a id="docs" href="/docs"&gt;Docs&lt;/a&gt;
-  &lt;a id="blog" href="/blog"&gt;Blog&lt;/a&gt;
-  &lt;button class="primary"&gt;Start&lt;/button&gt;
-&lt;/nav&gt;</code></pre>
+
+                <div class="compare-bleed" aria-label="Raw DOM compared with TideSurf output" data-comparison-demo>
+                    <div class="compare-bleed-grid">
+                        <div class="pane pane--raw">
+                            <div class="pane-head">
+                                <span data-i18n="compare.raw">Raw HTML</span>
+                                <strong class="mono">84,236</strong>
+                            </div>
+                            <pre><code>&lt;div class="application-main"&gt;
+  &lt;header class="Header-module__header"&gt;
+    &lt;nav aria-label="Global"&gt;
+      &lt;a href="/issues"&gt;Issues&lt;/a&gt;
+      &lt;a href="/pulls"&gt;Pull requests&lt;/a&gt;
+    &lt;/nav&gt;
+  &lt;/header&gt;
+  &lt;main&gt;
+    &lt;svg class="octicon octicon-issue-opened" …&gt;
+      &lt;path d="M8 9.5a1.5 1.5 0 1 0 0-3…"/&gt;
+    &lt;/svg&gt;
+    &lt;div class="markdown-body"&gt;…&lt;/div&gt;
+  &lt;/main&gt;
+&lt;/div&gt;</code></pre>
                         </div>
-                        <div class="lab-connector" aria-hidden="true"><span></span></div>
-                        <div class="lab-pane lab-pane--out">
-                            <div class="lab-head"><span>tidesurf.txt</span><span>~132 tokens</span></div>
-                            <pre><code># example.com
-URL: https://example.com/
+                        <div class="pane pane--out">
+                            <div class="pane-head">
+                                <span data-i18n="compare.tidesurf">TideSurf</span>
+                                <strong class="mono">2,593</strong>
+                            </div>
+                            <pre><code># github.com/TideSurf/core/issues
+URL: https://github.com/TideSurf/core/issues
 ---
-<span class="lab-id">L1</span> [LINK] Docs /docs
-<span class="lab-id">L2</span> [LINK] Blog /blog
-<span class="lab-id">B1</span> [BUTTON] Start /start</code></pre>
+H1 [HEADING] Issues
+L1 [LINK] Pull requests  /pulls
+L2 [LINK] Actions        /actions
+<span class="hl" id="proof-highlight">L3 [LINK] Latest issue title</span>
+B1 [BUTTON] New issue
+MAIN …</code></pre>
                         </div>
                     </div>
-                    <div class="story-art-row" aria-label="Compression motion examples">
-                        <figure class="motion-card motion-card--dom">
-                            <svg viewBox="0 0 360 180" role="img" aria-label="DOM nodes are pruned into compact TideSurf output">
-                                <rect class="svg-surface" x="8" y="8" width="344" height="164" rx="10" />
-                                <g class="svg-dom-tree">
-                                    <path d="M72 44v96M72 68h58M72 92h94M72 116h66" />
-                                    <circle cx="72" cy="44" r="5" />
-                                    <circle cx="130" cy="68" r="5" />
-                                    <circle cx="166" cy="92" r="5" />
-                                    <circle cx="138" cy="116" r="5" />
-                                    <text x="88" y="48">&lt;main&gt;</text>
-                                    <text x="146" y="72">nav</text>
-                                    <text x="182" y="96">button</text>
-                                    <text x="154" y="120">copy</text>
-                                </g>
-                                <g class="svg-dom-output">
-                                    <rect x="222" y="48" width="76" height="22" rx="4" />
-                                    <rect x="222" y="82" width="92" height="22" rx="4" />
-                                    <rect x="222" y="116" width="68" height="22" rx="4" />
-                                    <text x="236" y="64">L1 Docs</text>
-                                    <text x="236" y="98">B1 Start</text>
-                                    <text x="236" y="132">P Copy</text>
-                                </g>
-                                <path class="svg-flow svg-flow--one" d="M178 72C196 72 202 59 218 59" />
-                                <path class="svg-flow svg-flow--two" d="M186 92C202 92 206 93 218 93" />
-                                <path class="svg-flow svg-flow--three" d="M168 116C194 116 203 127 218 127" />
-                            </svg>
-                            <figcaption>Prune wrappers, keep targets</figcaption>
-                        </figure>
-                        <figure class="motion-card motion-card--tokens">
-                            <svg viewBox="0 0 360 180" role="img" aria-label="Raw HTML token count compresses into smaller TideSurf token count">
-                                <rect class="svg-surface" x="8" y="8" width="344" height="164" rx="10" />
-                                <line class="svg-axis" x1="58" y1="136" x2="306" y2="136" />
-                                <g class="svg-token-bars">
-                                    <rect class="svg-bar svg-bar--raw" x="84" y="42" width="52" height="94" rx="5" />
-                                    <rect class="svg-bar svg-bar--out" x="222" y="112" width="52" height="24" rx="5" />
-                                </g>
-                                <text class="svg-label" x="80" y="154">Raw HTML</text>
-                                <text class="svg-label" x="214" y="154">TideSurf</text>
-                                <path class="svg-flow svg-flow--one" d="M148 92H208" />
-                                <text class="svg-accent-text" x="151" y="76">10-100x</text>
-                            </svg>
-                            <figcaption>Reduce cost before reasoning</figcaption>
-                        </figure>
-                    </div>
-                    <div class="compression-proof">
-                        <div><strong>50-200</strong><span>tokens per page</span></div>
-                        <div><strong>10-100x</strong><span>lower token cost</span></div>
-                        <div><strong>&lt;25ms</strong><span>parse time</span></div>
-                        <div><strong>0</strong><span>screenshots</span></div>
-                    </div>
+                </div>
+
+                <p class="section-caption" data-i18n="bench.how.body">
+                    We launch headless Chrome, navigate to each site, and compare the full rendered DOM against TideSurf's compressed output. Token counts use cl100k_base estimation.
+                </p>
+            </section>
+
+            <!-- Asymmetric bento -->
+            <section class="section section--bento reveal" aria-labelledby="bento-title">
+                <div class="section-lead section-lead--narrow">
+                    <h2 id="bento-title" data-i18n="compare.label">How it works</h2>
+                    <p data-i18n="hero.tagline">Compressed DOM for agents.</p>
+                </div>
+
+                <div class="bento">
+                    <article class="bento-cell bento-cell--connect">
+                        <span class="bento-index mono">01</span>
+                        <h3 data-i18n="bento.connect.title">Connect</h3>
+                        <p data-i18n="bento.connect.desc">
+                            Attach to Chromium over CDP. Launch headless or connect to a browser you already have open.
+                        </p>
+                    </article>
+                    <article class="bento-cell bento-cell--compress">
+                        <span class="bento-index mono">02</span>
+                        <h3 data-i18n="bento.compress.title">Compress</h3>
+                        <p data-i18n="bento.compress.desc">
+                            Rendered DOM becomes token-efficient text. Typical page: 50-200 tokens. Parse in under 25 ms.
+                        </p>
+                    </article>
+                    <article class="bento-cell bento-cell--act">
+                        <span class="bento-index mono">03</span>
+                        <h3 data-i18n="bento.act.title">Act</h3>
+                        <p data-i18n="bento.act.desc">
+                            Your model picks a stable ID like L3 or B1, then click() runs through DevTools.
+                        </p>
+                    </article>
+                    <article class="bento-cell bento-cell--ids">
+                        <span class="bento-index mono">∞</span>
+                        <h3 data-i18n="bento.ids.title">Stable IDs across navigations</h3>
+                        <p data-i18n="bento.ids.desc">
+                            Element references stay short and predictable as L1, B2, and L3. The loop stays getState() → LLM → click().
+                        </p>
+                    </article>
                 </div>
             </section>
 
-            <section class="story-band story-band--loop" id="patterns">
-                <div class="story-label">
-                    <span data-i18n="patterns.label">Patterns</span>
-                    <span>02</span>
-                </div>
-                <div class="loop-system reveal">
-                    <div class="loop-intro">
-                        <h2 data-i18n="patterns.title">Built for agents</h2>
-                        <p data-i18n="patterns.sub">Three lines to browse. One tool call to act.</p>
+            <!-- Horizontal scroll agent loop -->
+            <section class="section section--loop reveal" aria-labelledby="loop-title">
+                <div class="loop-intro">
+                    <div class="section-lead section-lead--narrow">
+                        <h2 id="loop-title" data-i18n="patterns.title">The agent loop</h2>
+                        <p data-i18n="patterns.sub">
+                            TideSurf keeps the loop simple: read compressed page text, decide, act, then call the next tool.
+                        </p>
                     </div>
-                    <div class="usage-mock usage-mock--main" aria-label="TideSurf usage mock-up" data-i18n="mock.usage.aria" data-i18n-attr="aria-label">
-                        <div class="usage-pane usage-pane--chat">
-                            <div class="usage-pane-head">
-                                <span data-i18n="mock.chat">Chat</span>
-                                <span class="usage-pane-meta" data-i18n="mock.request">request</span>
+                    <p class="loop-hint mono" aria-hidden="true">scroll →</p>
+                </div>
+
+                <div class="loop-scroller" tabindex="0" aria-label="Agent loop demonstration panels" data-i18n="mock.usage.aria" data-i18n-attr="aria-label">
+                    <div class="loop-track">
+                        <div class="loop-panel loop-panel--prompt">
+                            <span class="loop-panel-label" data-i18n="mock.chat">Chat</span>
+                            <p class="loop-prompt">Find the latest issue title and open it.</p>
+                        </div>
+
+                        <div class="loop-panel loop-panel--state">
+                            <span class="loop-panel-label" data-i18n="mock.pageState">Page state</span>
+                            <pre><code>HEADING Issues
+[L1] Pull requests
+[L2] Actions
+<span class="term-step" data-term-step="0">[L3] Latest issue title</span>
+[B1] New issue</code></pre>
+                        </div>
+
+                        <div class="loop-panel loop-panel--agent">
+                            <span class="loop-panel-label" data-i18n="mock.agent">Agent</span>
+                            <pre><code><span class="term-step" data-term-step="0"><span class="tk-kw">const</span> state = <span class="tk-kw">await</span> browser.<span class="tk-fn">getState</span>()</span>
+<span class="term-step" data-term-step="1"><span class="tk-kw">await</span> browser.<span class="tk-fn">click</span>(<span class="tk-str">"L3"</span>)</span></code></pre>
+                        </div>
+
+                        <div class="loop-panel loop-panel--terminal">
+                            <div class="terminal-bar">
+                                <span class="mono">agent.ts</span>
+                                <span class="live mono">running</span>
                             </div>
-                            <div class="usage-message usage-step usage-step--chat">Find the latest issue title and open it.</div>
-                        </div>
-                        <div class="usage-pane usage-pane--agent">
-                            <div class="usage-pane-head">
-                                <span data-i18n="mock.agent">Agent</span>
-                                <span class="usage-pane-meta" data-i18n="mock.toolLoop">tool loop</span>
-                            </div>
-                            <pre><code><span class="usage-step usage-step--agent"><span class="tk-kw">const</span> state = <span class="tk-kw">await</span> browser.<span class="tk-fn">getState</span>()</span>
-<span class="usage-note">state.content -> LLM</span>
-<span class="usage-step usage-step--agent"><span class="tk-kw">await</span> browser.<span class="tk-fn">click</span>(<span class="tk-str">"L3"</span>)</span></code></pre>
-                        </div>
-                        <div class="usage-pane usage-pane--browser">
-                            <div class="usage-pane-head">
-                                <span data-i18n="mock.browser">Browser</span>
-                                <span class="usage-pane-meta" data-i18n="mock.pageState">page state</span>
-                            </div>
-                            <pre><code>MAIN
-  HEADING Issues
-  [L1] Pull requests
-  [L2] Actions
-  <span class="usage-step usage-step--browser">[L3] Latest issue title</span>
-  [B1] New issue</code></pre>
-                        </div>
-                    </div>
-                    <div class="story-art-row story-art-row--three" aria-label="Agent loop motion examples">
-                        <figure class="motion-card motion-card--prompt">
-                            <svg viewBox="0 0 300 160" role="img" aria-label="A chat prompt enters the agent loop">
-                                <rect class="svg-surface" x="8" y="8" width="284" height="144" rx="10" />
-                                <rect class="svg-bubble svg-bubble--one" x="34" y="40" width="190" height="28" rx="6" />
-                                <rect class="svg-bubble svg-bubble--two" x="34" y="82" width="138" height="28" rx="6" />
-                                <circle class="svg-dot-pulse" cx="238" cy="96" r="7" />
-                                <text x="48" y="58">Find latest issue</text>
-                                <text x="48" y="100">Open it</text>
-                            </svg>
-                            <figcaption>Chat request</figcaption>
-                        </figure>
-                        <figure class="motion-card motion-card--tool">
-                            <svg viewBox="0 0 300 160" role="img" aria-label="The agent chooses getState then click">
-                                <rect class="svg-surface" x="8" y="8" width="284" height="144" rx="10" />
-                                <path class="svg-tool-path" d="M56 62H222M56 98H172M56 134H232" />
-                                <circle class="svg-tool-node svg-tool-node--one" cx="56" cy="62" r="6" />
-                                <circle class="svg-tool-node svg-tool-node--two" cx="172" cy="98" r="6" />
-                                <circle class="svg-tool-node svg-tool-node--three" cx="232" cy="134" r="6" />
-                                <text x="74" y="46">getState()</text>
-                                <text x="74" y="82">LLM reads L3</text>
-                                <text x="74" y="118">click("L3")</text>
-                            </svg>
-                            <figcaption>Tool call</figcaption>
-                        </figure>
-                        <figure class="motion-card motion-card--result">
-                            <svg viewBox="0 0 300 160" role="img" aria-label="The browser opens the selected issue link">
-                                <rect class="svg-surface" x="8" y="8" width="284" height="144" rx="10" />
-                                <rect x="36" y="42" width="228" height="76" rx="8" />
-                                <path class="svg-window-line" d="M52 62H166M52 82H218M52 102H188" />
-                                <rect class="svg-active-link" x="46" y="75" width="186" height="16" rx="3" />
-                                <path class="svg-cursor" d="M230 106l18 8-9 4-4 9z" />
-                            </svg>
-                            <figcaption>Browser result</figcaption>
-                        </figure>
-                    </div>
-                </div>
-            </section>
-
-            <section class="story-band story-band--capabilities" id="capabilities">
-                <div class="story-label">
-                    <span data-i18n="features.label">Features</span>
-                    <span>03</span>
-                </div>
-                <div class="capability-system reveal">
-                    <div class="capability-copy">
-                        <h2 data-i18n="features.title">What ships</h2>
-                        <p>Direct CDP tools, token budgets, tab lifecycle, extraction, and MCP wiring in one small TypeScript surface.</p>
-                    </div>
-                    <div class="capability-grid" aria-label="TideSurf capabilities">
-                        <article class="capability-card capability-card--navigate">
-                            <svg viewBox="0 0 220 140" role="img" aria-label="Navigate to a URL">
-                                <rect class="svg-surface" x="8" y="8" width="204" height="124" rx="10" />
-                                <path class="svg-route" d="M42 98C80 46 136 116 180 48" />
-                                <circle class="svg-tool-node svg-tool-node--one" cx="42" cy="98" r="6" />
-                                <circle class="svg-tool-node svg-tool-node--three" cx="180" cy="48" r="6" />
-                                <path class="svg-cursor" d="M162 54l18 8-9 4-4 9z" />
-                            </svg>
-                            <div><h3>Navigate</h3><p>Go anywhere on the web</p><code>navigate("https://...")</code></div>
-                        </article>
-                        <article class="capability-card capability-card--interact">
-                            <svg viewBox="0 0 220 140" role="img" aria-label="Click and type into page elements">
-                                <rect class="svg-surface" x="8" y="8" width="204" height="124" rx="10" />
-                                <rect class="svg-input" x="36" y="48" width="94" height="26" rx="5" />
-                                <rect class="svg-button" x="136" y="48" width="48" height="26" rx="5" />
-                                <path class="svg-key-line" d="M48 62H108" />
-                                <circle class="svg-click-ring" cx="160" cy="61" r="16" />
-                            </svg>
-                            <div><h3>Interact</h3><p>Click, type, select, scroll</p><code>click("B1"), type("I1")</code></div>
-                        </article>
-                        <article class="capability-card capability-card--extract">
-                            <svg viewBox="0 0 220 140" role="img" aria-label="Extract selected page content">
-                                <rect class="svg-surface" x="8" y="8" width="204" height="124" rx="10" />
-                                <path class="svg-window-line" d="M42 46H174M42 68H154M42 90H188" />
-                                <rect class="svg-active-link" x="37" y="58" width="130" height="20" rx="4" />
-                                <path class="svg-flow svg-flow--one" d="M168 68H190" />
-                            </svg>
-                            <div><h3>Extract</h3><p>Read precise page content</p><code>extract({ selector })</code></div>
-                        </article>
-                        <article class="capability-card capability-card--budget">
-                            <svg viewBox="0 0 220 140" role="img" aria-label="Token budget trims output">
-                                <rect class="svg-surface" x="8" y="8" width="204" height="124" rx="10" />
-                                <rect class="svg-bar svg-bar--raw" x="42" y="38" width="34" height="72" rx="5" />
-                                <rect class="svg-bar svg-bar--out" x="96" y="72" width="34" height="38" rx="5" />
-                                <rect class="svg-bar svg-bar--out svg-bar--delay" x="150" y="86" width="34" height="24" rx="5" />
-                                <line class="svg-axis" x1="34" y1="110" x2="190" y2="110" />
-                            </svg>
-                            <div><h3>Budget</h3><p>Keep output within token limits</p><code>getState({ maxTokens })</code></div>
-                        </article>
-                        <article class="capability-card capability-card--tabs">
-                            <svg viewBox="0 0 220 140" role="img" aria-label="Create and switch browser tabs">
-                                <rect class="svg-surface" x="8" y="8" width="204" height="124" rx="10" />
-                                <rect class="svg-tab svg-tab--one" x="38" y="44" width="54" height="28" rx="5" />
-                                <rect class="svg-tab svg-tab--two" x="84" y="56" width="54" height="28" rx="5" />
-                                <rect class="svg-tab svg-tab--three" x="130" y="68" width="54" height="28" rx="5" />
-                                <path class="svg-flow svg-flow--two" d="M64 100H158" />
-                            </svg>
-                            <div><h3>Tabs</h3><p>Create, switch, close</p><code>newTab(), switchTab()</code></div>
-                        </article>
-                        <article class="capability-card capability-card--mcp">
-                            <svg viewBox="0 0 220 140" role="img" aria-label="Expose TideSurf tools through MCP">
-                                <rect class="svg-surface" x="8" y="8" width="204" height="124" rx="10" />
-                                <circle class="svg-mcp-node svg-tool-node--one" cx="60" cy="70" r="17" />
-                                <circle class="svg-mcp-node svg-tool-node--two" cx="110" cy="70" r="17" />
-                                <circle class="svg-mcp-node svg-tool-node--three" cx="160" cy="70" r="17" />
-                                <path class="svg-route" d="M77 70H93M127 70H143" />
-                            </svg>
-                            <div><h3>MCP</h3><p>Expose tools to Codex agents</p><code>bunx tidesurf mcp</code></div>
-                        </article>
-                    </div>
-                </div>
-            </section>
-
-            <section class="story-band story-band--safety" id="security">
-                <div class="story-label">
-                    <span data-i18n="security.label">Security</span>
-                    <span>04</span>
-                </div>
-                <div class="safety-system reveal">
-                    <div class="safety-checks">
-                        <h2 data-i18n="security.title">Safe by default</h2>
-                        <ul>
-                            <li><span></span><strong data-i18n="security.readonly.title">Read-only mode</strong><em data-i18n="security.readonly.desc">Restrict agents to observation only. No clicks, no typing, no navigation.</em></li>
-                            <li><span></span><strong data-i18n="security.filesystem.title">Filesystem confinement</strong><em data-i18n="security.filesystem.desc">Upload and download paths are locked to explicit roots.</em></li>
-                            <li><span></span><strong data-i18n="security.validation.title">Input validation</strong><em data-i18n="security.validation.desc">URLs, selectors, expressions, and file paths are validated before execution.</em></li>
-                            <li><span></span><strong data-i18n="security.local.title">Local CDP only</strong><em data-i18n="security.local.desc">Chrome DevTools Protocol runs over local WebSocket.</em></li>
-                        </ul>
-                    </div>
-                    <div class="safety-code">
-                        <div class="safety-visuals" aria-label="Safety motion examples">
-                            <figure
-                                class="motion-card motion-card--lock"
-                                role="button"
-                                tabindex="0"
-                                data-motion-modal
-                                data-modal-title="Read-only mode"
-                                data-modal-body="Write tools are blocked before dispatch. The agent can inspect compressed page state, but click, type, navigate, upload, and download calls are rejected when readOnly is enabled."
-                            >
-                                <svg viewBox="0 0 280 150" role="img" aria-label="Read-only mode blocks write actions">
-                                    <rect class="svg-surface" x="8" y="8" width="264" height="134" rx="10" />
-                                    <rect class="svg-lock-body" x="104" y="72" width="72" height="44" rx="8" />
-                                    <path class="svg-lock-shackle" d="M118 72V56a22 22 0 0 1 44 0v16" />
-                                    <path class="svg-blocked-action" d="M50 102H92" />
-                                    <path class="svg-blocked-action svg-blocked-action--two" d="M188 102H230" />
-                                    <circle class="svg-click-ring" cx="140" cy="94" r="18" />
-                                </svg>
-                                <figcaption>Writes stay blocked</figcaption>
-                            </figure>
-                            <figure
-                                class="motion-card motion-card--local"
-                                role="button"
-                                tabindex="0"
-                                data-motion-modal
-                                data-modal-title="Local CDP loop"
-                                data-modal-body="TideSurf talks to Chrome through a loopback DevTools WebSocket. The agent receives compressed DOM text and stable element IDs without remote browser infrastructure or screenshots."
-                            >
-                                <svg viewBox="0 0 280 150" role="img" aria-label="CDP stays local over a loopback connection">
-                                    <rect class="svg-surface" x="8" y="8" width="264" height="134" rx="10" />
-                                    <rect class="svg-terminal" x="26" y="38" width="70" height="58" rx="8" />
-                                    <rect class="svg-terminal" x="184" y="38" width="70" height="58" rx="8" />
-                                    <rect class="svg-input" x="112" y="50" width="52" height="34" rx="7" />
-                                    <path class="svg-route" d="M96 62C112 42 130 42 145 62" />
-                                    <path class="svg-route svg-route--return" d="M164 72C148 98 122 98 96 76" />
-                                    <path class="svg-key-line" d="M121 61H155" />
-                                    <circle class="svg-dot-pulse" cx="166" cy="72" r="5" />
-                                    <text x="42" y="60">Agent</text>
-                                    <text x="39" y="78">tools</text>
-                                    <text x="121" y="104">127.0.0.1</text>
-                                    <text x="199" y="60">Chrome</text>
-                                    <text x="204" y="78">CDP</text>
-                                </svg>
-                                <figcaption>Local loop only</figcaption>
-                            </figure>
-                        </div>
-                        <div class="code-block">
-                            <div class="code-header"><span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span><span class="code-filename">agent.config.ts</span></div>
-                            <pre><code><span class="tk-kw">const</span> browser = <span class="tk-kw">await</span> TideSurf.<span class="tk-fn">launch</span>({
-  readOnly: <span class="tk-kw">true</span>,
-  allowedOrigins: [<span class="tk-str">"example.com"</span>],
-  maxTokens: <span class="tk-num">500</span>
-})</code></pre>
+                            <pre><code><span class="term-line" data-term-step="0"><span class="tk-kw">await</span> browser.<span class="tk-fn">navigate</span>(<span class="tk-str">"github.com/…/issues"</span>)</span>
+<span class="term-line" data-term-step="1"><span class="tk-kw">const</span> state = <span class="tk-kw">await</span> browser.<span class="tk-fn">getState</span>()</span>
+<span class="term-line term-line--out" data-term-step="2"><span class="tk-cm">//</span> <span class="tk-num">142</span> tokens, LLM picks <span class="tk-str">L3</span></span>
+<span class="term-line" data-term-step="3"><span class="tk-kw">await</span> browser.<span class="tk-fn">click</span>(<span class="tk-str">"L3"</span>)</span>
+<span class="term-line term-line--dim" data-term-step="4"><span class="tk-cm">→</span> issue opened</span></code></pre>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <section class="story-band story-band--try quickstart" id="try">
-                <div class="story-label">
-                    <span data-i18n="quickstart.title">Try it</span>
-                    <span>05</span>
-                </div>
-                <div class="try-system reveal">
-                    <div class="try-copy">
-                        <h2 data-i18n="quickstart.title">Try it</h2>
-                        <p>Launch a browser, connect to an existing Chrome, or expose TideSurf through MCP.</p>
+            <!-- Giant trust numerals -->
+            <section class="section section--metrics reveal" aria-label="Performance and design guarantees">
+                <div class="metrics-band">
+                    <div class="metric">
+                        <span class="metric-num mono" data-i18n="metric.tokens.num">32×</span>
+                        <span class="metric-label" data-i18n="metric.tokens.label">fewer tokens</span>
                     </div>
+                    <div class="metric">
+                        <span class="metric-num mono" data-i18n="metric.time.num">&lt;25ms</span>
+                        <span class="metric-label" data-i18n="metric.time.label">parse time</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-num mono" data-i18n="metric.screenshots.num">0</span>
+                        <span class="metric-label" data-i18n="metric.screenshots.label">screenshots</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-num mono" data-i18n="metric.ids.num">L1, B2</span>
+                        <span class="metric-label" data-i18n="metric.ids.label">stable IDs</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Ship manifest -->
+            <section class="section section--ship reveal" aria-labelledby="ship-title">
+                <div class="ship-split">
+                    <div class="ship-copy">
+                        <h2 id="ship-title" data-i18n="features.title">What ships in one package</h2>
+                        <p data-i18n="ship.desc">
+                            TideSurf is a small TypeScript library for Bun and Node. It includes direct CDP tools, token budgets, tab lifecycle, content extraction, and MCP wiring.
+                        </p>
+                        <p class="ship-note" data-i18n="ship.note">
+                            Use read-only mode, path confinement, and input validation when you need guardrails. Built for engineers making function-calling browser agents.
+                        </p>
+                    </div>
+                    <div class="ship-manifest">
+                        <span class="ship-api">navigate()</span>
+                        <span class="ship-api">getState()</span>
+                        <span class="ship-api">click("L3")</span>
+                        <span class="ship-api">extract()</span>
+                        <span class="ship-api">tabs</span>
+                        <span class="ship-api">MCP</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Quickstart with tabs -->
+            <section class="section section--close reveal" aria-labelledby="close-title" id="try">
+                <div class="close-block">
+                    <h2 id="close-title" class="close-title" data-i18n="quickstart.title">Start building</h2>
+                    <p class="close-lede" data-i18n="try.lede">Install, launch a browser, and read your first page in a few lines.</p>
+
                     <div class="try-shell">
                         <div class="try-tabs" role="tablist" aria-label="TideSurf examples" data-i18n="try.aria" data-i18n-attr="aria-label">
                             <button class="try-tab is-active" id="try-tab-launch" type="button" role="tab" aria-selected="true" aria-controls="try-panel-launch" data-try-tab="launch" data-i18n="try.launch">Launch</button>
@@ -602,40 +340,40 @@ URL: https://example.com/
                                 <div class="qs-install">
                                     <pre><code><span class="tk-cm">$</span> <span class="tk-fn">npm install</span> @tidesurf/core</code></pre>
                                 </div>
-                                <div class="qs-code">
-                                    <div class="code-block">
-                                        <div class="code-header"><span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span><span class="code-filename">index.ts</span></div>
-                                        <pre><code><span class="tk-kw">const</span> browser = <span class="tk-kw">await</span> TideSurf.<span class="tk-fn">launch</span>()
-<span class="tk-kw">await</span> browser.<span class="tk-fn">navigate</span>(
-  <span class="tk-str">"https://example.com"</span>
-)
-<span class="tk-kw">const</span> state = <span class="tk-kw">await</span> browser.<span class="tk-fn">getState</span>()</code></pre>
+                                <div class="code-shell">
+                                    <div class="code-bar">
+                                        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                                        <span class="mono">index.ts</span>
                                     </div>
+                                    <pre><code><span class="tk-kw">const</span> browser = <span class="tk-kw">await</span> TideSurf.<span class="tk-fn">launch</span>()
+<span class="tk-kw">await</span> browser.<span class="tk-fn">navigate</span>(<span class="tk-str">"https://example.com"</span>)
+<span class="tk-kw">const</span> state = <span class="tk-kw">await</span> browser.<span class="tk-fn">getState</span>()</code></pre>
                                 </div>
                             </div>
                             <div class="try-panel" id="try-panel-connect" role="tabpanel" aria-labelledby="try-tab-connect" data-try-panel="connect" hidden>
                                 <div class="qs-install">
                                     <pre><code><span class="tk-cm">$</span> <span class="tk-fn">npm install</span> @tidesurf/core</code></pre>
                                 </div>
-                                <div class="qs-code">
-                                    <div class="code-block">
-                                        <div class="code-header"><span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span><span class="code-filename">connect.ts</span></div>
-                                        <pre><code><span class="tk-kw">const</span> browser = <span class="tk-kw">await</span> TideSurf.<span class="tk-fn">connect</span>()
-<span class="tk-kw">await</span> browser.<span class="tk-fn">switchTab</span>(<span class="tk-num">0</span>)
-<span class="tk-kw">const</span> state = <span class="tk-kw">await</span> browser.<span class="tk-fn">getState</span>({
-  maxTokens: <span class="tk-num">500</span>
-})</code></pre>
+                                <div class="code-shell">
+                                    <div class="code-bar">
+                                        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                                        <span class="mono">connect.ts</span>
                                     </div>
+                                    <pre><code><span class="tk-kw">const</span> browser = <span class="tk-kw">await</span> TideSurf.<span class="tk-fn">connect</span>()
+<span class="tk-kw">await</span> browser.<span class="tk-fn">switchTab</span>(<span class="tk-num">0</span>)
+<span class="tk-kw">const</span> state = <span class="tk-kw">await</span> browser.<span class="tk-fn">getState</span>({ maxTokens: <span class="tk-num">500</span> })</code></pre>
                                 </div>
                             </div>
                             <div class="try-panel" id="try-panel-mcp" role="tabpanel" aria-labelledby="try-tab-mcp" data-try-panel="mcp" hidden>
                                 <div class="qs-install">
                                     <pre><code><span class="tk-cm">$</span> <span class="tk-fn">bunx</span> tidesurf mcp</code></pre>
                                 </div>
-                                <div class="qs-code">
-                                    <div class="code-block">
-                                        <div class="code-header"><span class="dot dot-red"></span><span class="dot dot-yellow"></span><span class="dot dot-green"></span><span class="code-filename">mcp.json</span></div>
-                                        <pre><code>{
+                                <div class="code-shell">
+                                    <div class="code-bar">
+                                        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                                        <span class="mono">mcp.json</span>
+                                    </div>
+                                    <pre><code>{
   <span class="tk-str">"mcpServers"</span>: {
     <span class="tk-str">"tidesurf"</span>: {
       <span class="tk-str">"command"</span>: <span class="tk-str">"bunx"</span>,
@@ -646,81 +384,46 @@ URL: https://example.com/
     }
   }
 }</code></pre>
-                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                    <div class="try-visuals" aria-label="Try it motion examples">
-                        <figure class="motion-card motion-card--install">
-                            <svg viewBox="0 0 300 160" role="img" aria-label="Install command copies and launches TideSurf">
-                                <rect class="svg-surface" x="8" y="8" width="284" height="144" rx="10" />
-                                <rect class="svg-terminal" x="34" y="42" width="232" height="76" rx="8" />
-                                <path class="svg-window-line" d="M54 70H196M54 92H154" />
-                                <rect class="svg-active-link" x="52" y="84" width="104" height="18" rx="4" />
-                                <circle class="svg-dot-pulse" cx="226" cy="92" r="7" />
-                            </svg>
-                            <figcaption>Install and launch</figcaption>
-                        </figure>
-                        <figure class="motion-card motion-card--tabswitch">
-                            <svg viewBox="0 0 300 160" role="img" aria-label="Try it tabs switch between examples">
-                                <rect class="svg-surface" x="8" y="8" width="284" height="144" rx="10" />
-                                <rect class="svg-tab svg-tab--one" x="42" y="42" width="58" height="28" rx="5" />
-                                <rect class="svg-tab svg-tab--two" x="108" y="42" width="58" height="28" rx="5" />
-                                <rect class="svg-tab svg-tab--three" x="174" y="42" width="58" height="28" rx="5" />
-                                <rect class="svg-active-link" x="42" y="82" width="194" height="34" rx="6" />
-                                <path class="svg-flow svg-flow--three" d="M70 124H206" />
-                            </svg>
-                            <figcaption>Switch examples</figcaption>
-                        </figure>
-                    </div>
-                    <div class="qs-cta">
-                        <h2 class="qs-cta-text" data-i18n="qs.cta.title">Surf deeper?</h2>
-                        <a href="https://tidesurf.org/docs" class="qs-cta-btn" data-i18n="qs.cta.btn">Read the docs</a>
+
+                    <div class="close-links">
+                        <a href="https://tidesurf.org/docs" class="footer-btn" style="--btn-color: var(--c-teal)" data-i18n="nav.docs">docs</a>
+                        <a href="https://github.com/TideSurf/core" class="footer-btn" style="--btn-color: var(--c-green)" data-i18n="nav.github">github</a>
+                        <a href="https://www.npmjs.com/package/@tidesurf/core" class="footer-btn" style="--btn-color: var(--c-gold)" data-i18n="nav.npm">npm</a>
                     </div>
                 </div>
             </section>
+
+            <footer class="footer reveal">
+                <nav class="footer-links" aria-label="TideSurf links">
+                    <a href="https://tidesurf.org/docs" class="footer-btn" style="--btn-color: var(--c-teal)" data-i18n="nav.docs">docs</a>
+                    <a href="https://github.com/TideSurf/core" class="footer-btn" style="--btn-color: var(--c-green)" data-i18n="nav.github">github</a>
+                    <a href="https://www.npmjs.com/package/@tidesurf/core" class="footer-btn" style="--btn-color: var(--c-gold)" data-i18n="nav.npm">npm</a>
+                    <a href="https://github.com/TideSurf/core" class="github-star" aria-label="Star TideSurf on GitHub">
+                        <span class="gh-logo"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="m 12.301 0 h 0.093 c 2.242 0 4.34 0.613 6.137 1.68 l -0.055 -0.031 c 1.871 1.094 3.386 2.609 4.449 4.422 l 0.031 0.058 c 1.04 1.769 1.654 3.896 1.654 6.166 c 0 5.406 -3.483 10 -8.327 11.658 l -0.087 0.026 c -0.063 0.02 -0.135 0.031 -0.209 0.031 c -0.162 0 -0.312 -0.054 -0.433 -0.144 l 0.002 0.001 c -0.128 -0.115 -0.208 -0.281 -0.208 -0.466 c 0 -0.005 0 -0.01 0 -0.014 v 0.001 q 0 -0.048 0.008 -1.226 t 0.008 -2.154 c 0.007 -0.075 0.011 -0.161 0.011 -0.249 c 0 -0.792 -0.323 -1.508 -0.844 -2.025 c 0.618 -0.061 1.176 -0.163 1.718 -0.305 l -0.076 0.017 c 0.573 -0.16 1.073 -0.373 1.537 -0.642 l -0.031 0.017 c 0.508 -0.28 0.938 -0.636 1.292 -1.058 l 0.006 -0.007 c 0.372 -0.476 0.663 -1.036 0.84 -1.645 l 0.009 -0.035 c 0.209 -0.683 0.329 -1.468 0.329 -2.281 c 0 -0.045 0 -0.091 -0.001 -0.136 v 0.007 c 0 -0.022 0.001 -0.047 0.001 -0.072 c 0 -1.248 -0.482 -2.383 -1.269 -3.23 l 0.003 0.003 c 0.168 -0.44 0.265 -0.948 0.265 -1.479 c 0 -0.649 -0.145 -1.263 -0.404 -1.814 l 0.011 0.026 c -0.115 -0.022 -0.246 -0.035 -0.381 -0.035 c -0.334 0 -0.649 0.078 -0.929 0.216 l 0.012 -0.005 c -0.568 0.21 -1.054 0.448 -1.512 0.726 l 0.038 -0.022 l -0.609 0.384 c -0.922 -0.264 -1.981 -0.416 -3.075 -0.416 s -2.153 0.152 -3.157 0.436 l 0.081 -0.02 q -0.256 -0.176 -0.681 -0.433 c -0.373 -0.214 -0.814 -0.421 -1.272 -0.595 l -0.066 -0.022 c -0.293 -0.154 -0.64 -0.244 -1.009 -0.244 c -0.124 0 -0.246 0.01 -0.364 0.03 l 0.013 -0.002 c -0.248 0.524 -0.393 1.139 -0.393 1.788 c 0 0.531 0.097 1.04 0.275 1.509 l -0.01 -0.029 c -0.785 0.844 -1.266 1.979 -1.266 3.227 c 0 0.025 0 0.051 0.001 0.076 v -0.004 c -0.001 0.039 -0.001 0.084 -0.001 0.13 c 0 0.809 0.12 1.591 0.344 2.327 l -0.015 -0.057 c 0.189 0.643 0.476 1.202 0.85 1.693 l -0.009 -0.013 c 0.354 0.435 0.782 0.793 1.267 1.062 l 0.022 0.011 c 0.432 0.252 0.933 0.465 1.46 0.614 l 0.046 0.011 c 0.466 0.125 1.024 0.227 1.595 0.284 l 0.046 0.004 c -0.431 0.428 -0.718 1 -0.784 1.638 l -0.001 0.012 c -0.207 0.101 -0.448 0.183 -0.699 0.236 l -0.021 0.004 c -0.256 0.051 -0.549 0.08 -0.85 0.08 c -0.022 0 -0.044 0 -0.066 0 h 0.003 c -0.394 -0.008 -0.756 -0.136 -1.055 -0.348 l 0.006 0.004 c -0.371 -0.259 -0.671 -0.595 -0.881 -0.986 l -0.007 -0.015 c -0.198 -0.336 -0.459 -0.614 -0.768 -0.827 l -0.009 -0.006 c -0.225 -0.169 -0.49 -0.301 -0.776 -0.38 l -0.016 -0.004 l -0.32 -0.048 c -0.023 -0.002 -0.05 -0.003 -0.077 -0.003 c -0.14 0 -0.273 0.028 -0.394 0.077 l 0.007 -0.003 q -0.128 0.072 -0.08 0.184 c 0.039 0.086 0.087 0.16 0.145 0.225 l -0.001 -0.001 c 0.061 0.072 0.13 0.135 0.205 0.19 l 0.003 0.002 l 0.112 0.08 c 0.283 0.148 0.516 0.354 0.693 0.603 l 0.004 0.006 c 0.191 0.237 0.359 0.505 0.494 0.792 l 0.01 0.024 l 0.16 0.368 c 0.135 0.402 0.38 0.738 0.7 0.981 l 0.005 0.004 c 0.3 0.234 0.662 0.402 1.057 0.478 l 0.016 0.002 c 0.33 0.064 0.714 0.104 1.106 0.112 h 0.007 c 0.045 0.002 0.097 0.002 0.15 0.002 c 0.261 0 0.517 -0.021 0.767 -0.062 l -0.027 0.004 l 0.368 -0.064 q 0 0.609 0.008 1.418 t 0.008 0.873 v 0.014 c 0 0.185 -0.08 0.351 -0.208 0.466 h -0.001 c -0.119 0.089 -0.268 0.143 -0.431 0.143 c -0.075 0 -0.147 -0.011 -0.214 -0.032 l 0.005 0.001 c -4.929 -1.689 -8.409 -6.283 -8.409 -11.69 c 0 -2.268 0.612 -4.393 1.681 -6.219 l -0.032 0.058 c 1.094 -1.871 2.609 -3.386 4.422 -4.449 l 0.058 -0.031 c 1.739 -1.034 3.835 -1.645 6.073 -1.645 h 0.098 h -0.005 Z m -7.64 17.666 q 0.048 -0.112 -0.112 -0.192 q -0.16 -0.048 -0.208 0.032 q -0.048 0.112 0.112 0.192 q 0.144 0.096 0.208 -0.032 Z m 0.497 0.545 q 0.112 -0.08 -0.032 -0.256 q -0.16 -0.144 -0.256 -0.048 q -0.112 0.08 0.032 0.256 q 0.159 0.157 0.256 0.047 Z m 0.48 0.72 q 0.144 -0.112 0 -0.304 q -0.128 -0.208 -0.272 -0.096 q -0.144 0.08 0 0.288 t 0.272 0.112 Z m 0.672 0.673 q 0.128 -0.128 -0.064 -0.304 q -0.192 -0.192 -0.32 -0.048 q -0.144 0.128 0.064 0.304 q 0.192 0.192 0.32 0.044 Z m 0.913 0.4 q 0.048 -0.176 -0.208 -0.256 q -0.24 -0.064 -0.304 0.112 t 0.208 0.24 q 0.24 0.097 0.304 -0.096 Z m 1.009 0.08 q 0 -0.208 -0.272 -0.176 q -0.256 0 -0.256 0.176 q 0 0.208 0.272 0.176 q 0.256 0.001 0.256 -0.175 Z m 0.929 -0.16 q -0.032 -0.176 -0.288 -0.144 q -0.256 0.048 -0.224 0.24 t 0.288 0.128 t 0.225 -0.224 Z"/></svg></span>
+                        <span class="gh-stars"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><span class="star-count" id="star-count"></span></span>
+                    </a>
+                </nav>
+                <div class="footer-prefs">
+                    <div class="theme-selector" role="group" aria-label="Theme">
+                        <button type="button" class="theme-btn" data-theme="light">light</button>
+                        <button type="button" class="theme-btn" data-theme="dark">dark</button>
+                    </div>
+                    <div class="lang-switcher">
+                        <button type="button" class="lang-btn" data-lang="en" aria-label="English">EN</button>
+                        <button type="button" class="lang-btn" data-lang="ja" aria-label="Japanese">JP</button>
+                        <button type="button" class="lang-btn" data-lang="ko" aria-label="Korean">KR</button>
+                    </div>
+                </div>
+            </footer>
         </main>
 
-        <footer>
-            <div class="footer-inner">
-                <div class="footer-brand">
-                    <svg class="logo-mark" width="22" height="16" viewBox="0 0 28 20" fill="none">
-                        <path d="M2 5 C7 1, 11 1, 14 5 C17 9, 21 9, 26 5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" opacity="0.12"/>
-                        <path d="M2 10 C7 6, 11 6, 14 10 C17 14, 21 14, 26 10" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" opacity="0.3"/>
-                        <path d="M2 15 C7 11, 11 11, 14 15 C17 19, 21 19, 26 15" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
-                    </svg>
-                    <span>TideSurf</span>
-                </div>
-                <div class="footer-links">
-                    <a href="https://tidesurf.org/docs" data-i18n="nav.docs"
-                        >Docs</a
-                    >
-                    <a
-                        href="https://github.com/TideSurf/core"
-                        data-i18n="nav.github"
-                        >GitHub</a
-                    >
-                </div>
-                <div class="footer-right">
-                    <a href="https://www.producthunt.com/products/tidesurf?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-tidesurf" class="ph-badge" target="_blank" rel="noopener noreferrer"><img alt="TideSurf on Product Hunt" width="148" height="32" loading="lazy" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1101853&amp;theme=neutral&amp;t=1773855834160" /></a>
-                    <!-- Thanks to SaltyAom -->
-                </div>
-            </div>
-        </footer>
-
-        <div class="motion-modal" id="motion-modal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="motion-modal-title" hidden>
-            <div class="motion-modal-backdrop" data-motion-close></div>
-            <div class="motion-modal-panel" role="document">
-                <button class="motion-modal-close" type="button" data-motion-close aria-label="Close detail">Close</button>
-                <h2 id="motion-modal-title"></h2>
-                <p id="motion-modal-body"></p>
-            </div>
-        </div>
-
-        <div class="cookie-note is-hidden" id="cookie-note" role="status" aria-live="polite">
+        <div id="cookie-notice" class="cookie-notice" hidden>
             <span data-i18n="privacy.cookie.text">Cloudflare Analytics only.</span>
-            <button type="button" id="cookie-dismiss" data-i18n="privacy.cookie.action">OK</button>
+            <button id="cookie-dismiss" data-i18n="privacy.cookie.action">OK</button>
         </div>
 
         <script type="module" src="/src/main.ts"></script>

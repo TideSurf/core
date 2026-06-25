@@ -2,7 +2,7 @@
 
 *In the modern web era, the tide is strong. Let's surf.*
 
-TideSurf is the connector between Chromium and LLM agents — it translates the live DOM into minimal, token-efficient text that any language model can understand (typically 50–200 tokens instead of 5,000–50,000+ for raw HTML), and translates agent actions back into browser commands via the Chrome DevTools Protocol.
+TideSurf connects Chromium to LLM agents. It turns the live DOM into compact text a model can read, usually 50-200 tokens instead of 5,000-50,000+ for raw HTML, then turns the model's actions back into browser commands through the Chrome DevTools Protocol.
 
 Special thanks to [SaltyAom](https://github.com/SaltyAom) and [ElysiaJS](https://elysiajs.com).
 
@@ -11,8 +11,8 @@ Special thanks to [SaltyAom](https://github.com/SaltyAom) and [ElysiaJS](https:/
 TideSurf requires a Chromium-based browser installed on the host machine. On most systems, Chrome or Chromium is already available, but you can point TideSurf to a specific binary by setting the `CHROME_PATH` environment variable or passing `chromePath` in the launch options.
 
 **Runtime compatibility:**
-- **Bun** (recommended) — TideSurf is built and tested against Bun
-- **Node.js** ≥ 18 — fully supported via the same npm package
+- **Bun** (recommended): TideSurf is built and tested against Bun
+- **Node.js** ≥ 18: fully supported via the same npm package
 
 ## Installation
 
@@ -38,7 +38,7 @@ import { TideSurf } from "@tidesurf/core";
 const browser = await TideSurf.launch();
 await browser.navigate("https://example.com");
 
-// Get compressed page state — this is what you feed to your LLM
+// Get compressed page state for your LLM
 const state = await browser.getState();
 console.log(state.content);
 
@@ -50,15 +50,15 @@ await page.type("I1", "hello world");  // Type into the first input
 await browser.close();
 ```
 
-The `state.content` output is compact text that strips away all CSS classes, wrapper divs, scripts, and styles — keeping only interactive elements (buttons, links, inputs), semantic structure (nav, form, headings), and visible text content, with short IDs like `B1`, `L3`, or `I2` that your agent can reference when performing actions. Elements that are disabled or inert appear in `~~strikethrough~~` to signal that the agent should not interact with them. See [Page format](#page-format) for the full output specification.
+The `state.content` output is the part you send to the model. It removes CSS classes, wrapper divs, scripts, and styles, then keeps the pieces an agent can actually use: buttons, links, inputs, forms, headings, and visible text. Short IDs such as `B1`, `L3`, and `I2` become the handles your agent uses for later actions. Disabled or inert elements appear in `~~strikethrough~~`, which tells the agent to leave them alone. See [Page format](#page-format) for the full output specification.
 
 ## Connecting to an existing browser
 
 Instead of launching a new Chrome instance, you can connect to one that's already running. This is useful when you want to:
 
-- **Re-use a logged-in session** — your agent can access pages behind authentication without re-entering credentials
-- **Debug a live page** — spot a bug while browsing, then hand off to your agent to investigate
-- **Keep your browsing state** — extensions, cookies, and local storage carry over
+- **Reuse a logged-in session**: your agent can access pages behind authentication without re-entering credentials
+- **Debug a live page**: spot a bug while browsing, then hand off to your agent to investigate
+- **Keep your browsing state**: extensions, cookies, and local storage carry over
 
 ```typescript
 import { TideSurf } from "@tidesurf/core";
@@ -71,13 +71,13 @@ const state = await browser.getState();
 const page = browser.getPage();
 await page.click("B1");
 
-// close() only disconnects CDP — it won't kill your Chrome
+// close() only disconnects CDP. It will not kill your Chrome.
 await browser.close();
 ```
 
 **Prerequisites:** Chrome must have remote debugging enabled. Either:
 
-1. **Chrome 144+:** Open `chrome://inspect#remote-debugging` and enable it — Chrome will show a permission dialog when TideSurf connects
+1. **Chrome 144+:** Open `chrome://inspect#remote-debugging` and enable it. Chrome will show a permission dialog when TideSurf connects
 2. **Any Chrome:** Launch with `--remote-debugging-port=9222`
 
 You can specify a custom port and host:
@@ -125,7 +125,7 @@ const browser = await TideSurf.launch({
 
 ## Integrating with an LLM agent
 
-TideSurf ships with standardized tool definitions that you can pass directly to any LLM that supports function calling. This makes it straightforward to build an autonomous browsing agent — your LLM receives the compressed page state as context, decides which tool to call, and TideSurf executes the action:
+TideSurf ships with standardized tool definitions that you can pass directly to any LLM that supports function calling. In an agent loop, the model receives the compressed page state as context, chooses a tool, and TideSurf executes the browser action:
 
 ```typescript
 import { TideSurf, getToolDefinitions } from "@tidesurf/core";
@@ -145,7 +145,7 @@ The `getToolDefinitions()` function returns an array of 18 tool schemas (navigat
 
 ## Using as an MCP server
 
-If you're working with Claude Code or another MCP-compatible client, TideSurf can run as a Model Context Protocol server — no code required. Add the following to your MCP configuration:
+If you're working with Claude Code or another MCP-compatible client, TideSurf can run as a Model Context Protocol server. Add the following to your MCP configuration:
 
 ```json
 {
@@ -190,7 +190,7 @@ const minimal = await browser.getState({ mode: "minimal" });
 // Full page content (all content, not just viewport)
 const fullPage = await browser.getState({ viewport: false });
 
-// Viewport mode is on by default — set viewport: false for the entire page
+// Viewport mode is on by default: set viewport: false for the entire page
 const viewport = await browser.getState(); // equivalent to { viewport: true }
 ```
 
@@ -198,7 +198,7 @@ Modes compose with each other and `maxTokens`.
 
 ## What to read next
 
-- **[Page format](#page-format)** — understand the output format TideSurf produces and how element IDs work
-- **[Token budget](#token-budget)** — control output size with `maxTokens` and learn how TideSurf prioritizes content
-- **[API reference](#api-reference)** — full method signatures and tool definitions (including `TideSurf.connect()`)
-- **[Migration guide](#migration)** — upgrade guide for breaking changes between versions
+- **[Page format](#page-format)**: understand the output format TideSurf produces and how element IDs work
+- **[Token budget](#token-budget)**: control output size with `maxTokens` and learn how TideSurf prioritizes content
+- **[API reference](#api-reference)**: full method signatures and tool definitions (including `TideSurf.connect()`)
+- **[Migration guide](#migration)**: upgrade guide for breaking changes between versions

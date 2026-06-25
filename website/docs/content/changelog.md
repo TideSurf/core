@@ -4,11 +4,11 @@
 
 ### Fixed
 
-- **Read-only tool policy** — `TideSurf.getToolDefinitions({ readOnly: true })` now matches the documented security model and excludes `clipboard_read`. The tool executor also rejects `clipboard_read` in read-only sessions.
-- **MCP action responses** — Packaged CLI MCP tools for `click`, `scroll`, `switch_tab`, and `close_tab` now return updated page or tab state instead of only reporting success.
-- **Headless MCP clipboard access** — MCP clipboard read/write now grant the required Chrome permissions and focus the active page before using `navigator.clipboard`.
-- **Benchmark fixtures** — Compression benchmarks now serve local HTTP fixtures instead of navigating to blocked `data:` URLs.
-- **Token budget pruning** — Pruning now treats token estimates consistently and handles large dominant containers without preserving an oversized page state.
+- **Read-only tool policy**: `TideSurf.getToolDefinitions({ readOnly: true })` now matches the documented security model and excludes `clipboard_read`. The tool executor also rejects `clipboard_read` in read-only sessions.
+- **MCP action responses**: Packaged CLI MCP tools for `click`, `scroll`, `switch_tab`, and `close_tab` now return updated page or tab state instead of only reporting success.
+- **Headless MCP clipboard access**: MCP clipboard read/write now grant the required Chrome permissions and focus the active page before using `navigator.clipboard`.
+- **Benchmark fixtures**: Compression benchmarks now serve local HTTP fixtures instead of navigating to blocked `data:` URLs.
+- **Token budget pruning**: Pruning now treats token estimates consistently and handles large dominant containers without preserving an oversized page state.
 
 ### Tests
 
@@ -19,12 +19,12 @@
 
 ### Fixed
 
-- **MCP browser boot** — Register Chrome crash listeners on the Inspector CDP domain instead of the Page domain, fixing launch/connect failures caused by unsupported `Page.targetCrashed` handlers.
-- **Launch cleanup** — Failed `TideSurf.launch()` setup now disconnects any opened CDP session, terminates the spawned Chrome process, and removes owned temporary profiles before rethrowing.
-- **Trusted local development URLs** — Added explicit `allowLocalhost` and `allowPrivateHosts` options for CLI, MCP, and SDK navigation. Local/private URLs remain blocked by default, while trusted MCP/dev sessions can opt in.
-- **Tool validation flow** — Removed duplicate URL validation in tool execution and routed navigation/new-tab tools through the authoritative `TideSurf` instance methods.
-- **Auto-connect fallback** — CLI and MCP auto-connect now fall back to launching only for CDP connection failures instead of swallowing unrelated errors.
-- **Tab policy preservation** — Switching to an untracked tab now preserves the instance URL policy and filesystem access roots.
+- **MCP browser boot**: Register Chrome crash listeners on the Inspector CDP domain instead of the Page domain, fixing launch/connect failures caused by unsupported `Page.targetCrashed` handlers.
+- **Launch cleanup**: Failed `TideSurf.launch()` setup now disconnects any opened CDP session, terminates the spawned Chrome process, and removes owned temporary profiles before rethrowing.
+- **Trusted local development URLs**: Added explicit `allowLocalhost` and `allowPrivateHosts` options for CLI, MCP, and SDK navigation. Local/private URLs remain blocked by default, while trusted MCP/dev sessions can opt in.
+- **Tool validation flow**: Removed duplicate URL validation in tool execution and routed navigation/new-tab tools through the authoritative `TideSurf` instance methods.
+- **Auto-connect fallback**: CLI and MCP auto-connect now fall back to launching only for CDP connection failures instead of swallowing unrelated errors.
+- **Tab policy preservation**: Switching to an untracked tab now preserves the instance URL policy and filesystem access roots.
 
 ### Tests
 
@@ -35,16 +35,16 @@
 
 ### Security
 
-- **Expression denylist bypass** — `validateExpression()` can no longer be bypassed via bracket-notation indexing (`document["cookie"]`), the comma-operator eval trick (`(0,eval)(...)`), or the `"".constructor.constructor(...)` prototype walk. Unicode/hex escape sequences (`\uXXXX`, `\xXX`, `\u{XXXX}`) are decoded before scanning, `[ "name" ]`/`[ 'name' ]`/`[ \`name\` ]` are normalized to dot access, and `.constructor` and `import()` are now on the denylist.
-- **SSRF filter bypass** — IPv4-mapped IPv6 addresses (`::ffff:169.254.169.254`, the AWS metadata endpoint) are now unmapped and re-checked against the private-IPv4 ranges. The IPv6 unspecified address (`::`) and the full `fc00::/7` ULA range are also blocked; the previous filter only matched `fc00:` and missed `fd00:`.
-- **Clipboard rate-limit TOCTOU** — `clipboardRead()` now reserves the 5-second cooldown slot *before* awaiting the clipboard read, closing a TOCTOU where a `Promise.all` of N concurrent calls all passed the stale-timestamp check and read in parallel.
+- **Expression denylist bypass**: `validateExpression()` can no longer be bypassed via bracket-notation indexing (`document["cookie"]`), the comma-operator eval trick (`(0,eval)(...)`), or the `"".constructor.constructor(...)` prototype walk. Unicode/hex escape sequences (`\uXXXX`, `\xXX`, `\u{XXXX}`) are decoded before scanning, `[ "name" ]`/`[ 'name' ]`/`[ \`name\` ]` are normalized to dot access, and `.constructor` and `import()` are now on the denylist.
+- **SSRF filter bypass**: IPv4-mapped IPv6 addresses (`::ffff:169.254.169.254`, the AWS metadata endpoint) are now unmapped and re-checked against the private-IPv4 ranges. The IPv6 unspecified address (`::`) and the full `fc00::/7` ULA range are also blocked; the previous filter only matched `fc00:` and missed `fd00:`.
+- **Clipboard rate-limit TOCTOU**: `clipboardRead()` now reserves the 5-second cooldown slot *before* awaiting the clipboard read, closing a TOCTOU where a `Promise.all` of N concurrent calls all passed the stale-timestamp check and read in parallel.
 
 ### Fixed
 
-- **`waitForStable()` zombie timer** — Each call now owns a private context on `window.__tidesurf_stable` rather than sharing timer state. New calls cancel the prior context (clear its timer, mark cancelled), preventing a 500ms early-resolve timer from the previous call from disconnecting the new observer and silently reporting "stable".
-- **`closeTab()` bricking on last-tab close** — The stale-page cleanup loop no longer uses a pre-`newTab()` snapshot of the tab list, which previously caused it to immediately close the fresh `about:blank` created after closing the last tab, leaving `activePage` pointing at a dead connection.
-- **`search()` ID divergence from `lastNodeMap`** — Search results now cross-reference fresh IDs against `lastNodeMap` by `backendNodeId`. Only `elementId`s that resolve to the same node that `click()`/`type()` would hit are returned; otherwise the ID is dropped rather than silently pointing at the wrong element after DOM mutations.
-- **`getFullDOM()` OOM guard** — Element count is now pre-checked via `Runtime.evaluate` *before* `DOM.getDocument`, so `chrome-remote-interface` no longer `JSON.parse`s a 200k-node response into memory just to discover it's too large. The post-parse guard remains as a secondary check for shadow/iframe/text nodes.
+- **`waitForStable()` zombie timer**: Each call now owns a private context on `window.__tidesurf_stable` rather than sharing timer state. New calls cancel the prior context (clear its timer, mark cancelled), preventing a 500ms early-resolve timer from the previous call from disconnecting the new observer and silently reporting "stable".
+- **`closeTab()` bricking on last-tab close**: The stale-page cleanup loop no longer uses a pre-`newTab()` snapshot of the tab list, which previously caused it to immediately close the fresh `about:blank` created after closing the last tab, leaving `activePage` pointing at a dead connection.
+- **`search()` ID divergence from `lastNodeMap`**: Search results now cross-reference fresh IDs against `lastNodeMap` by `backendNodeId`. Only `elementId`s that resolve to the same node that `click()`/`type()` would hit are returned; otherwise the ID is dropped rather than silently pointing at the wrong element after DOM mutations.
+- **`getFullDOM()` OOM guard**: Element count is now pre-checked via `Runtime.evaluate` *before* `DOM.getDocument`, so `chrome-remote-interface` no longer `JSON.parse`s a 200k-node response into memory just to discover it's too large. The post-parse guard remains as a secondary check for shadow/iframe/text nodes.
 
 ### Tests
 
@@ -54,9 +54,9 @@
 
 ### Fixed
 
-- **HIGH-002b: Fast typing** — Replace per-character `Input.dispatchKeyEvent` loop with single `Input.insertText` call. Typing 100 characters now takes 1 CDP round-trip instead of 200, providing ~200x speedup for text input operations.
-- **NEW-CRIT-004: URL length validation** — Add 2048-character limit to `validateUrl()` to prevent potential buffer overflow and DoS from extremely long URLs.
-- **NEW-CRIT-005: DOM node count limit** — Add 50,000-node limit check in `getFullDOM()` to prevent memory exhaustion on pages with extremely large DOMs. Returns helpful error message suggesting viewport mode or simpler page.
+- **HIGH-002b: Fast typing**: Replace per-character `Input.dispatchKeyEvent` loop with single `Input.insertText` call. Typing 100 characters now takes 1 CDP round-trip instead of 200, providing ~200x speedup for text input operations.
+- **NEW-CRIT-004: URL length validation**: Add 2048-character limit to `validateUrl()` to prevent potential buffer overflow and DoS from extremely long URLs.
+- **NEW-CRIT-005: DOM node count limit**: Add 50,000-node limit check in `getFullDOM()` to prevent memory exhaustion on pages with extremely large DOMs. Returns helpful error message suggesting viewport mode or simpler page.
 
 ### Security
 
@@ -93,12 +93,12 @@ Key security improvements in v0.5.x:
 
 ### New
 
-- **Element state awareness** — Interactive elements now serialize their runtime state directly into the compressed output. Disabled and inert elements are wrapped in `~~strikethrough~~` (covering HTML `disabled`, `aria-disabled`, `<fieldset disabled>` inheritance, `pointer-events: none`, and the `inert` attribute). Toggle state uses `open`/`closed` keywords (from `aria-expanded`). Inputs display `checked`, `required`, `readonly`, and constraint attributes (`min`, `max`, `step`, `pattern`).
-- **Computed CSS visibility checks** — `getState()` now inspects computed styles (`opacity`, `visibility`, `display`, `clip-path`, `pointer-events`) to filter out elements that are present in the DOM but not visible or usable on the page.
-- **Interaction state detection** — TideSurf detects elements obscured by overlays (modal backdrops, cookie banners) and marks them with an `obscured` keyword. The agent knows to dismiss the blocker before interacting.
-- **`includeHidden` option** — `getState({ includeHidden: true })` bypasses CSS visibility filtering to include all DOM elements regardless of computed style. Useful for debugging hidden menus, lazy-loaded content, and off-screen elements.
-- **OPTION/OPTGROUP handling** — Select dropdowns now serialize their options with group labels and a `>` prefix for the currently selected option(s). Disabled options and `multiple` selects are represented.
-- **Dialog element support** — `<dialog>` elements receive `D` prefix IDs (e.g. `D1`), joining the existing L/B/I/S/F/T prefix scheme.
+- **Element state awareness**: Interactive elements now serialize their runtime state directly into the compressed output. Disabled and inert elements are wrapped in `~~strikethrough~~` (covering HTML `disabled`, `aria-disabled`, `<fieldset disabled>` inheritance, `pointer-events: none`, and the `inert` attribute). Toggle state uses `open`/`closed` keywords (from `aria-expanded`). Inputs display `checked`, `required`, `readonly`, and constraint attributes (`min`, `max`, `step`, `pattern`).
+- **Computed CSS visibility checks**: `getState()` now inspects computed styles (`opacity`, `visibility`, `display`, `clip-path`, `pointer-events`) to filter out elements that are present in the DOM but not visible or usable on the page.
+- **Interaction state detection**: TideSurf detects elements obscured by overlays (modal backdrops, cookie banners) and marks them with an `obscured` keyword. The agent knows to dismiss the blocker before interacting.
+- **`includeHidden` option**: `getState({ includeHidden: true })` bypasses CSS visibility filtering to include all DOM elements regardless of computed style. Useful for debugging hidden menus, lazy-loaded content, and off-screen elements.
+- **OPTION/OPTGROUP handling**: Select dropdowns now serialize their options with group labels and a `>` prefix for the currently selected option(s). Disabled options and `multiple` selects are represented.
+- **Dialog element support**: `<dialog>` elements receive `D` prefix IDs (e.g. `D1`), joining the existing L/B/I/S/F/T prefix scheme.
 
 ### Tests
 
@@ -109,23 +109,23 @@ Key security improvements in v0.5.x:
 
 ### Improved
 
-- **Detailed tool responses** — Action tools (`click`, `scroll`, `switch_tab`) now return the resulting page state so models can see what their actions caused. No more blind `"Clicked B1"` — the model immediately knows whether the page navigated, a modal opened, or content changed.
-- **Actionable error messages** — Errors now include guidance on what to do next. Element not found → "call get_state to see current IDs". Timeout → "page may still be loading, call get_state". Chrome connection errors → step-by-step setup instructions.
-- **CLI executor parity** — `executor.ts` (used by CLI and direct SDK) now returns the same level of detail as the MCP adapter.
+- **Detailed tool responses**: Action tools (`click`, `scroll`, `switch_tab`) now return the resulting page state so models can see what their actions caused. Instead of a blind `"Clicked B1"` response, the model immediately knows whether the page navigated, a modal opened, or content changed.
+- **Actionable error messages**: Errors now include guidance on what to do next. Element not found → "call get_state to see current IDs". Timeout → "page may still be loading, call get_state". Chrome connection errors → step-by-step setup instructions.
+- **CLI executor parity**: `executor.ts` (used by CLI and direct SDK) now returns the same level of detail as the MCP adapter.
 
 ## 0.3.4 (2026-03-22)
 
 ### Fixed
 
-- Enforce read-only mode on `TideSurf.navigate()` at the SDK level. Previously, `readOnly` was only checked in the tool executor — direct SDK callers could still navigate. A new `ReadOnlyError` is thrown when `navigate()` is called in read-only sessions.
+- Enforce read-only mode on `TideSurf.navigate()` at the SDK level. Previously, `readOnly` was only checked in the tool executor, so direct SDK callers could still navigate. A new `ReadOnlyError` is thrown when `navigate()` is called in read-only sessions.
 - `viewport: false` now works in both MCP servers. A truthiness bug silently dropped `false`, making full-page state unreachable via `get_state`. Both `src/cli.ts` and `mcp/index.ts` now forward the parameter correctly.
 - Icon-only buttons and links (e.g. SVG-only controls) now render their `aria-label` or `title` instead of producing blank `[B1]` / `[L1]` entries.
 - `type()` and `select()` now call `waitForStable()` after the action, matching `click()` and `scroll()`. This prevents race conditions with reactive forms, validation messages, and dependent dropdowns.
 - `selectOption()` now dispatches both `input` and `change` events (was `change` only), improving compatibility with framework-controlled inputs.
 - Add `launch_browser` tool and auto-connect fallback to the packaged `tidesurf mcp` server, matching the repo-only MCP adapter. Remove the broken `bun mcp/index.ts` suggestion from the error message.
-- Docs TOC links are now shareable — hash format changed from `#heading-N` (which collided with page routing) to `#page-name:heading-N`.
+- Docs TOC links are now shareable: hash format changed from `#heading-N` (which collided with page routing) to `#page-name:heading-N`.
 - Docs language switcher now shows a notice when viewing in Japanese/Korean that content is in English.
-- Fix misleading "Full page (default)" comment in getting-started docs — now accurately reflects that viewport defaults to `true`.
+- Fix misleading "Full page (default)" comment in getting-started docs: now accurately reflects that viewport defaults to `true`.
 
 ### Removed
 
@@ -151,7 +151,7 @@ Key security improvements in v0.5.x:
 
 ### Fixed
 
-- Robust Chrome launch with port-polling fallback. Chrome on macOS may not write the DevTools URL to stderr when another instance is already running — CDP port polling is now used as a fallback detection method, and leaked Chrome processes are killed on timeout to prevent zombie processes from blocking retries.
+- Robust Chrome launch with port-polling fallback. Chrome on macOS may not write the DevTools URL to stderr when another instance is already running: CDP port polling is now used as a fallback detection method, and leaked Chrome processes are killed on timeout to prevent zombie processes from blocking retries.
 
 ### Chore
 
@@ -161,7 +161,7 @@ Key security improvements in v0.5.x:
 
 ### New tools
 
-- **launch_browser** — Launch a new Chrome instance from the agent. Uses port 9223 by default to avoid conflicts with user's running Chrome on 9222. Defaults to headless; the model can choose headful via the tool.
+- **launch_browser**: Launch a new Chrome instance from the agent. Uses port 9223 by default to avoid conflicts with user's running Chrome on 9222. Defaults to headless; the model can choose headful via the tool.
 
 ### Fixed
 
@@ -171,7 +171,7 @@ Key security improvements in v0.5.x:
 
 ### Fixed
 
-- Remove sibling deduplication from the pipeline. The optimization was lossy — it collapsed repeated elements (product cards, search results) into summaries, preventing the agent from reading omitted items. All page content is now preserved losslessly.
+- Remove sibling deduplication from the pipeline. The optimization was lossy because it collapsed repeated elements (product cards, search results) into summaries, preventing the agent from reading omitted items. All page content is now preserved losslessly.
 - Update benchmark numbers to reflect the lossless pipeline.
 
 ## 0.3.0 (2026-03-16)
@@ -204,11 +204,11 @@ Key changes:
 
 ### Token optimization pipeline
 
-- **URL compression** — strips tracking params (`utm_*`, `fbclid`, `gclid`), relativizes same-origin URLs, drops protocol, truncates long paths
-- **Text truncation** — body text outside interactive elements and headings is truncated to 60 chars at word boundaries
-- **Attribute reduction** — removes `name`, `data-testid`, `action` from output; elides `type="text"` (default), `method="get"` (default), and duplicate `aria-label`/`placeholder`
-- **Heading levels preserved** — H1-H6 now emit `h1`-`h6` instead of generic `heading`, enabling `#`/`##`/`###` in output
-- **Conditional structural collapse** — `<section>`, `<article>`, `<aside>` only kept when they have `aria-label` or `role`; `<header>`, `<footer>` only kept when they contain interactive children
+- **URL compression**: strips tracking params (`utm_*`, `fbclid`, `gclid`), relativizes same-origin URLs, drops protocol, truncates long paths
+- **Text truncation**: body text outside interactive elements and headings is truncated to 60 chars at word boundaries
+- **Attribute reduction**: removes `name`, `data-testid`, `action` from output; elides `type="text"` (default), `method="get"` (default), and duplicate `aria-label`/`placeholder`
+- **Heading levels preserved**: H1-H6 now emit `h1`-`h6` instead of generic `heading`, enabling `#`/`##`/`###` in output
+- **Conditional structural collapse**: `<section>`, `<article>`, `<aside>` only kept when they have `aria-label` or `role`; `<header>`, `<footer>` only kept when they contain interactive children
 
 ### Viewport default
 
@@ -270,20 +270,20 @@ Key changes:
 
 6 new tools, bringing the total from 12 to 18:
 
-- **search** — Find text on the page. Returns matches with element IDs and surrounding context
-- **screenshot** — Capture the viewport, full page, or a specific element as a base64 PNG
-- **upload** — Upload a file to a `<input type="file">` element
-- **clipboard_read** — Read the current clipboard contents
-- **clipboard_write** — Write text to the clipboard
-- **download** — Click a download link/button and capture the downloaded file
+- **search**: Find text on the page. Returns matches with element IDs and surrounding context
+- **screenshot**: Capture the viewport, full page, or a specific element as a base64 PNG
+- **upload**: Upload a file to a `<input type="file">` element
+- **clipboard_read**: Read the current clipboard contents
+- **clipboard_write**: Write text to the clipboard
+- **download**: Click a download link/button and capture the downloaded file
 
 ### Output modes
 
 `get_state` now accepts a `mode` parameter:
 
-- **`"full"`** (default) — Complete compressed DOM, same as before
-- **`"interactive"`** — Only elements with IDs (buttons, links, inputs, selects). Ultra-compact for action-oriented agents
-- **`"minimal"`** — Landmarks, headings, and text summaries. Table-of-contents view for page orientation
+- **`"full"`** (default): Complete compressed DOM, same as before
+- **`"interactive"`**: Only elements with IDs (buttons, links, inputs, selects). Ultra-compact for action-oriented agents
+- **`"minimal"`**: Landmarks, headings, and text summaries. Table-of-contents view for page orientation
 
 ### Viewport window
 
@@ -293,7 +293,7 @@ Modes compose: `get_state({ viewport: true, mode: "interactive", maxTokens: 200 
 
 ### Read-only mode
 
-Launch or connect with `readOnly: true` to disable all write tools. The agent can observe but not interact — useful for auditing, monitoring, and safe exploration.
+Launch or connect with `readOnly: true` to disable all write tools. The agent can observe without interacting, which is useful for auditing, monitoring, and safe exploration.
 
 ```typescript
 const browser = await TideSurf.connect({ readOnly: true });
@@ -303,13 +303,13 @@ const browser = await TideSurf.connect({ readOnly: true });
 tidesurf mcp --auto-connect --read-only
 ```
 
-Write and sensitive tools disabled in read-only mode: navigate, click, type, select, scroll, evaluate, new_tab, close_tab, upload, clipboard_read, clipboard_write, download. Observation tools remain available: get_state, extract, list_tabs, switch_tab, search, screenshot.
+Read-only mode disables write and sensitive tools: navigate, click, type, select, scroll, evaluate, new_tab, close_tab, upload, clipboard_read, clipboard_write, download. Observation tools remain available: get_state, extract, list_tabs, switch_tab, search, screenshot.
 
 ## 0.1.2 (2026-03-14)
 
 ### Auto Connect
 
-- `TideSurf.connect(options?)` — attach to existing Chrome via CDP
+- `TideSurf.connect(options?)`: attach to existing Chrome via CDP
 - `discoverBrowser()` utility with timeout and retry
 - `--auto-connect` and `--port` CLI/MCP flags
 - Port validation across all entry points
@@ -323,7 +323,7 @@ Write and sensitive tools disabled in read-only mode: navigate, click, type, sel
 
 Initial release.
 
-- DOM compression via CDP (100–800 tokens per page)
+- DOM compression via CDP (100-800 tokens per page)
 - 12 standard tool definitions for LLM function calling
 - Multi-tab support with independent state
 - Token budgeting with priority-based pruning

@@ -45,26 +45,26 @@ const state = await browser.getState({ viewport: false });
 
 ### Action required
 
-1. **Update prompt templates** — If your prompts reference the old XML format (e.g., `<button id="B1">`), update them to recognize the new format (`[B1]`)
+1. **Update prompt templates**: If your prompts reference the old XML format (e.g., `<button id="B1">`), update them to recognize the new format (`[B1]`)
 
-2. **Update parsing code** — Any code that parses TideSurf output needs to handle the new format
+2. **Update parsing code**: Any code that parses TideSurf output needs to handle the new format
 
-3. **Review token budgets** — With the new format being 4-5x more efficient, you may want to lower `maxTokens` values or remove them entirely
+3. **Review token budgets**: With the new format being 4-5x more efficient, you may want to lower `maxTokens` values or remove them entirely
 
-4. **Check viewport assumptions** — If your agent expects full-page content, explicitly pass `{ viewport: false }`
+4. **Check viewport assumptions**: If your agent expects full-page content, explicitly pass `{ viewport: false }`
 
 ## v0.2.0 New Tools
 
 v0.2.0 added 6 new tools (bringing total to 18):
 
-- `search` — Find text on the page
-- `screenshot` — Capture PNG images
-- `upload` — File uploads
-- `clipboard_read` — Read clipboard
-- `clipboard_write` — Write to clipboard
-- `download` — File downloads
+- `search`: Find text on the page
+- `screenshot`: Capture PNG images
+- `upload`: File uploads
+- `clipboard_read`: Read clipboard
+- `clipboard_write`: Write to clipboard
+- `download`: File downloads
 
-No breaking changes — existing code continues to work.
+No breaking changes: existing code continues to work.
 
 ## v0.1.2 Auto-Connect
 

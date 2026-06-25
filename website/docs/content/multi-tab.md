@@ -1,6 +1,6 @@
 # Multi-tab
 
-TideSurf supports multiple browser tabs with independent state, letting your agent work across several pages simultaneously — useful for tasks like comparing search results, cross-referencing documentation, or managing multiple workflows in parallel.
+TideSurf supports multiple browser tabs with independent state. Your agent can compare search results, cross-reference documentation, or manage several workflows in parallel through one TideSurf instance.
 
 ## Opening and managing tabs
 
@@ -25,9 +25,9 @@ await browser.closeTab(tab.id);
 
 ## How tab state works
 
-Each tab maintains its own independent state — its own URL, DOM tree, navigation history, and element ID assignments. When you call `getState()`, it always returns the state of the currently active tab. Switching tabs changes which page all subsequent operations (click, type, scroll, navigate) apply to.
+Each tab keeps its own URL, DOM tree, navigation history, and element ID assignments. When you call `getState()`, it always returns the state of the currently active tab. Switching tabs changes which page all subsequent operations, such as click, type, scroll, and navigate, apply to.
 
-This means an agent can open a reference page in one tab, switch to a form in another tab, fill out the form using information from the reference page, and then close the reference tab — all through the same TideSurf instance.
+This means an agent can open a reference page in one tab, switch to a form in another tab, fill out the form using information from the reference page, and then close the reference tab: all through the same TideSurf instance.
 
 ```typescript
 // Example: cross-reference between two pages
@@ -52,7 +52,7 @@ When using TideSurf's tool definitions with an LLM, four tab-related tools are a
 
 | Tool | Parameters | What it does |
 |---|---|---|
-| `list_tabs` | — | Returns an array of all open tabs with their IDs, URLs, and titles |
+| `list_tabs` | none | Returns an array of all open tabs with their IDs, URLs, and titles |
 | `new_tab` | `url?` | Opens a new tab, optionally navigating to the given URL |
 | `switch_tab` | `tabId` | Switches the active tab to the one with the given ID |
 | `close_tab` | `tabId` | Closes the tab with the given ID |

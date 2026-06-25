@@ -1,6 +1,6 @@
 # Benchmarks
 
-TideSurf compresses the live DOM into token-efficient text. The compression ratio depends on how bloated the source HTML is — heavy sites with deep nesting, SVGs, and generated CSS classes see the biggest gains.
+TideSurf compresses the live DOM into token-efficient text. The compression ratio depends on how bloated the source HTML is: heavy sites with deep nesting, SVGs, and generated CSS classes see the biggest gains.
 
 ## Live-site results
 
@@ -21,9 +21,9 @@ These numbers come from `scripts/benchmark-live.ts`, which launches headless Chr
 
 The compression ratio depends on the structure of the source HTML:
 
-- **Very high compression (10–32x):** Sites like GitHub and Wikipedia have deeply nested DOM trees, inline SVGs, auto-generated class names, wrapper `<div>`s, and embedded scripts/styles. TideSurf strips all of this while preserving every element losslessly.
+- **Very high compression (10-32x):** Sites like GitHub and Wikipedia have deeply nested DOM trees, inline SVGs, auto-generated class names, wrapper `<div>`s, and embedded scripts/styles. TideSurf strips all of this while preserving every element losslessly.
 
-- **High compression (8–14x):** Sites like MDN and Hacker News have moderate structural overhead. Text truncation, URL compression, and the compact output format combine for significant gains even on leaner pages.
+- **High compression (8-14x):** Sites like MDN and Hacker News have moderate structural overhead. Text truncation, URL compression, and the compact output format combine for significant gains even on leaner pages.
 
 ### What gets removed
 
@@ -38,10 +38,10 @@ TideSurf's DOM walker discards:
 
 ### What gets preserved
 
-- **Interactive elements** — links, buttons, inputs, selects (assigned `L`/`B`/`I`/`S` IDs)
-- **Visible text content** — headings, paragraphs, labels, table cells
-- **Semantic structure** — `<nav>`, `<main>`, `<article>`, `<form>`, `<table>`
-- **Element hierarchy** — enough nesting to understand the page layout
+- **Interactive elements**: links, buttons, inputs, selects (assigned `L`/`B`/`I`/`S` IDs)
+- **Visible text content**: headings, paragraphs, labels, table cells
+- **Semantic structure**: `<nav>`, `<main>`, `<article>`, `<form>`, `<table>`
+- **Element hierarchy**: enough nesting to understand the page layout
 
 ## Cost impact
 
@@ -53,11 +53,11 @@ Token costs at typical LLM pricing ($5/M input tokens):
 | Wikipedia | $0.62 | $0.06 | $0.56 |
 | MDN Docs | $0.12 | $0.009 | $0.12 |
 
-For an agent that browses 100 pages per session, TideSurf can reduce input costs by **88–97%**.
+For an agent that browses 100 pages per session, TideSurf can reduce input costs by **88-97%**.
 
 ## Context window impact
 
-Most LLMs have context windows of 128K–200K tokens. A single raw GitHub page (84,236 tokens) uses **42–66%** of the context window. With TideSurf (2,593 tokens), the same page uses **1–2%** — leaving room for the agent's instructions, conversation history, and dozens of additional pages in a single session.
+Most LLMs have context windows of 128K-200K tokens. A single raw GitHub page (84,236 tokens) uses **42-66%** of the context window. With TideSurf (2,593 tokens), the same page uses **1-2%**: leaving room for the agent's instructions, conversation history, and dozens of additional pages in a single session.
 
 ## Running benchmarks yourself
 

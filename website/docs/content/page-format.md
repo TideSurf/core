@@ -4,7 +4,7 @@ When you call `getState()`, TideSurf walks the live DOM tree, strips away everyt
 
 ## Before and after
 
-Consider a typical page fragment with navigation and a search form. The raw HTML carries a significant amount of presentational markup — CSS classes, wrapper divs, ARIA roles, and layout attributes — that inflates token usage without adding information the LLM can act on:
+Consider a typical page fragment with navigation and a search form. The raw HTML carries plenty of presentational markup: CSS classes, wrapper divs, ARIA roles, and layout attributes. Those details inflate token usage without giving the model more useful actions:
 
 ```html
 <div class="header">
@@ -72,7 +72,7 @@ TideSurf applies a clear set of rules to decide what stays and what goes:
 
 ## Special cases
 
-**Images** are preserved as `[img: alt text]`, but `src` is omitted to save tokens — the alt text is usually sufficient for an LLM to understand what the image represents.
+**Images** are preserved as `[img: alt text]`, but `src` is omitted to save tokens. The alt text is usually enough for an LLM to understand what the image represents.
 
 **Shadow DOM** is pierced automatically, so elements inside web components appear in the output as if they were part of the regular DOM tree.
 
@@ -89,16 +89,16 @@ TideSurf serializes element state directly into the compressed output using conv
 | Format | Meaning |
 |---|---|
 | `[B1] Submit` | Normal, clickable button |
-| `~~[B1] Submit~~` | Disabled or inert — do not interact |
-| `[B1] Submit obscured` | Behind an overlay — dismiss blocker first |
+| `~~[B1] Submit~~` | Disabled or inert: do not interact |
+| `[B1] Submit obscured` | Behind an overlay: dismiss blocker first |
 | `[B1] Menu open` | Toggle is expanded |
 | `[B1] Menu closed` | Toggle is collapsed |
 | `[L1](/url →) text` | Link opens in new tab |
 | `> Option` | Currently selected option in a select |
 
-### Disabled and inert elements — `~~strikethrough~~`
+### Disabled and inert elements: `~~strikethrough~~`
 
-Elements that cannot receive interaction are wrapped in markdown `~~strikethrough~~`. An agent should never pass a struck-through element's ID to `click`, `type`, or `select` — the browser will either ignore the action or throw an error.
+Elements that cannot receive interaction are wrapped in markdown `~~strikethrough~~`. An agent should never pass a struck-through element's ID to `click`, `type`, or `select`, because the browser will either ignore the action or throw an error.
 
 ```
 ~~[B1] Submit~~              # button has disabled attribute
@@ -108,9 +108,9 @@ Elements that cannot receive interaction are wrapped in markdown `~~strikethroug
 ~~[B2] Save~~                # inert (pointer-events:none or HTML inert)
 ```
 
-The strikethrough convention covers multiple underlying causes — the HTML `disabled` attribute, `aria-disabled="true"`, inherited disabled state from a `<fieldset disabled>` ancestor, CSS `pointer-events: none`, and the HTML `inert` attribute. From the agent's perspective, the reason doesn't matter: `~~` means "don't touch it."
+The strikethrough convention covers multiple underlying causes, including the HTML `disabled` attribute, `aria-disabled="true"`, inherited disabled state from a `<fieldset disabled>` ancestor, CSS `pointer-events: none`, and the HTML `inert` attribute. From the agent's perspective, the reason does not matter. `~~` means "leave this alone."
 
-### Toggle state — `open` / `closed`
+### Toggle state: `open` / `closed`
 
 Buttons and links that control expandable regions show their toggle state:
 
@@ -120,7 +120,7 @@ Buttons and links that control expandable regions show their toggle state:
 ~~[B3] Options closed~~       # disabled AND collapsed
 ```
 
-### Obscured elements — `obscured`
+### Obscured elements: `obscured`
 
 Elements behind overlays (modals, cookie banners) are still actionable but blocked. The agent should dismiss the overlay first:
 
@@ -178,4 +178,4 @@ Before serializing the DOM, TideSurf inspects each element's computed CSS styles
 
 This filtering prevents agents from interacting with honeypot fields, off-screen traps, or CSS-hidden elements that are present in the DOM but not visible to a real user.
 
-Use `getState({ includeHidden: true })` to bypass this filtering for debugging — for example, to inspect hidden menus, lazy-loaded content, or off-screen elements before they become visible.
+Use `getState({ includeHidden: true })` to bypass this filtering for debugging. This helps when you need to inspect hidden menus, lazy-loaded content, or off-screen elements before they become visible.

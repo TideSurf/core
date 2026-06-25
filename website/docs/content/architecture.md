@@ -1,6 +1,6 @@
 # Architecture
 
-TideSurf sits between your LLM agent and a Chromium browser, acting as a bidirectional translator: it compresses the live DOM into token-efficient text for the agent, and converts the agent's tool calls into browser commands via the Chrome DevTools Protocol (CDP).
+TideSurf sits between your LLM agent and a Chromium browser. It compresses the live DOM into token-efficient text for the agent, then converts the agent's tool calls into browser commands through the Chrome DevTools Protocol (CDP).
 
 ## System overview
 
@@ -17,8 +17,8 @@ TideSurf sits between your LLM agent and a Chromium browser, acting as a bidirec
 
 TideSurf provides two connection modes:
 
-- **`TideSurf.launch()`** — spawns a new Chrome process, owns its lifecycle, cleans up on close
-- **`TideSurf.connect()`** — attaches to a Chrome instance that's already running (with remote debugging enabled). Does not manage the process — `close()` only disconnects CDP
+- **`TideSurf.launch()`**: spawns a new Chrome process, owns its lifecycle, and cleans up on close
+- **`TideSurf.connect()`**: attaches to a Chrome instance that's already running with remote debugging enabled. It does not manage the process, so `close()` only disconnects CDP
 
 ## Data flow
 
@@ -40,7 +40,7 @@ Agent tool call → TideSurf resolves ID → CDP command → Browser executes ac
 
 ### DOM Compressor
 
-The core of TideSurf — a recursive tree walker that traverses the rendered DOM and makes keep/strip decisions for every node. It applies heuristics to identify interactive elements (inputs, buttons, links), semantic containers (nav, form, headings), and visible text, while discarding CSS classes, inline styles, wrapper divs, script/style tags, hidden elements, and other presentational noise. Before serialization, a computed visibility pass inspects each element's CSS styles (`display`, `visibility`, `opacity`, `clip-path`, `pointer-events`) to filter out invisible elements and detect disabled/inert state. Surviving elements carry state flags (disabled, expanded, obscured) that the serializer encodes as `~~strikethrough~~` or keyword suffixes.
+The core of TideSurf: a recursive tree walker that traverses the rendered DOM and makes keep/strip decisions for every node. It applies heuristics to identify interactive elements (inputs, buttons, links), semantic containers (nav, form, headings), and visible text, while discarding CSS classes, inline styles, wrapper divs, script/style tags, hidden elements, and other presentational noise. Before serialization, a computed visibility pass inspects each element's CSS styles (`display`, `visibility`, `opacity`, `clip-path`, `pointer-events`) to filter out invisible elements and detect disabled/inert state. Surviving elements carry state flags (disabled, expanded, obscured) that the serializer encodes as `~~strikethrough~~` or keyword suffixes.
 
 When a token budget is set via `maxTokens`, the compressor runs a second pass that prioritizes interactive elements over passive content and prunes from the bottom of the priority stack until the output fits within the budget.
 
@@ -60,7 +60,7 @@ Exposes TideSurf's capabilities as a set of 18 standardized tool definitions tha
 
 ## Design principles
 
-- **Token efficiency over completeness** — the compressed output deliberately omits information that doesn't help an agent decide its next action. Visual styling, layout details, and decorative elements add tokens without adding utility.
-- **Stable, predictable IDs** — short prefixed IDs (`B1`, `L3`) are more reliable for LLMs than CSS selectors or XPaths, which can be brittle and verbose. The prefix tells the LLM the element type at a glance.
-- **Standard tools, any model** — by using a generic tool-calling interface, TideSurf works with Claude, GPT, Gemini, open-source models, or anything else that supports function calling. No vendor lock-in.
-- **Read-only mode** — when enabled, write tools are removed from both the executor and the definitions array. The LLM never sees tools it can't use.
+- **Token efficiency over completeness**: the compressed output deliberately omits information that doesn't help an agent decide its next action. Visual styling, layout details, and decorative elements add tokens without adding utility.
+- **Stable, predictable IDs**: short prefixed IDs (`B1`, `L3`) are more reliable for LLMs than CSS selectors or XPaths, which can be brittle and verbose. The prefix tells the LLM the element type at a glance.
+- **Standard tools, any model**: by using a generic tool-calling interface, TideSurf works with Claude, GPT, Gemini, open-source models, or anything else that supports function calling. No vendor lock-in.
+- **Read-only mode**: when enabled, write tools are removed from both the executor and the definitions array. The LLM never sees tools it can't use.

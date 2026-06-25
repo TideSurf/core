@@ -1,4 +1,5 @@
 import { marked } from "marked";
+import "./style.css";
 
 type Language = "en" | "ja" | "ko";
 type Theme = "light" | "dark";
@@ -16,12 +17,12 @@ const translations: Translations = {
   "nav.npm": { en: "npm", ja: "npm", ko: "npm" },
   "docs.title": { en: "Documentation", ja: "ドキュメント", ko: "문서" },
   "search.placeholder": {
-    en: "Search docs...",
-    ja: "ドキュメントを検索...",
-    ko: "문서 검색...",
+    en: "Search docs",
+    ja: "ドキュメントを検索",
+    ko: "문서 검색",
   },
   "search.empty": {
-    en: "No results",
+    en: "Nothing found",
     ja: "結果はありません",
     ko: "검색 결과가 없습니다",
   },
@@ -103,9 +104,9 @@ const translations: Translations = {
     ko: "이 페이지",
   },
   "content.loading": {
-    en: "Loading documentation…",
-    ja: "ドキュメントを読み込み中…",
-    ko: "문서를 불러오는 중…",
+    en: "Loading docs",
+    ja: "ドキュメントを読み込み中",
+    ko: "문서를 불러오는 중",
   },
   "error.missing.title": {
     en: "Page not found",
@@ -128,7 +129,7 @@ const translations: Translations = {
     ko: "링크 복사",
   },
   "content.share.copied": {
-    en: "Copied!",
+    en: "Copied",
     ja: "コピーしました",
     ko: "복사됨",
   },
@@ -138,12 +139,12 @@ const translations: Translations = {
     ko: "llms.txt 열기",
   },
   "content.copy.md": {
-    en: "Copy Markdown",
+    en: "Copy markdown",
     ja: "マークダウンをコピー",
     ko: "마크다운 복사",
   },
   "content.copy.text": {
-    en: "Copy Text",
+    en: "Copy text",
     ja: "テキストをコピー",
     ko: "텍스트 복사",
   },
@@ -155,7 +156,6 @@ interface SearchEntry {
   snippet: string;
 }
 
-const SVG_NS = "http://www.w3.org/2000/svg";
 const DEFAULT_PAGE = "getting-started";
 const SAFE_URL_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
 const DROP_CONTENT_TAGS = new Set([
@@ -231,7 +231,6 @@ let pages: Record<string, string> = {};
 let pageMap: Record<string, string> = {};
 let tocObserver: IntersectionObserver | null = null;
 let tocScrollHandler: (() => void) | null = null;
-let docMetaCleanup: (() => void) | null = null;
 
 const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
 const contentEl = document.getElementById("content")!;
@@ -274,43 +273,6 @@ async function loadContent(): Promise<void> {
     const name = path.split("/").pop()?.replace(".md", "") ?? "";
     pageMap[name] = content as string;
   }
-}
-
-function createSvgElement(tag: string, attributes: Record<string, string>): SVGElement {
-  const element = document.createElementNS(SVG_NS, tag);
-  for (const [key, value] of Object.entries(attributes)) {
-    element.setAttribute(key, value);
-  }
-  return element;
-}
-
-function createCopyIcon(): SVGElement {
-  const svg = createSvgElement("svg", {
-    width: "14",
-    height: "14",
-    viewBox: "0 0 24 24",
-    fill: "none",
-    stroke: "currentColor",
-    "stroke-width": "2",
-  });
-
-  svg.appendChild(
-    createSvgElement("rect", {
-      x: "9",
-      y: "9",
-      width: "13",
-      height: "13",
-      rx: "2",
-      ry: "2",
-    })
-  );
-  svg.appendChild(
-    createSvgElement("path", {
-      d: "M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1",
-    })
-  );
-
-  return svg;
 }
 
 function isSafeUrl(rawValue: string): boolean {
@@ -423,13 +385,17 @@ function addCodeCopyButtons(): void {
     copyBtn.className = "copy-code-btn";
     copyBtn.type = "button";
     copyBtn.setAttribute("aria-label", "Copy code");
-    copyBtn.appendChild(createCopyIcon());
+    copyBtn.textContent = "copy";
     copyBtn.addEventListener("click", async () => {
       const code = pre.querySelector("code")?.textContent || "";
       try {
         await navigator.clipboard.writeText(code);
+        copyBtn.textContent = "copied";
         copyBtn.classList.add("copied");
-        window.setTimeout(() => copyBtn.classList.remove("copied"), 1500);
+        window.setTimeout(() => {
+          copyBtn.textContent = "copy";
+          copyBtn.classList.remove("copied");
+        }, 1500);
       } catch (err) {
         console.error("Failed to copy:", err);
       }
@@ -597,12 +563,8 @@ function renderPage(pageName: string): void {
 
   const title = contentEl.querySelector("h1")?.textContent;
   if (title) {
-    document.title = `${title} — TideSurf Docs`;
+    document.title = `${title} | TideSurf Docs`;
   }
-
-  // Clean up previous doc-meta click handler
-  docMetaCleanup?.();
-  docMetaCleanup = null;
 
   // Add doc meta (path + action buttons) after h1
   const h1 = contentEl.querySelector("h1");
@@ -625,129 +587,43 @@ function renderPage(pageName: string): void {
     const actions = document.createElement("div");
     actions.className = "doc-actions";
 
-    // Copy options (three dots)
-    const copyWrapper = document.createElement("div");
-    copyWrapper.className = "doc-action-wrapper";
-    const copyBtn = document.createElement("button");
-    copyBtn.className = "doc-action-btn";
-    copyBtn.setAttribute("aria-label", translate("content.copy.md"));
-    copyBtn.setAttribute("aria-haspopup", "true");
-    copyBtn.setAttribute("aria-expanded", "false");
-    copyBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="3" r="1.5"/><circle cx="8" cy="8" r="1.5"/><circle cx="8" cy="13" r="1.5"/></svg>`;
-    const copyDropdown = document.createElement("div");
-    copyDropdown.className = "doc-action-dropdown";
-    copyDropdown.setAttribute("role", "menu");
-    copyDropdown.innerHTML = `
-      <button class="doc-action-option" role="menuitem" data-action="copy-md">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-        <span>${translate("content.copy.md")}</span>
-      </button>
-      <button class="doc-action-option" role="menuitem" data-action="copy-text">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-        <span>${translate("content.copy.text")}</span>
-      </button>
-    `;
-    copyWrapper.appendChild(copyBtn);
-    copyWrapper.appendChild(copyDropdown);
-
-    // Share options
-    const shareWrapper = document.createElement("div");
-    shareWrapper.className = "doc-action-wrapper";
-    const shareBtn = document.createElement("button");
-    shareBtn.className = "doc-action-btn";
-    shareBtn.setAttribute("aria-label", translate("content.share.title"));
-    shareBtn.setAttribute("aria-haspopup", "true");
-    shareBtn.setAttribute("aria-expanded", "false");
-    shareBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>`;
-    const shareDropdown = document.createElement("div");
-    shareDropdown.className = "doc-action-dropdown";
-    shareDropdown.setAttribute("role", "menu");
-    shareDropdown.innerHTML = `
-      <button class="doc-action-option" role="menuitem" data-action="copy-link">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-        <span>${translate("content.share.copy")}</span>
-      </button>
-      <button class="doc-action-option" role="menuitem" data-action="llms-txt">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-        <span>${translate("content.share.llms")}</span>
-      </button>
-    `;
-    shareWrapper.appendChild(shareBtn);
-    shareWrapper.appendChild(shareDropdown);
-
-    // Copy link button (inline, no dropdown)
-    const copyLinkBtn = document.createElement("button");
-    copyLinkBtn.className = "doc-action-btn";
-    copyLinkBtn.setAttribute("aria-label", translate("content.share.copy"));
-    copyLinkBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
-    copyLinkBtn.addEventListener("click", () => {
-      const url = `${window.location.origin}/docs#${pageName}`;
-      navigator.clipboard.writeText(url).then(() => {
-        copyLinkBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+    const makeAction = (
+      label: string,
+      ariaLabel: string,
+      action: () => void | Promise<void>
+    ): HTMLButtonElement => {
+      const button = document.createElement("button");
+      button.className = "doc-action-btn";
+      button.type = "button";
+      button.setAttribute("aria-label", ariaLabel);
+      button.textContent = label;
+      button.addEventListener("click", async () => {
+        const originalLabel = button.textContent ?? label;
+        await action();
+        button.textContent = translate("content.share.copied");
         setTimeout(() => {
-          copyLinkBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+          button.textContent = originalLabel;
         }, 1500);
       });
-    });
+      return button;
+    };
 
-    actions.appendChild(copyWrapper);
-    actions.appendChild(shareWrapper);
-    actions.appendChild(copyLinkBtn);
+    actions.append(
+      makeAction("markdown", translate("content.copy.md"), () =>
+        navigator.clipboard.writeText(pageMap[pageName] || "")
+      ),
+      makeAction("text", translate("content.copy.text"), () =>
+        navigator.clipboard.writeText(contentEl.innerText || "")
+      ),
+      makeAction("link", translate("content.share.copy"), () =>
+        navigator.clipboard.writeText(`${window.location.origin}/docs#${pageName}`)
+      ),
+      makeAction("llms.txt", translate("content.share.llms"), () => openLlmsTxt(pageName))
+    );
+
     docMeta.appendChild(pathEl);
     docMeta.appendChild(actions);
     h1.insertAdjacentElement("afterend", docMeta);
-
-    // Setup dropdown toggles
-    [copyBtn, shareBtn].forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const dropdown = btn.nextElementSibling as HTMLElement;
-        const isExpanded = btn.getAttribute("aria-expanded") === "true";
-        docMeta.querySelectorAll(".doc-action-dropdown").forEach((d) => d.classList.remove("open"));
-        docMeta.querySelectorAll(".doc-action-btn").forEach((b) => b.setAttribute("aria-expanded", "false"));
-        if (!isExpanded) {
-          btn.setAttribute("aria-expanded", "true");
-          dropdown.classList.add("open");
-        }
-      });
-    });
-
-    // Close dropdowns when clicking outside
-    const handleOutsideClick = (e: MouseEvent) => {
-      if (!actions.contains(e.target as Node)) {
-        docMeta.querySelectorAll(".doc-action-dropdown").forEach((d) => d.classList.remove("open"));
-        docMeta.querySelectorAll(".doc-action-btn").forEach((b) => b.setAttribute("aria-expanded", "false"));
-      }
-    };
-    document.addEventListener("click", handleOutsideClick);
-    docMetaCleanup = () => document.removeEventListener("click", handleOutsideClick);
-
-    // Handle actions
-    docMeta.querySelectorAll(".doc-action-option").forEach((option) => {
-      option.addEventListener("click", () => {
-        const action = (option as HTMLElement).dataset.action;
-        const span = option.querySelector("span");
-        if (action === "copy-md") {
-          const md = pageMap[pageName] || "";
-          navigator.clipboard.writeText(md).then(() => {
-            if (span) { const orig = span.textContent; span.textContent = translate("content.share.copied"); setTimeout(() => { if (span) span.textContent = orig; }, 1500); }
-          });
-        } else if (action === "copy-text") {
-          const text = contentEl.innerText || "";
-          navigator.clipboard.writeText(text).then(() => {
-            if (span) { const orig = span.textContent; span.textContent = translate("content.share.copied"); setTimeout(() => { if (span) span.textContent = orig; }, 1500); }
-          });
-        } else if (action === "copy-link") {
-          const url = `${window.location.origin}${window.location.pathname}#${pageName}`;
-          navigator.clipboard.writeText(url).then(() => {
-            if (span) { span.textContent = translate("content.share.copied"); setTimeout(() => { if (span) span.textContent = translate("content.share.copy"); }, 1500); }
-          });
-        } else if (action === "llms-txt") {
-          openLlmsTxt(pageName);
-        }
-        docMeta.querySelectorAll(".doc-action-dropdown").forEach((d) => d.classList.remove("open"));
-        docMeta.querySelectorAll(".doc-action-btn").forEach((b) => b.setAttribute("aria-expanded", "false"));
-      });
-    });
   }
 
   buildTOC();
@@ -820,15 +696,15 @@ function buildTOC(): void {
       anchor.href = `#${currentPageName}:${id}`;
       anchor.className = "anchor-link";
       anchor.setAttribute("aria-label", `Link to ${text}`);
-      anchor.textContent = "#";
+      anchor.textContent = "link";
       anchor.addEventListener("click", (event) => {
         event.preventDefault();
         const url = `${window.location.origin}${window.location.pathname}#${currentPageName}:${id}`;
         navigator.clipboard.writeText(url).then(() => {
-          anchor.textContent = "\u2713";
+          anchor.textContent = "copied";
           anchor.classList.add("copied");
           setTimeout(() => {
-            anchor.textContent = "#";
+            anchor.textContent = "link";
             anchor.classList.remove("copied");
           }, 1500);
         });
@@ -1058,17 +934,26 @@ function initTheme(): void {
   currentTheme = savedTheme || (prefersDark ? "dark" : "light");
   applyTheme();
 
-  document.getElementById("theme-toggle")?.addEventListener("click", toggleTheme);
-}
-
-function toggleTheme(): void {
-  currentTheme = currentTheme === "dark" ? "light" : "dark";
-  safeStorageSet("tidesurf-docs-theme", currentTheme);
-  applyTheme();
+  document.querySelectorAll(".theme-btn[data-theme]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const theme = (btn as HTMLElement).dataset.theme as Theme;
+      if (theme) {
+        currentTheme = theme;
+        safeStorageSet("tidesurf-docs-theme", theme);
+        applyTheme();
+      }
+    });
+  });
 }
 
 function applyTheme(): void {
   document.documentElement.setAttribute("data-theme", currentTheme);
+  document.querySelectorAll(".theme-btn[data-theme]").forEach((btn) => {
+    btn.classList.toggle(
+      "active",
+      (btn as HTMLElement).dataset.theme === currentTheme
+    );
+  });
 }
 
 function initLanguage(): void {

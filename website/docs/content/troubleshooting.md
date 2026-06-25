@@ -16,7 +16,7 @@ On macOS, the default path is usually `/Applications/Google Chrome.app/Contents/
 
 ## CDP connection refused
 
-This happens when Chrome launched successfully but TideSurf couldn't establish a WebSocket connection to the Chrome DevTools Protocol endpoint — usually because another process is already using the debugging port.
+This happens when Chrome launched successfully but TideSurf couldn't establish a WebSocket connection to the Chrome DevTools Protocol endpoint: usually because another process is already using the debugging port.
 
 **Fix:** TideSurf retries automatically up to 3 times, so transient failures resolve on their own. If the error persists, check whether another Chrome instance or debugging tool is already bound to the same port. You can specify a different port in the launch options:
 
@@ -76,7 +76,7 @@ const browser = await TideSurf.launch({
 
 ## Shadow DOM content missing
 
-Shadow DOM is pierced automatically by default. If you're not seeing shadow DOM content in the output, verify that `pierce: true` is set (this is the default behavior). Custom elements that use closed shadow roots may not be accessible — this is a browser-level restriction, not a TideSurf limitation.
+Shadow DOM is pierced automatically by default. If you're not seeing shadow DOM content in the output, verify that `pierce: true` is set (this is the default behavior). Custom elements that use closed shadow roots may not be accessible because the browser keeps them private.
 
 ## Cross-origin iframes
 
