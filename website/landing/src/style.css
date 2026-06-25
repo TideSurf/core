@@ -156,8 +156,8 @@ button:focus-visible {
 
 .topnav-brand {
   font-weight: 600;
-  font-size: 1rem;
-  letter-spacing: -0.01em;
+  font-size: 1.5rem;
+  letter-spacing: -0.022em;
   color: var(--ink);
 }
 
@@ -205,6 +205,23 @@ button:focus-visible {
   opacity: 0;
 }
 
+/* ---------- Section marks — a small on-theme SVG per section ---------- */
+
+.sec-mark {
+  display: block;
+  width: 1.8rem;
+  height: 1.8rem;
+  margin-bottom: 0.7rem;
+  color: var(--mark, var(--accent));
+  opacity: 0.85;
+}
+
+.sec-mark svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
 /* ==========================================================================
    Hero — the title is the page. TideSurf, set large and calm.
    Fills the first viewport so the wordmark owns the screen; everything below
@@ -220,24 +237,14 @@ button:focus-visible {
   justify-content: center;
 }
 
-/* The wordmark. Unmissable, but quiet: weight 500, tight tracking, no glow. */
-.hero h1 {
-  font-size: clamp(4.6rem, 15vw, 11.5rem);
-  line-height: 0.86;
-  font-weight: 500;
-  letter-spacing: -0.045em;
-  overflow-wrap: anywhere;
-  text-wrap: balance;
-}
-
 .hero-thesis {
-  max-width: 15ch;
-  margin-top: 0.25rem;
+  max-width: 18ch;
+  margin-top: 0.2rem;
   color: var(--ink);
-  font-size: clamp(2rem, 4.6vw, 3.7rem);
-  line-height: 1.06;
+  font-size: clamp(3rem, 6.9vw, 5.55rem);
+  line-height: 1.02;
   font-weight: 500;
-  letter-spacing: -0.018em;
+  letter-spacing: -0.024em;
   text-wrap: balance;
 }
 

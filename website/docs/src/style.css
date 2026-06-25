@@ -160,8 +160,8 @@ input:focus-visible {
 
 .sidebar-title {
   font-size: var(--fs-sm);
-  font-weight: 500;
-  letter-spacing: 0.05em;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   color: var(--ink);
 }
 
@@ -244,20 +244,22 @@ input:focus-visible {
 .sidebar-link {
   font-size: var(--fs-sm);
   color: var(--ink-2);
-  padding: 0.35rem var(--gutter);
+  padding: 0.3rem 0.55rem;
+  margin: 0.1rem var(--gutter);
   display: block;
   transition: color var(--pill) var(--ease-out-expo), background var(--pill) var(--ease-out-expo), transform var(--pill) var(--ease-out-expo);
 }
 
 .sidebar-link:hover {
   color: var(--ink);
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  background: color-mix(in srgb, var(--accent), var(--paper-2) 70%);
+  transform: translateX(2px);
 }
 
 .sidebar-link.active {
-  color: var(--ink);
+  color: var(--paper);
   font-weight: 500;
-  background: color-mix(in srgb, var(--accent), var(--paper-2) 78%);
+  background: var(--accent);
 }
 
 /* Sidebar Preferences Footer */
@@ -356,8 +358,8 @@ input:focus-visible {
 #content h1 {
   font-size: var(--fs-mega);
   font-weight: 500;
-  letter-spacing: 0;
-  line-height: 1.08;
+  letter-spacing: -0.022em;
+  line-height: 1.06;
   margin-bottom: 0.35rem;
   color: var(--ink);
   text-wrap: balance;
@@ -366,8 +368,8 @@ input:focus-visible {
 #content h2 {
   font-size: var(--fs-xl);
   font-weight: 500;
-  letter-spacing: 0;
-  line-height: 1.2;
+  letter-spacing: -0.018em;
+  line-height: 1.12;
   margin-top: 2.1rem;
   margin-bottom: 0.5rem;
   color: var(--ink);
@@ -446,6 +448,33 @@ input:focus-visible {
 }
 
 #content a:not(.btn-style):active {
+  transform: scale(0.96) rotate(0deg);
+  transition-duration: 0.08s;
+}
+
+/* Button-style links — flat colour pills, matching the landing's nav buttons. */
+#content a.btn-style,
+.btn-style {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.5rem;
+  padding: 0.25rem 0.85rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 22%, var(--paper));
+  transition: background-color var(--pill) var(--ease-out-expo), color var(--pill) var(--ease-out-expo), transform var(--pill) var(--ease-out-expo);
+}
+
+#content a.btn-style:hover,
+.btn-style:hover {
+  background: color-mix(in srgb, var(--accent) 44%, var(--paper));
+  transform: scale(1.07) rotate(-2deg);
+}
+
+#content a.btn-style:active,
+.btn-style:active {
   transform: scale(0.96) rotate(0deg);
   transition-duration: 0.08s;
 }
