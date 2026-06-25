@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
     <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
@@ -7,24 +7,24 @@
             http-equiv="Content-Security-Policy"
             content="default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://tidesurf.org https://api.producthunt.com; connect-src 'self' https://api.github.com https://cloudflareinsights.com; object-src 'none'; base-uri 'self'; form-action 'self'"
         />
-        <title>TideSurf | DOM-to-text runtime for browser agents</title>
+        <title>TideSurf | Live pages as text for browser agents</title>
         <meta
             name="description"
-            content="TideSurf turns Chromium pages into compact text for LLM agents, with 32x fewer tokens, stable element IDs, and direct local CDP control."
+            content="TideSurf turns rendered Chromium pages into compact text with stable action IDs and local CDP control for LLM browser agents."
         />
-        <meta property="og:title" content="TideSurf - Surf the Tide" />
-        <meta property="og:description" content="Compact DOM text for browser agents, with stable IDs and direct local CDP control." />
+        <meta property="og:title" content="TideSurf | Live pages as text for browser agents" />
+        <meta property="og:description" content="Compact DOM text, stable action IDs, and local CDP control for LLM browser agents." />
         <meta property="og:image" content="https://tidesurf.org/og.png" />
         <meta property="og:url" content="https://tidesurf.org" />
         <meta property="og:type" content="website" />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="TideSurf - Surf the Tide" />
-        <meta name="twitter:description" content="Compact DOM text for browser agents, with stable IDs and direct local CDP control." />
+        <meta name="twitter:title" content="TideSurf | Live pages as text for browser agents" />
+        <meta name="twitter:description" content="Compact DOM text, stable action IDs, and local CDP control for LLM browser agents." />
         <meta name="twitter:image" content="https://tidesurf.org/og.png" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
         <link
-            href="https://fonts.googleapis.com/css2?family=Zalando+Sans:wght@400;500&family=Gothic+A1:wght@400;500&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+            href="https://fonts.googleapis.com/css2?family=Zalando+Sans:wght@400;500;600&family=Gothic+A1:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
             rel="stylesheet"
         />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
@@ -34,396 +34,160 @@
         <a href="#main" class="skip-link">Skip to content</a>
 
         <main id="main" class="page">
-            <!-- TideSurf-first hero -->
-            <header class="hero reveal-group" aria-labelledby="hero-title">
-                <div class="hero-split">
-                    <div class="hero-type reveal" style="--reveal-delay: 0ms">
-                        <div class="hero-mark">
-                            <svg class="logo-mark" width="44" height="30" viewBox="0 0 28 20" fill="none" aria-hidden="true">
-                                <path
-                                    d="M2 5 C7 1, 11 1, 14 5 C17 9, 21 9, 26 5"
-                                    stroke="currentColor"
-                                    stroke-width="1.4"
-                                    stroke-linecap="round"
-                                    opacity="0.12"
-                                />
-                                <path
-                                    d="M2 10 C7 6, 11 6, 14 10 C17 14, 21 14, 26 10"
-                                    stroke="currentColor"
-                                    stroke-width="1.8"
-                                    stroke-linecap="round"
-                                    opacity="0.3"
-                                />
-                                <path
-                                    d="M2 15 C7 11, 11 11, 14 15 C17 19, 21 19, 26 15"
-                                    stroke="currentColor"
-                                    stroke-width="2.4"
-                                    stroke-linecap="round"
-                                />
-                            </svg>
-                            <span class="hero-handle mono">npm @tidesurf/core</span>
-                        </div>
-
-                        <h1 id="hero-title" class="hero-wordmark" aria-label="TideSurf">
-                            <span>Tide</span><span class="hero-wordmark-accent">Surf</span>
-                        </h1>
-
-                        <p class="hero-motion-line" aria-label="TideSurf lets browser agents browse, compress, reason, and act on live pages as text.">
-                            <span>Agents can</span>
-                            <span class="hero-verb-slot mono" aria-hidden="true">
-                                <span id="hero-verb-current">browse</span>
-                                <span id="hero-verb-next"></span>
-                            </span>
-                            <span>live pages as text.</span>
-                        </p>
+            <section class="hero reveal" aria-labelledby="hero-title">
+                <p class="eyebrow mono">@tidesurf/core / local Chromium / agent-readable pages</p>
+                <h1 id="hero-title">TideSurf</h1>
+                <p class="hero-thesis">Live pages become text agents can trust.</p>
+                <p class="hero-lede">
+                    A browser agent does not need another screenshot. It needs the page distilled into readable text, with handles that still point back to real things in Chromium. TideSurf sits in that gap.
+                </p>
+                <div class="hero-actions" aria-label="Primary actions">
+                    <div class="install">
+                        <span class="prompt mono">$</span>
+                        <code id="install-command-text" class="mono">bun add @tidesurf/core</code>
+                        <button type="button" class="copy-btn" id="install-copy-btn" data-copy="bun add @tidesurf/core" aria-label="Copy install command">
+                            <span class="copy-label">copy</span>
+                        </button>
                     </div>
-
-                    <div class="hero-aside reveal" style="--reveal-delay: 120ms">
-                        <p class="hero-identity" data-i18n="hero.tagline">
-                            TideSurf is the DOM-to-text runtime for engineers building function-calling browser agents.
-                        </p>
-                        <p class="hero-lede" data-i18n="hero.lede">
-                            A compression layer between Chromium and your LLM. Live pages become token-efficient text
-                            with stable element IDs, so agents can browse, reason, and act without brittle selectors.
-                        </p>
-
-                        <div class="hero-proof" aria-label="TideSurf proof points">
-                            <span><strong class="mono">32x</strong> more page context</span>
-                            <span><strong class="mono">L1 B2</strong> click by ID</span>
-                            <span><strong class="mono">local</strong> CDP control</span>
-                        </div>
-
-                        <div class="hero-state" aria-label="TideSurf compressed page state example">
-                            <div class="hero-state-head">
-                                <span class="mono">browser.getState()</span>
-                                <strong class="mono">142 tokens</strong>
-                            </div>
-                            <pre><code>H1 TideSurf
-P  DOM-to-text for browser agents.
-L1 Docs
-B1 Copy install command
-MAIN Same page. Fewer tokens.</code></pre>
-                        </div>
-
-                        <div class="hero-cta">
-                            <div class="install install--hero">
-                                <span class="prompt mono">$</span>
-                                <code id="install-command-text" class="mono">bun add @tidesurf/core</code>
-                                <button type="button" class="copy-btn pill" id="install-copy-btn" data-copy="bun add @tidesurf/core" aria-label="Copy install command">
-                                    <span class="copy-label">copy</span>
-                                </button>
-                            </div>
-                            <a href="https://tidesurf.org/docs" class="footer-btn" style="--btn-color: var(--c-teal)" data-i18n="nav.docs">docs</a>
-                        </div>
-                    </div>
-                </div>
-            </header>
-
-            <!-- Typographic proof ribbon -->
-            <div class="stat-ribbon reveal" style="--reveal-delay: 200ms" aria-label="GitHub issues benchmark">
-                <div class="stat-ribbon-inner">
-                    <span class="stat-ribbon-item">
-                        <span class="stat-ribbon-label" data-i18n="compare.raw">raw DOM</span>
-                        <span class="stat-ribbon-num mono">84,236</span>
+                    <a class="patch-link" href="https://tidesurf.org/docs" style="--patch-color: var(--c-teal)">Docs</a>
+                    <a class="patch-link" href="https://github.com/TideSurf/core" style="--patch-color: var(--c-green)">GitHub</a>
+                    <span class="github-star mono" id="github-star" hidden>
+                        <span id="star-count"></span>
+                        <span>stars</span>
                     </span>
-                    <span class="stat-ribbon-sep mono" aria-hidden="true">→</span>
-                    <span class="stat-ribbon-item stat-ribbon-item--accent">
-                        <span class="stat-ribbon-label" data-i18n="compare.tidesurf">TideSurf</span>
-                        <span class="stat-ribbon-num mono">2,593</span>
-                    </span>
-                    <span class="stat-ribbon-mult mono">32×</span>
-                    <span class="stat-ribbon-meta">cl100k_base · live pages · GitHub issues</span>
                 </div>
-            </div>
+            </section>
 
-            <!-- Edge-bleed compare -->
-            <section class="section section--proof reveal" aria-labelledby="proof-title">
-                <div class="section-lead">
-                    <h2 id="proof-title" data-i18n="bench.title">Same page. Fewer tokens.</h2>
-                    <p data-i18n="bench.why.body">
-                        Every token your agent reads costs money and eats into the context window. A GitHub page that takes 84,236 tokens raw fits in just 2,593 with TideSurf. That is 32x compression.
+            <section class="material" aria-labelledby="material-title">
+                <div class="material-copy">
+                    <p class="eyebrow mono">what changes</p>
+                    <h2 id="material-title">Keep the page real. Make the context smaller.</h2>
+                    <p>
+                        TideSurf reads the rendered page, keeps the parts an agent can use, and gives every actionable thing a short handle. Models choose a handle. DevTools carries it back to Chromium.
                     </p>
                 </div>
-
-                <div class="compare-bleed" aria-label="Raw DOM compared with TideSurf output" data-comparison-demo>
-                    <div class="compare-bleed-grid">
-                        <div class="pane pane--raw">
-                            <div class="pane-head">
-                                <span data-i18n="compare.raw">Raw HTML</span>
-                                <strong class="mono">84,236</strong>
-                            </div>
-                            <pre><code>&lt;div class="application-main"&gt;
-  &lt;header class="Header-module__header"&gt;
-    &lt;nav aria-label="Global"&gt;
-      &lt;a href="/issues"&gt;Issues&lt;/a&gt;
-      &lt;a href="/pulls"&gt;Pull requests&lt;/a&gt;
-    &lt;/nav&gt;
-  &lt;/header&gt;
-  &lt;main&gt;
-    &lt;svg class="octicon octicon-issue-opened" …&gt;
-      &lt;path d="M8 9.5a1.5 1.5 0 1 0 0-3…"/&gt;
-    &lt;/svg&gt;
-    &lt;div class="markdown-body"&gt;…&lt;/div&gt;
-  &lt;/main&gt;
-&lt;/div&gt;</code></pre>
-                        </div>
-                        <div class="pane pane--out">
-                            <div class="pane-head">
-                                <span data-i18n="compare.tidesurf">TideSurf</span>
-                                <strong class="mono">2,593</strong>
-                            </div>
-                            <pre><code># github.com/TideSurf/core/issues
-URL: https://github.com/TideSurf/core/issues
----
-H1 [HEADING] Issues
-L1 [LINK] Pull requests  /pulls
-L2 [LINK] Actions        /actions
-<span class="hl" id="proof-highlight">L3 [LINK] Latest issue title</span>
-B1 [BUTTON] New issue
-MAIN …</code></pre>
-                        </div>
+                <div class="material-field" aria-label="TideSurf material map">
+                    <div class="field-cell field-cell-a">
+                        <span class="mono">rendered</span>
+                        <strong>Chromium state</strong>
+                    </div>
+                    <div class="field-cell field-cell-b">
+                        <span class="mono">pruned</span>
+                        <strong>visible text</strong>
+                    </div>
+                    <div class="field-cell field-cell-c">
+                        <span class="mono">stable</span>
+                        <strong>L1 B2 I3</strong>
+                    </div>
+                    <div class="field-cell field-cell-d">
+                        <span class="mono">local</span>
+                        <strong>CDP action</strong>
+                    </div>
+                    <div class="field-cell field-cell-e">
+                        <span class="mono">mcp</span>
+                        <strong>agent tools</strong>
                     </div>
                 </div>
+            </section>
 
-                <p class="section-caption" data-i18n="bench.how.body">
-                    We launch headless Chrome, navigate to each site, and compare the full rendered DOM against TideSurf's compressed output. Token counts use cl100k_base estimation.
+            <section class="evidence reveal" aria-label="TideSurf proof points">
+                <article style="--tile-color: var(--grey-1)">
+                    <span class="mono">raw page</span>
+                    <strong class="mono">84,236</strong>
+                    <p>tokens from a real GitHub issues page before TideSurf compresses the DOM.</p>
+                </article>
+                <article style="--tile-color: var(--c-teal)">
+                    <span class="mono">after TideSurf</span>
+                    <strong class="mono">2,593</strong>
+                    <p>tokens with headings, links, buttons, inputs, tables, and visible copy preserved.</p>
+                </article>
+                <article style="--tile-color: var(--c-rust)">
+                    <span class="mono">agent handles</span>
+                    <strong class="mono">L1 B2 I3</strong>
+                    <p>short IDs that stay connected to the elements the model wants to use.</p>
+                </article>
+            </section>
+
+            <section class="statement reveal" aria-labelledby="statement-title">
+                <p class="eyebrow mono">why it feels calmer</p>
+                <h2 id="statement-title">Browser automation reads better when the browser is still alive.</h2>
+                <p>
+                    TideSurf does not ask the model to invent selectors or parse a visual guess. It hands over a compact text surface, then routes the chosen handle through DevTools.
                 </p>
             </section>
 
-            <!-- Asymmetric bento -->
-            <section class="section section--bento reveal" aria-labelledby="bento-title">
-                <div class="section-lead section-lead--narrow">
-                    <h2 id="bento-title" data-i18n="compare.label">How it works</h2>
-                    <p data-i18n="hero.tagline">Compressed DOM for agents.</p>
-                </div>
+            <section class="principles reveal" aria-label="TideSurf design principles">
+                <article>
+                    <span class="mono">01</span>
+                    <h3>Compress the page, not the meaning.</h3>
+                    <p>
+                        Wrapper markup, generated classes, scripts, and presentational noise recede. Anything a person can read and use remains visible to the agent.
+                    </p>
+                </article>
+                <article>
+                    <span class="mono">02</span>
+                    <h3>Let handles become actions.</h3>
+                    <p>
+                        The same ID the model reads can click, type, select, scroll, extract, and move across tabs. Less selector ceremony, more actual browsing.
+                    </p>
+                </article>
+                <article>
+                    <span class="mono">03</span>
+                    <h3>Keep control close to home.</h3>
+                    <p>
+                        Launch Chrome from TideSurf or attach to a running session. Cookies, auth state, and local debugging stay where developers expect them.
+                    </p>
+                </article>
+            </section>
 
-                <div class="bento">
-                    <article class="bento-cell bento-cell--connect">
-                        <span class="bento-index mono">01</span>
-                        <h3 data-i18n="bento.connect.title">Connect</h3>
-                        <p data-i18n="bento.connect.desc">
-                            Attach to Chromium over CDP. Launch headless or connect to a browser you already have open.
-                        </p>
-                    </article>
-                    <article class="bento-cell bento-cell--compress">
-                        <span class="bento-index mono">02</span>
-                        <h3 data-i18n="bento.compress.title">Compress</h3>
-                        <p data-i18n="bento.compress.desc">
-                            Rendered DOM becomes token-efficient text. Typical page: 50-200 tokens. Parse in under 25 ms.
-                        </p>
-                    </article>
-                    <article class="bento-cell bento-cell--act">
-                        <span class="bento-index mono">03</span>
-                        <h3 data-i18n="bento.act.title">Act</h3>
-                        <p data-i18n="bento.act.desc">
-                            Your model picks a stable ID like L3 or B1, then click() runs through DevTools.
-                        </p>
-                    </article>
-                    <article class="bento-cell bento-cell--ids">
-                        <span class="bento-index mono">∞</span>
-                        <h3 data-i18n="bento.ids.title">Stable IDs across navigations</h3>
-                        <p data-i18n="bento.ids.desc">
-                            Element references stay short and predictable as L1, B2, and L3. The loop stays getState() → LLM → click().
-                        </p>
-                    </article>
+            <section class="runtime reveal" aria-label="Runtime details">
+                <div>
+                    <span class="mono">read-only mode</span>
+                    <p>Expose safer tool definitions when an agent only needs to inspect a page.</p>
+                </div>
+                <div>
+                    <span class="mono">token budgets</span>
+                    <p>Prune lower-priority content while keeping actionable elements addressable.</p>
+                </div>
+                <div>
+                    <span class="mono">MCP server</span>
+                    <p>Use the same browser layer from Claude Code and other MCP clients.</p>
+                </div>
+                <div>
+                    <span class="mono">Bun + Node</span>
+                    <p>Small TypeScript package, direct CDP, optional MCP dependencies.</p>
                 </div>
             </section>
 
-            <!-- Horizontal scroll agent loop -->
-            <section class="section section--loop reveal" aria-labelledby="loop-title">
-                <div class="loop-intro">
-                    <div class="section-lead section-lead--narrow">
-                        <h2 id="loop-title" data-i18n="patterns.title">The agent loop</h2>
-                        <p data-i18n="patterns.sub">
-                            TideSurf keeps the loop simple: read compressed page text, decide, act, then call the next tool.
-                        </p>
-                    </div>
-                    <p class="loop-hint mono" aria-hidden="true">scroll →</p>
-                </div>
-
-                <div class="loop-scroller" tabindex="0" aria-label="Agent loop demonstration panels" data-i18n="mock.usage.aria" data-i18n-attr="aria-label">
-                    <div class="loop-track">
-                        <div class="loop-panel loop-panel--prompt">
-                            <span class="loop-panel-label" data-i18n="mock.chat">Chat</span>
-                            <p class="loop-prompt">Find the latest issue title and open it.</p>
-                        </div>
-
-                        <div class="loop-panel loop-panel--state">
-                            <span class="loop-panel-label" data-i18n="mock.pageState">Page state</span>
-                            <pre><code>HEADING Issues
-[L1] Pull requests
-[L2] Actions
-<span class="term-step" data-term-step="0">[L3] Latest issue title</span>
-[B1] New issue</code></pre>
-                        </div>
-
-                        <div class="loop-panel loop-panel--agent">
-                            <span class="loop-panel-label" data-i18n="mock.agent">Agent</span>
-                            <pre><code><span class="term-step" data-term-step="0"><span class="tk-kw">const</span> state = <span class="tk-kw">await</span> browser.<span class="tk-fn">getState</span>()</span>
-<span class="term-step" data-term-step="1"><span class="tk-kw">await</span> browser.<span class="tk-fn">click</span>(<span class="tk-str">"L3"</span>)</span></code></pre>
-                        </div>
-
-                        <div class="loop-panel loop-panel--terminal">
-                            <div class="terminal-bar">
-                                <span class="mono">agent.ts</span>
-                                <span class="live mono">running</span>
-                            </div>
-                            <pre><code><span class="term-line" data-term-step="0"><span class="tk-kw">await</span> browser.<span class="tk-fn">navigate</span>(<span class="tk-str">"github.com/…/issues"</span>)</span>
-<span class="term-line" data-term-step="1"><span class="tk-kw">const</span> state = <span class="tk-kw">await</span> browser.<span class="tk-fn">getState</span>()</span>
-<span class="term-line term-line--out" data-term-step="2"><span class="tk-cm">//</span> <span class="tk-num">142</span> tokens, LLM picks <span class="tk-str">L3</span></span>
-<span class="term-line" data-term-step="3"><span class="tk-kw">await</span> browser.<span class="tk-fn">click</span>(<span class="tk-str">"L3"</span>)</span>
-<span class="term-line term-line--dim" data-term-step="4"><span class="tk-cm">→</span> issue opened</span></code></pre>
-                        </div>
-                    </div>
+            <section class="closing reveal" aria-labelledby="closing-title">
+                <p class="eyebrow mono">start small</p>
+                <h2 id="closing-title">Give the model the page, then let it use the page.</h2>
+                <div class="closing-actions">
+                    <a class="patch-link" href="https://tidesurf.org/docs" style="--patch-color: var(--c-teal)">Read docs</a>
+                    <a class="patch-link" href="https://www.npmjs.com/package/@tidesurf/core" style="--patch-color: var(--c-gold)">npm</a>
                 </div>
             </section>
-
-            <!-- Giant trust numerals -->
-            <section class="section section--metrics reveal" aria-label="Performance and design guarantees">
-                <div class="metrics-band">
-                    <div class="metric">
-                        <span class="metric-num mono" data-i18n="metric.tokens.num">32×</span>
-                        <span class="metric-label" data-i18n="metric.tokens.label">fewer tokens</span>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-num mono" data-i18n="metric.time.num">&lt;25ms</span>
-                        <span class="metric-label" data-i18n="metric.time.label">parse time</span>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-num mono" data-i18n="metric.screenshots.num">0</span>
-                        <span class="metric-label" data-i18n="metric.screenshots.label">screenshots</span>
-                    </div>
-                    <div class="metric">
-                        <span class="metric-num mono" data-i18n="metric.ids.num">L1, B2</span>
-                        <span class="metric-label" data-i18n="metric.ids.label">stable IDs</span>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Ship manifest -->
-            <section class="section section--ship reveal" aria-labelledby="ship-title">
-                <div class="ship-split">
-                    <div class="ship-copy">
-                        <h2 id="ship-title" data-i18n="features.title">What ships in one package</h2>
-                        <p data-i18n="ship.desc">
-                            TideSurf is a small TypeScript library for Bun and Node. It includes direct CDP tools, token budgets, tab lifecycle, content extraction, and MCP wiring.
-                        </p>
-                        <p class="ship-note" data-i18n="ship.note">
-                            Use read-only mode, path confinement, and input validation when you need guardrails. Built for engineers making function-calling browser agents.
-                        </p>
-                    </div>
-                    <div class="ship-manifest">
-                        <span class="ship-api">navigate()</span>
-                        <span class="ship-api">getState()</span>
-                        <span class="ship-api">click("L3")</span>
-                        <span class="ship-api">extract()</span>
-                        <span class="ship-api">tabs</span>
-                        <span class="ship-api">MCP</span>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Quickstart with tabs -->
-            <section class="section section--close reveal" aria-labelledby="close-title" id="try">
-                <div class="close-block">
-                    <h2 id="close-title" class="close-title" data-i18n="quickstart.title">Start building</h2>
-                    <p class="close-lede" data-i18n="try.lede">Install, launch a browser, and read your first page in a few lines.</p>
-
-                    <div class="try-shell">
-                        <div class="try-tabs" role="tablist" aria-label="TideSurf examples" data-i18n="try.aria" data-i18n-attr="aria-label">
-                            <button class="try-tab is-active" id="try-tab-launch" type="button" role="tab" aria-selected="true" aria-controls="try-panel-launch" data-try-tab="launch" data-i18n="try.launch">Launch</button>
-                            <button class="try-tab" id="try-tab-connect" type="button" role="tab" aria-selected="false" aria-controls="try-panel-connect" data-try-tab="connect" tabindex="-1" data-i18n="try.connect">Connect</button>
-                            <button class="try-tab" id="try-tab-mcp" type="button" role="tab" aria-selected="false" aria-controls="try-panel-mcp" data-try-tab="mcp" tabindex="-1" data-i18n="try.mcp">MCP</button>
-                        </div>
-                        <div class="try-panels">
-                            <div class="try-panel is-active" id="try-panel-launch" role="tabpanel" aria-labelledby="try-tab-launch" data-try-panel="launch">
-                                <div class="qs-install">
-                                    <pre><code><span class="tk-cm">$</span> <span class="tk-fn">npm install</span> @tidesurf/core</code></pre>
-                                </div>
-                                <div class="code-shell">
-                                    <div class="code-bar">
-                                        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-                                        <span class="mono">index.ts</span>
-                                    </div>
-                                    <pre><code><span class="tk-kw">const</span> browser = <span class="tk-kw">await</span> TideSurf.<span class="tk-fn">launch</span>()
-<span class="tk-kw">await</span> browser.<span class="tk-fn">navigate</span>(<span class="tk-str">"https://example.com"</span>)
-<span class="tk-kw">const</span> state = <span class="tk-kw">await</span> browser.<span class="tk-fn">getState</span>()</code></pre>
-                                </div>
-                            </div>
-                            <div class="try-panel" id="try-panel-connect" role="tabpanel" aria-labelledby="try-tab-connect" data-try-panel="connect" hidden>
-                                <div class="qs-install">
-                                    <pre><code><span class="tk-cm">$</span> <span class="tk-fn">npm install</span> @tidesurf/core</code></pre>
-                                </div>
-                                <div class="code-shell">
-                                    <div class="code-bar">
-                                        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-                                        <span class="mono">connect.ts</span>
-                                    </div>
-                                    <pre><code><span class="tk-kw">const</span> browser = <span class="tk-kw">await</span> TideSurf.<span class="tk-fn">connect</span>()
-<span class="tk-kw">await</span> browser.<span class="tk-fn">switchTab</span>(<span class="tk-num">0</span>)
-<span class="tk-kw">const</span> state = <span class="tk-kw">await</span> browser.<span class="tk-fn">getState</span>({ maxTokens: <span class="tk-num">500</span> })</code></pre>
-                                </div>
-                            </div>
-                            <div class="try-panel" id="try-panel-mcp" role="tabpanel" aria-labelledby="try-tab-mcp" data-try-panel="mcp" hidden>
-                                <div class="qs-install">
-                                    <pre><code><span class="tk-cm">$</span> <span class="tk-fn">bunx</span> tidesurf mcp</code></pre>
-                                </div>
-                                <div class="code-shell">
-                                    <div class="code-bar">
-                                        <span class="dot"></span><span class="dot"></span><span class="dot"></span>
-                                        <span class="mono">mcp.json</span>
-                                    </div>
-                                    <pre><code>{
-  <span class="tk-str">"mcpServers"</span>: {
-    <span class="tk-str">"tidesurf"</span>: {
-      <span class="tk-str">"command"</span>: <span class="tk-str">"bunx"</span>,
-      <span class="tk-str">"args"</span>: [
-        <span class="tk-str">"tidesurf"</span>,
-        <span class="tk-str">"mcp"</span>
-      ]
-    }
-  }
-}</code></pre>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="close-links">
-                        <a href="https://tidesurf.org/docs" class="footer-btn" style="--btn-color: var(--c-teal)" data-i18n="nav.docs">docs</a>
-                        <a href="https://github.com/TideSurf/core" class="footer-btn" style="--btn-color: var(--c-green)" data-i18n="nav.github">github</a>
-                        <a href="https://www.npmjs.com/package/@tidesurf/core" class="footer-btn" style="--btn-color: var(--c-gold)" data-i18n="nav.npm">npm</a>
-                    </div>
-                </div>
-            </section>
-
-            <footer class="footer reveal">
-                <nav class="footer-links" aria-label="TideSurf links">
-                    <a href="https://tidesurf.org/docs" class="footer-btn" style="--btn-color: var(--c-teal)" data-i18n="nav.docs">docs</a>
-                    <a href="https://github.com/TideSurf/core" class="footer-btn" style="--btn-color: var(--c-green)" data-i18n="nav.github">github</a>
-                    <a href="https://www.npmjs.com/package/@tidesurf/core" class="footer-btn" style="--btn-color: var(--c-gold)" data-i18n="nav.npm">npm</a>
-                    <a href="https://github.com/TideSurf/core" class="github-star" aria-label="Star TideSurf on GitHub">
-                        <span class="gh-logo"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="m 12.301 0 h 0.093 c 2.242 0 4.34 0.613 6.137 1.68 l -0.055 -0.031 c 1.871 1.094 3.386 2.609 4.449 4.422 l 0.031 0.058 c 1.04 1.769 1.654 3.896 1.654 6.166 c 0 5.406 -3.483 10 -8.327 11.658 l -0.087 0.026 c -0.063 0.02 -0.135 0.031 -0.209 0.031 c -0.162 0 -0.312 -0.054 -0.433 -0.144 l 0.002 0.001 c -0.128 -0.115 -0.208 -0.281 -0.208 -0.466 c 0 -0.005 0 -0.01 0 -0.014 v 0.001 q 0 -0.048 0.008 -1.226 t 0.008 -2.154 c 0.007 -0.075 0.011 -0.161 0.011 -0.249 c 0 -0.792 -0.323 -1.508 -0.844 -2.025 c 0.618 -0.061 1.176 -0.163 1.718 -0.305 l -0.076 0.017 c 0.573 -0.16 1.073 -0.373 1.537 -0.642 l -0.031 0.017 c 0.508 -0.28 0.938 -0.636 1.292 -1.058 l 0.006 -0.007 c 0.372 -0.476 0.663 -1.036 0.84 -1.645 l 0.009 -0.035 c 0.209 -0.683 0.329 -1.468 0.329 -2.281 c 0 -0.045 0 -0.091 -0.001 -0.136 v 0.007 c 0 -0.022 0.001 -0.047 0.001 -0.072 c 0 -1.248 -0.482 -2.383 -1.269 -3.23 l 0.003 0.003 c 0.168 -0.44 0.265 -0.948 0.265 -1.479 c 0 -0.649 -0.145 -1.263 -0.404 -1.814 l 0.011 0.026 c -0.115 -0.022 -0.246 -0.035 -0.381 -0.035 c -0.334 0 -0.649 0.078 -0.929 0.216 l 0.012 -0.005 c -0.568 0.21 -1.054 0.448 -1.512 0.726 l 0.038 -0.022 l -0.609 0.384 c -0.922 -0.264 -1.981 -0.416 -3.075 -0.416 s -2.153 0.152 -3.157 0.436 l 0.081 -0.02 q -0.256 -0.176 -0.681 -0.433 c -0.373 -0.214 -0.814 -0.421 -1.272 -0.595 l -0.066 -0.022 c -0.293 -0.154 -0.64 -0.244 -1.009 -0.244 c -0.124 0 -0.246 0.01 -0.364 0.03 l 0.013 -0.002 c -0.248 0.524 -0.393 1.139 -0.393 1.788 c 0 0.531 0.097 1.04 0.275 1.509 l -0.01 -0.029 c -0.785 0.844 -1.266 1.979 -1.266 3.227 c 0 0.025 0 0.051 0.001 0.076 v -0.004 c -0.001 0.039 -0.001 0.084 -0.001 0.13 c 0 0.809 0.12 1.591 0.344 2.327 l -0.015 -0.057 c 0.189 0.643 0.476 1.202 0.85 1.693 l -0.009 -0.013 c 0.354 0.435 0.782 0.793 1.267 1.062 l 0.022 0.011 c 0.432 0.252 0.933 0.465 1.46 0.614 l 0.046 0.011 c 0.466 0.125 1.024 0.227 1.595 0.284 l 0.046 0.004 c -0.431 0.428 -0.718 1 -0.784 1.638 l -0.001 0.012 c -0.207 0.101 -0.448 0.183 -0.699 0.236 l -0.021 0.004 c -0.256 0.051 -0.549 0.08 -0.85 0.08 c -0.022 0 -0.044 0 -0.066 0 h 0.003 c -0.394 -0.008 -0.756 -0.136 -1.055 -0.348 l 0.006 0.004 c -0.371 -0.259 -0.671 -0.595 -0.881 -0.986 l -0.007 -0.015 c -0.198 -0.336 -0.459 -0.614 -0.768 -0.827 l -0.009 -0.006 c -0.225 -0.169 -0.49 -0.301 -0.776 -0.38 l -0.016 -0.004 l -0.32 -0.048 c -0.023 -0.002 -0.05 -0.003 -0.077 -0.003 c -0.14 0 -0.273 0.028 -0.394 0.077 l 0.007 -0.003 q -0.128 0.072 -0.08 0.184 c 0.039 0.086 0.087 0.16 0.145 0.225 l -0.001 -0.001 c 0.061 0.072 0.13 0.135 0.205 0.19 l 0.003 0.002 l 0.112 0.08 c 0.283 0.148 0.516 0.354 0.693 0.603 l 0.004 0.006 c 0.191 0.237 0.359 0.505 0.494 0.792 l 0.01 0.024 l 0.16 0.368 c 0.135 0.402 0.38 0.738 0.7 0.981 l 0.005 0.004 c 0.3 0.234 0.662 0.402 1.057 0.478 l 0.016 0.002 c 0.33 0.064 0.714 0.104 1.106 0.112 h 0.007 c 0.045 0.002 0.097 0.002 0.15 0.002 c 0.261 0 0.517 -0.021 0.767 -0.062 l -0.027 0.004 l 0.368 -0.064 q 0 0.609 0.008 1.418 t 0.008 0.873 v 0.014 c 0 0.185 -0.08 0.351 -0.208 0.466 h -0.001 c -0.119 0.089 -0.268 0.143 -0.431 0.143 c -0.075 0 -0.147 -0.011 -0.214 -0.032 l 0.005 0.001 c -4.929 -1.689 -8.409 -6.283 -8.409 -11.69 c 0 -2.268 0.612 -4.393 1.681 -6.219 l -0.032 0.058 c 1.094 -1.871 2.609 -3.386 4.422 -4.449 l 0.058 -0.031 c 1.739 -1.034 3.835 -1.645 6.073 -1.645 h 0.098 h -0.005 Z m -7.64 17.666 q 0.048 -0.112 -0.112 -0.192 q -0.16 -0.048 -0.208 0.032 q -0.048 0.112 0.112 0.192 q 0.144 0.096 0.208 -0.032 Z m 0.497 0.545 q 0.112 -0.08 -0.032 -0.256 q -0.16 -0.144 -0.256 -0.048 q -0.112 0.08 0.032 0.256 q 0.159 0.157 0.256 0.047 Z m 0.48 0.72 q 0.144 -0.112 0 -0.304 q -0.128 -0.208 -0.272 -0.096 q -0.144 0.08 0 0.288 t 0.272 0.112 Z m 0.672 0.673 q 0.128 -0.128 -0.064 -0.304 q -0.192 -0.192 -0.32 -0.048 q -0.144 0.128 0.064 0.304 q 0.192 0.192 0.32 0.044 Z m 0.913 0.4 q 0.048 -0.176 -0.208 -0.256 q -0.24 -0.064 -0.304 0.112 t 0.208 0.24 q 0.24 0.097 0.304 -0.096 Z m 1.009 0.08 q 0 -0.208 -0.272 -0.176 q -0.256 0 -0.256 0.176 q 0 0.208 0.272 0.176 q 0.256 0.001 0.256 -0.175 Z m 0.929 -0.16 q -0.032 -0.176 -0.288 -0.144 q -0.256 0.048 -0.224 0.24 t 0.288 0.128 t 0.225 -0.224 Z"/></svg></span>
-                        <span class="gh-stars"><svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><span class="star-count" id="star-count"></span></span>
-                    </a>
-                </nav>
-                <div class="footer-prefs">
-                    <div class="theme-selector" role="group" aria-label="Theme">
-                        <button type="button" class="theme-btn" data-theme="light">light</button>
-                        <button type="button" class="theme-btn" data-theme="dark">dark</button>
-                    </div>
-                    <div class="lang-switcher">
-                        <button type="button" class="lang-btn" data-lang="en" aria-label="English">EN</button>
-                        <button type="button" class="lang-btn" data-lang="ja" aria-label="Japanese">JP</button>
-                        <button type="button" class="lang-btn" data-lang="ko" aria-label="Korean">KR</button>
-                    </div>
-                </div>
-            </footer>
         </main>
 
+        <footer class="site-footer">
+            <div>
+                <strong>TideSurf</strong>
+                <span>DOM-to-text runtime for browser agents.</span>
+            </div>
+            <nav class="footer-links" aria-label="Footer links">
+                <a class="patch-link" href="https://tidesurf.org/docs" style="--patch-color: var(--c-teal)">Docs</a>
+                <a class="patch-link" href="https://github.com/TideSurf/core" style="--patch-color: var(--c-green)">GitHub</a>
+                <a class="patch-link" href="https://www.npmjs.com/package/@tidesurf/core" style="--patch-color: var(--c-rust)">npm</a>
+            </nav>
+            <div class="theme-selector" role="group" aria-label="Theme">
+                <button type="button" class="theme-btn" data-theme="light">light</button>
+                <button type="button" class="theme-btn" data-theme="dark">dark</button>
+            </div>
+        </footer>
+
         <div id="cookie-notice" class="cookie-notice" hidden>
-            <span data-i18n="privacy.cookie.text">Cloudflare Analytics only.</span>
-            <button id="cookie-dismiss" data-i18n="privacy.cookie.action">OK</button>
+            <span>Cloudflare Analytics only.</span>
+            <button id="cookie-dismiss">OK</button>
         </div>
 
         <script type="module" src="/src/main.ts"></script>
