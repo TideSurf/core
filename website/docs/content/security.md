@@ -1,10 +1,10 @@
 # Security model
 
-TideSurf runs with full access to Chrome's DevTools Protocol. Understanding the security boundaries helps you deploy safely.
+TideSurf uses Chrome's DevTools Protocol with browser-level power. Treat its session boundary as part of your application security model.
 
 ## Read-only mode
 
-Launch or connect with `readOnly: true` to restrict the session to observation-only. This prevents:
+`readOnly: true` limits the agent tool surface to observation. It removes:
 
 - Page navigation and modification (`navigate`, `click`, `type`, `select`, `scroll`)
 - JavaScript execution (`evaluate`)
@@ -12,13 +12,13 @@ Launch or connect with `readOnly: true` to restrict the session to observation-o
 - File operations (`upload`, `download`)
 - Tab creation and closure (`new_tab`, `close_tab`)
 
-Observation tools remain available: `get_state`, `extract`, `list_tabs`, `switch_tab`, `search`, `screenshot`.
+Observation tools remain: `get_state`, `extract`, `list_tabs`, `switch_tab`, `search`, and `screenshot`.
 
-**Important:** Read-only mode is enforced at the tool layer (tool executor and MCP server). If you use the SDK directly via `browser.getPage()`, you bypass this guard and can still call mutating methods on the `SurfingPage` instance. This is by design: SDK users are expected to manage their own access control. The `TideSurf.navigate()` method does enforce read-only at the SDK level.
+Read-only mode is enforced by the tool executor and MCP server. Direct SDK access through `browser.getPage()` bypasses that tool guard, so the host application must control `SurfingPage` methods. `TideSurf.navigate()` does enforce read-only mode at the SDK level.
 
 ## Filesystem confinement
 
-The `upload` and `download` tools restrict file access to `fileAccessRoots`, which default to the current working directory and the OS temp directory. Override explicitly:
+`upload` and `download` stay inside `fileAccessRoots`, which defaults to the current working directory and OS temp directory. Expand it explicitly:
 
 ```typescript
 const browser = await TideSurf.launch({
@@ -30,7 +30,7 @@ Paths outside these roots are rejected with a `ValidationError`.
 
 ## Input validation
 
-All tool inputs are validated before execution:
+Tool inputs are validated before execution:
 
 | Input | Validation |
 |---|---|
@@ -43,21 +43,21 @@ All tool inputs are validated before execution:
 
 ## CDP connection security
 
-- TideSurf connects to Chrome over a local WebSocket. The CDP port (default 9222) should not be exposed to untrusted networks.
-- When using `TideSurf.connect()`, TideSurf attaches to whatever Chrome instance is listening. It does not verify identity: ensure only your Chrome is on the expected port.
-- `close()` on a connected (not launched) instance only disconnects CDP. It never kills the browser process.
+- Keep the local CDP WebSocket port, `9222` by default, away from untrusted networks.
+- `TideSurf.connect()` attaches to the Chrome instance listening on the target port without identity verification. Control access to that port.
+- `close()` only disconnects a connected instance. It does not stop that Chrome process.
 
 ## Computed visibility and element state
 
-TideSurf now inspects computed CSS styles to determine element visibility and interactability. Before serializing the DOM, it checks properties including `opacity`, `visibility`, `display`, `clip-path`, and `pointer-events` to filter out elements that are present in the DOM but not visible or usable on the page.
+Before serialization, TideSurf checks `opacity`, `visibility`, `display`, `clip-path`, and `pointer-events`. Hidden or unusable elements stay out of the agent surface.
 
-This filtering uses `data-os-state` attributes injected into the DOM during the `getState()` walk. In theory, page JavaScript could race against TideSurf's DOM walk via a `MutationObserver` and spoof these attributes, such as marking a hidden element as visible. TideSurf mitigates this by cleaning up all `data-os-state` attributes before each `getState()` call, so stale or spoofed values from a previous pass are removed before the fresh walk begins.
+The visibility pass temporarily injects `data-os-state` attributes. Page JavaScript could race the DOM walk through a `MutationObserver` and spoof them. TideSurf clears all such attributes before each `getState()` pass, removing stale values before the fresh walk.
 
-For debugging purposes, the `includeHidden` option can be passed to `getState()` to bypass CSS visibility filtering and include all DOM elements regardless of their computed style. This is useful for inspecting pages where elements are intentionally hidden (e.g. off-screen menus, lazy-loaded content) but should not be used in production agent loops, as it may expose non-interactive elements that inflate token usage.
+`getState({ includeHidden: true })` bypasses visibility filtering for debugging hidden menus, lazy content, and off-screen elements. Keep it out of production agent loops; it exposes non-interactive DOM and raises token use.
 
 ## Evaluate safety
 
-The `evaluate` tool executes arbitrary JavaScript in the page context. It is blocked in read-only mode but available otherwise.
+`evaluate` runs arbitrary JavaScript in the page context and stays unavailable in read-only mode.
 
 **Validation applied:**
 - Maximum length: 10000 characters
@@ -68,7 +68,7 @@ The `evaluate` tool executes arbitrary JavaScript in the page context. It is blo
   - `eval`, `Function`: prevents dynamic code execution
 
 **Important limitations:**
-- The validator does NOT block `require`, `import`, `process`, or Node.js-specific keywords because these are not available in the browser page context
+- The validator does not block `require`, `import`, `process`, or Node.js-specific keywords; they are unavailable in the browser page context
 - Page-side JavaScript can still perform actions like navigation, form submission, and DOM manipulation
-- `evaluate` has the same power as a browser DevTools console: use with equivalent caution
-- Always validate any data returned from `evaluate` before using it in subsequent operations
+- `evaluate` has browser DevTools console power and needs the same caution
+- Validate returned data before using it in later operations

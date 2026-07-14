@@ -3,7 +3,7 @@
   let theme = prefersDark ? "dark" : "light";
 
   try {
-    const savedTheme = window.localStorage.getItem("tidesurf-docs-theme");
+    const savedTheme = window.localStorage.getItem("tidesurf-theme");
     if (savedTheme === "dark" || savedTheme === "light") {
       theme = savedTheme;
     }

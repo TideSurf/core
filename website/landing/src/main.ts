@@ -1,4 +1,5 @@
 import "./style.css";
+import { initScrollTone } from "../../shared/scroll-tone";
 
 type Theme = "light" | "dark";
 
@@ -48,7 +49,9 @@ function initTheme(): void {
 function applyTheme(): void {
   document.documentElement.setAttribute("data-theme", currentTheme);
   document.querySelectorAll<HTMLButtonElement>(".theme-btn[data-theme]").forEach((button) => {
-    button.classList.toggle("active", button.dataset.theme === currentTheme);
+    const active = button.dataset.theme === currentTheme;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
   });
 }
 
@@ -74,75 +77,24 @@ function initCopyButtons(): void {
   });
 }
 
-async function initGitHubStars(): Promise<void> {
-  const star = document.getElementById("github-star");
-  const count = document.getElementById("star-count");
-  if (!star || !count) return;
-
-  try {
-    const response = await fetch("https://api.github.com/repos/TideSurf/core", {
-      headers: { Accept: "application/vnd.github+json" },
-    });
-    if (!response.ok) return;
-
-    const data = (await response.json()) as { stargazers_count?: number };
-    if (data.stargazers_count == null) return;
-
-    count.textContent =
-      data.stargazers_count >= 1000
-        ? `${(data.stargazers_count / 1000).toFixed(1)}k`
-        : String(data.stargazers_count);
-    star.hidden = false;
-  } catch {
-    // The star count is nice to have, not required for the page.
-  }
-}
-
 function initCookieNotice(): void {
   const notice = document.getElementById("cookie-notice");
   const dismiss = document.getElementById("cookie-dismiss");
-  const themeFloat = document.querySelector<HTMLElement>(".theme-float");
   if (!notice || !dismiss) return;
 
   if (safeStorageGet("tidesurf-cookie-dismissed") === "true") {
     notice.hidden = true;
+    document.body.classList.remove("cookie-visible");
     return;
   }
 
   notice.hidden = false;
-  // Lift the floating theme switch above the notice so it stays clickable.
-  const lift = () => {
-    if (themeFloat && !notice.hidden) {
-      themeFloat.style.bottom = `${notice.offsetHeight + 12}px`;
-    }
-  };
-  lift();
+  document.body.classList.add("cookie-visible");
   dismiss.addEventListener("click", () => {
     safeStorageSet("tidesurf-cookie-dismissed", "true");
     notice.hidden = true;
-    if (themeFloat) themeFloat.style.bottom = "";
+    document.body.classList.remove("cookie-visible");
   });
-}
-
-function initReveal(): void {
-  const reveals = Array.from(document.querySelectorAll<HTMLElement>(".reveal"));
-  if (!reveals.length || prefersReducedMotion() || !("IntersectionObserver" in window)) {
-    reveals.forEach((element) => element.classList.add("is-visible"));
-    return;
-  }
-
-  const observer = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) return;
-        entry.target.classList.add("is-visible");
-        observer.unobserve(entry.target);
-      });
-    },
-    { threshold: 0.16, rootMargin: "0px 0px -8% 0px" }
-  );
-
-  reveals.forEach((element) => observer.observe(element));
 }
 
 type RGB = [number, number, number];
@@ -175,7 +127,9 @@ function initWaves(): void {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
-  const reduced = prefersReducedMotion();
+  const reducedData = window.matchMedia("(prefers-reduced-data: reduce)").matches;
+  const compact = window.matchMedia("(max-width: 720px)").matches;
+  const shouldAnimate = !prefersReducedMotion() && !reducedData && !compact;
   const SQUARE = 32; // css px per tile
   const GAP = 0; // flush tiles — squares read via colour diff, no gaps
   const BASE_SPEED = 0.04; // 0.25x of the original drift
@@ -184,11 +138,14 @@ function initWaves(): void {
   let dpr = Math.min(window.devicePixelRatio || 1, 1.5);
   let cols = 0;
   let rows = 0;
+  let fieldWidth = 0;
+  let fieldHeight = 0;
   let phase = 0;
   let boost = 0;
   let scrollProgress = 0;
   let lastScroll = window.scrollY;
   let raf = 0;
+  let staticRaf = 0;
   let running = false;
 
   let paper: RGB = [231, 235, 239];
@@ -204,8 +161,10 @@ function initWaves(): void {
 
   function resize(): void {
     dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-    const w = window.innerWidth;
-    const h = window.innerHeight;
+    const w = document.documentElement.clientWidth;
+    const h = Math.ceil(window.innerHeight);
+    fieldWidth = w;
+    fieldHeight = h;
     canvas.width = Math.ceil(w * dpr);
     canvas.height = Math.ceil(h * dpr);
     canvas.style.width = `${w}px`;
@@ -222,8 +181,8 @@ function initWaves(): void {
   }
 
   function draw(): void {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
+    const w = fieldWidth;
+    const h = fieldHeight;
     ctx.clearRect(0, 0, w, h);
     const size = SQUARE - GAP;
     for (let r = 0; r < rows; r++) {
@@ -238,6 +197,7 @@ function initWaves(): void {
         // accent so the lower sections read more easily.
         let col = mixColor(paper, paper3, m * 0.55 + scrollProgress * 0.32);
         col = mixColor(col, accent, m * 0.08 + scrollProgress * 0.12);
+        col = mixColor(col, [7, 8, 6], scrollProgress * (currentTheme === "dark" ? 0.32 : 0.22));
         ctx.fillStyle = `rgb(${col[0] | 0},${col[1] | 0},${col[2] | 0})`;
         ctx.fillRect(c * SQUARE, y, size, size);
       }
@@ -253,7 +213,7 @@ function initWaves(): void {
   }
 
   function start(): void {
-    if (running || reduced) return;
+    if (running || !shouldAnimate) return;
     running = true;
     raf = requestAnimationFrame(loop);
   }
@@ -272,23 +232,32 @@ function initWaves(): void {
     // touch more accent as you descend. Subtle, continuous, no flicker.
     const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
     scrollProgress = Math.min(1, Math.max(0, window.scrollY / maxScroll));
+    if (!shouldAnimate && !staticRaf) {
+      staticRaf = requestAnimationFrame(() => {
+        staticRaf = 0;
+        draw();
+      });
+    }
   }
 
   resize();
   readColors();
+  onScroll();
   draw();
 
-  if (!reduced) {
+  window.addEventListener(
+    "resize",
+    () => {
+      resize();
+      draw();
+    },
+    { passive: true }
+  );
+
+  window.addEventListener("scroll", onScroll, { passive: true });
+
+  if (shouldAnimate) {
     start();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    window.addEventListener(
-      "resize",
-      () => {
-        resize();
-        draw();
-      },
-      { passive: true }
-    );
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) stop();
       else start();
@@ -306,42 +275,16 @@ function initWaves(): void {
   });
 }
 
-/* Highlight-pill charm: on hover, a pill gently fades to an alternate word
-   (e.g. "handles" -> "little nametags"), then fades back. Opt-in via [data-alt];
-   the fading text lives in a nested .hl-i so the pill background stays solid. */
-function initHoverSwap(): void {
-  const swaps = Array.from(document.querySelectorAll<HTMLElement>(".hl[data-alt]"));
-  for (const el of swaps) {
-    const inner = el.querySelector<HTMLElement>(".hl-i");
-    if (!inner) continue;
-    const original = inner.textContent ?? "";
-    const alt = el.dataset.alt ?? original;
-    let timer: number | undefined;
-    const fadeTo = (text: string): void => {
-      window.clearTimeout(timer);
-      el.classList.add("is-swapping");
-      timer = window.setTimeout(() => {
-        inner.textContent = text;
-        el.classList.remove("is-swapping");
-      }, 140);
-    };
-    el.addEventListener("mouseenter", () => fadeTo(alt));
-    el.addEventListener("mouseleave", () => fadeTo(original));
-  }
-}
-
-async function init(): Promise<void> {
+function init(): void {
   initTheme();
+  initScrollTone();
   initCopyButtons();
   initCookieNotice();
-  initReveal();
-  initHoverSwap();
   initWaves();
-  await initGitHubStars();
 }
 
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", () => void init());
+  document.addEventListener("DOMContentLoaded", init);
 } else {
-  void init();
+  init();
 }

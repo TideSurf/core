@@ -1,211 +1,176 @@
 # TideSurf Website Design Contract
 
-This document is the source of truth for future agents editing `website/`.
-Follow it before changing the landing page or docs UI.
+This is the source of truth for `website/landing`, `website/docs`, and shared
+website styles.
 
-## Product Context
+## Reference
 
-TideSurf is for engineers and AI/LLM developers building browser agents.
-The website should feel technical, refined, and efficient: dense enough for
-serious builders, but calm enough to scan quickly.
+The visual reference is `../../../mercuriusdream.github.io`, especially
+`src/styles/global.css`.
 
-The core message is:
+Borrow its compact reading rhythm, warm paper, plainspoken copy, square color
+patches, and integrated utility controls. Do not copy its personal-site content
+structure or every interaction literally.
 
-- TideSurf connects agents to Chromium through CDP.
-- TideSurf compresses live DOM into token-efficient text.
-- Agents use stable element IDs to observe and act.
-- No screenshots or vision-model workflow should be implied.
+## Visual Character
 
-## Visual Direction
+TideSurf is humane, exact, and quietly opinionated.
 
-Use minimalist editorial tooling, not SaaS spectacle.
+- Warm greyscale paper and near-black ink.
+- TideSurf teal as the primary punctum.
+- Muted green, gold, rust, rose, and violet only for small semantic patches.
+- Square edges, flat fills, no decorative rules, shadows, glow, glass, or
+  gradients.
+- Code is evidence and instruction, never wallpaper.
+- No generic card grids, metric badges, or ornamental dashboard chrome.
 
-- Foundation: greyscale surfaces and text.
-- Accent: TideSurf blue `#0055FF`, used as pinpoints only.
-- Shape: tight radii, usually `3px`; product mock shells can reach `8px`.
-- Depth: restrained material elevation only. No glow, no aura, no neon edge.
-- Composition: left-aligned and asymmetric where possible.
-- Code examples are content, not wallpaper.
+## Shared Foundation
 
-Avoid:
+Both sites import `website/shared/foundation.css`.
 
-- Purple/cyan gradients, gradient text, neon dark-mode accents.
-- Hero metric circles or big stat-badge clusters.
-- Decorative glassmorphism, bokeh, blobs, or glow outlines.
-- Repeated icon-card grids as the main visual system.
-- Real interactive controls inside decorative mock-ups.
+Light theme:
 
-## Typography
+- `paper`: `#ECEDEA`
+- `paper-2`: `#E0E1DD`
+- `paper-3`: `#D2D3CF`
+- `ink`: `#161716`
 
-Landing uses:
+Dark theme:
 
-- Body: `IBM Plex Sans`, then CJK fallbacks.
-- Code: `IBM Plex Mono`, then system monospace.
-- CJK: `Noto Sans JP` and `Noto Sans KR`.
+- `paper`: `#1A1A18`
+- `paper-2`: `#242422`
+- `paper-3`: `#2E2E2C`
+- `ink`: `#E8E9E6`
 
-Rules:
+Typography:
 
-- Do not reintroduce Inter, Roboto, Arial, Open Sans, or system-default-only
-  typography for the primary design.
-- Keep letter spacing at `0` for normal headings and body text.
-- Uppercase micro-labels may use positive tracking.
-- Body text must stay readable at mobile sizes.
-- Use weight and spacing for hierarchy before adding color.
+- UI and prose: `Zalando Sans`, then `Gothic A1` and system fallbacks.
+- Code only: `IBM Plex Mono`, then system monospace.
+- Landing headings may use fluid sizing. Docs UI uses a fixed, compact scale.
+- Prose measure stays between 65 and 75 characters where practical.
 
-## Color And Theme
+## Identity
 
-All product UI color should come from CSS tokens in
-`website/landing/src/style.css`.
+- The primary mark is a solid square tide field with one deeper open waterline
+  cut through its middle. The square is the glyph itself, not a container
+  around the wordmark.
+- The horizontal lockup pairs that mark with open `TideSurf` lettering:
+  `Tide` in warm ink and `Surf` in teal. Product headers, README files,
+  browser tabs, and social art reuse the exact tide geometry.
+- Keep the lockup compact and free of gradients, shadows, containers, or
+  detached alternate symbols.
 
-Allowed accent behavior:
+## Patch Controls
 
-- Blue active state.
-- Blue element-ID chips or one-pixel connectors.
-- Blue focus indicator.
-- Blue syntax emphasis for function/tool identifiers.
+`.patch-control` is the shared button and compact-link primitive.
 
-Syntax highlighting should remain greyscale + blue. Do not add green,
-orange, purple, cyan, or red token categories unless the whole design system
-is intentionally revised.
+- Flat color-mix background, square corners, medium weight.
+- Hover changes fill and text color only.
+- No hover scale, rotate, translate, bounce, or word replacement.
+- Active state darkens the fill without moving the element.
+- Keyboard focus inverts paper and ink as a clear square box. Underlines and
+  decorative outlines stay out of the control language, but focus never
+  disappears.
+- Mobile hit areas are at least 44px.
 
-## Mock-Up Rules
+Use the same primitive for navigation actions, theme and language controls,
+copy buttons, documentation actions, and final calls to action.
 
-The landing page mock-ups should communicate the real TideSurf loop:
+The shared `light` / `dark` selector floats at bottom-left on both sites. While
+the analytics notice is visible, the selector overlays its reserved left-hand
+space at a higher z-index; it does not create a second row. Consent copy stays
+plain and its `OK` action uses the green patch.
 
-1. Chat request.
-2. Agent tool call or reasoning step.
-3. Browser or compressed DOM state.
+## Landing
 
-Hero mock-up:
+The landing is a brand surface. Its first viewport belongs to the thesis,
+install action, and global navigation; product proof begins below the fold.
 
-- Use a live-page panel paired with compressed DOM output.
-- Keep the story direct: live page element IDs map visibly to compressed DOM
-  rows and a small tool-call rail. Avoid generic app-dashboard chrome.
-- It may contain button-like shapes as visual samples, but they must not be
-  focusable or clickable.
-- On tablet/mobile, stack before any clipping occurs.
-- Keep it visually quiet enough to support "Surf the Tide"; it should not
-  overpower the headline.
+Structure:
 
-Main usage mock-up:
+1. Thesis, install command, and a direct link to the real output.
+2. A raw-HTML to TideSurf-text specimen using the documented page format.
+3. The live loop: read state, choose a handle, use the page.
+4. Operational capabilities and guardrails as compact rows.
+5. Final docs and install action.
 
-- Three panes: `Chat`, `Agent`, `Browser`.
-- Animate only transform, opacity, background, and color.
-- Reduced motion must show a stable final state.
+The square wave field is a TideSurf-only signature. Keep it quiet and fixed
+behind the page so no section edge can cut it off. Page depth darkens this one
+flat canvas; scrolling back toward the top restores its starting tone.
 
-## Accessibility And Interaction
+Do not make sections invisible before an IntersectionObserver fires. Any reveal
+is progressive enhancement and may only affect decoration.
 
-Required:
+## Documentation
 
-- Every real interactive element needs a visible keyboard focus state.
-- Focus states may use a solid blue outline; never use glow.
-- Touch targets should be at least `44px` in either the element or its hit area.
-- Decorative mock controls must be spans or aria-hidden visual elements, not
-  buttons or links.
-- Hidden navigation and drawers must be removed from the focus order with
-  `inert` or explicit tab index management while closed.
-- Tabs must keep `role="tablist"`, `role="tab"`, `aria-selected`,
-  `aria-controls`, roving `tabIndex`, and hidden panels in sync.
-- Language switching should update visible labels and relevant aria labels.
+Docs are a product surface. Familiar navigation and density are useful, but the
+shell must still feel like TideSurf.
 
-## Responsive Rules
+- Always show the `TideSurf / Docs` identity in the first viewport.
+- Desktop navigation lives in the page margin as a slim reading index. It must
+  not become a contrasting full-height app slab or a separate browse modal.
+- Active navigation is a snug color patch, not a full-width selection bar.
+- Hide the table of contents before the reading column becomes cramped.
+- Mobile uses a compact branded top bar and an inert off-canvas drawer.
+- The default shell language is English while documentation content is English.
+  A saved manual language choice may still localize shell labels.
+- Inline links, theme controls, and navigation use the same restrained patch
+  vocabulary as the landing. Do not add a page-action slab or visible
+  `copy page` / `llms.txt` toolbar beside every title.
 
-Use content-driven breakpoints. The hero mock-up has historically clipped at
-tablet widths, so do not lower the stack breakpoint without testing.
+## README And Copy
 
-Minimum checks before shipping:
+- The README is a compact product handoff, not a badge wall or a marketing
+  microsite. Use only the headings needed to install, understand, and operate.
+- Prefer direct declarative sentences. Reduce repeated conditional openings,
+  stacked plural lists, ornamental blank lines, and Markdown dividers.
+- Code and documented behavior stay exact even where prose becomes shorter.
 
-- `390x844` phone portrait.
-- `768x1024` tablet portrait.
-- `1000x900` tablet/desktop transition.
-- `1440x1000` desktop.
+## Responsive Checks
+
+Verify all website work at:
+
+- `390x844`
+- `768x1024`
+- `1000x900`
+- `1440x1000`
 
 At every width:
 
-- No horizontal overflow or hidden clipping of primary content.
-- Hero title, install command, and mock-up must not overlap.
-- Mock-up panels can stack, but core product story must remain present.
-
-## Landing Main Structure
-
-The landing `<main>` is intentionally organized as one technical narrative,
-not as independent marketing sections. Future edits should preserve this
-sequence:
-
-1. Compression: raw HTML becomes compact TideSurf text.
-2. Usage loop: chat/request, agent tool call, browser result.
-3. Evidence: token and cost benchmark, integrated near the compression story.
-4. Capabilities: tools, budgets, auto-connect, MCP as dense editorial rows,
-   not another card grid.
-5. Guardrails: read-only, filesystem, validation, local CDP as a compact
-   production-readiness checklist.
-6. Try It: tabbed install/use examples as the final action.
-
-Keep the `story-band` model unless there is a full replacement design. Prefer
-fewer section wrappers, stronger transitions between ideas, and one or two
-high-quality mock-ups over many separate cards. Do not restore the old bento
-feature grid, metric circles, or separated benchmark block as the main page
-structure. The main page should feel like a developer can scan the full product
-loop in under a minute.
-
-Each `story-band` must include a visual explanation of its message, preferably
-repo-native SVG that can animate with CSS. The current baseline is at least one
-purposeful animation per band:
-
-- Compression: DOM pruning and token reduction.
-- Patterns: chat request, agent tool call, browser state.
-- Features: one motion SVG per capability, not a static table.
-- Security: write blocking and local CDP loop.
-- Try It: install flow and tab switching.
-
-Keep these visuals explanatory, not decorative. Use transform, opacity,
-stroke-dashoffset, fill/color changes, and small background pulses only. Every
-new animation needs a reduced-motion static state.
+- No horizontal page overflow.
+- No clipped titles, install commands, code shells, or navigation.
+- Mobile controls have usable hit areas.
+- The docs reading column does not collapse beside an unnecessary table of
+  contents.
+- Landing proof remains visible and understandable without animation.
 
 ## Performance And Motion
 
-Prefer CSS transform and opacity. Avoid `transition: all`.
-
-Never make primary page content invisible by default for scroll-reveal effects.
-Full-page screenshots, print/export, crawlers, slow scripts, and reduced-motion
-users must see complete content without needing an IntersectionObserver to fire.
-Reveal classes may add subtle enhancement, but the baseline state must render
-visible content.
-
-Do not use `content-visibility: auto` on major marketing sections unless
-full-page screenshots, print/export, and visual-regression tools have been
-verified. Stable rendering is more important than a marginal paint win here.
-
-Animations should be calm:
-
-- Short distances.
-- No bounce or elastic easing.
-- No decorative motion that competes with reading.
-- Expensive decorative motion should be desktop-only, and should be skipped
-  for reduced motion, reduced data, and compact mobile contexts.
-- Respect `prefers-reduced-motion`.
+- Animate only state changes and the quiet landing wave field.
+- Wheel, trackpad, touch, keyboard, and scrollbar input stay native. Browser
+  smoothing is reserved for explicit anchor navigation.
+- Use opacity or transform only when motion is necessary.
+- No hover movement.
+- Respect `prefers-reduced-motion` and `prefers-reduced-data`.
+- Pause continuous animation when the page is hidden.
+- Never hide primary content by default.
+- Prefer short declarative copy. Avoid repeated `when` / `if` / `then` clauses
+  and ornamental blank lines.
 
 ## Docs Code Rendering
 
-Syntax highlighting in docs must operate from `textContent`, escape the source,
-and then insert highlight spans. Do not run regex replacements over `innerHTML`;
-that can highlight attributes inside generated markup and leak strings like
-`class="tk-str"` into visible code blocks.
+Syntax highlighting must start from `textContent`, escape the source, and only
+then insert highlight spans. Never run highlighting replacements over generated
+`innerHTML`.
 
-## Verification Checklist
+## Verification
 
-Run from `website/landing`:
+Run both builds from the repository root:
 
 ```bash
-bun run build
+bun run build:web:landing
+bun run build:web:docs
 ```
 
-Then visually inspect local preview/dev server at desktop, tablet, and mobile
-widths. Confirm:
-
-- "Surf the Tide" remains the hero heading.
-- No legacy console-framed usage UI remains.
-- No metric circles return.
-- Mock-up buttons are not in the keyboard tab order.
-- Try It tabs work by click and arrow keys.
-- Theme and language switches do not break layout.
+Then inspect the four target viewports, both themes, keyboard focus, the docs
+drawer, copy controls, theme persistence, and browser console output.

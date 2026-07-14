@@ -1,36 +1,36 @@
 # Multi-tab
 
-TideSurf supports multiple browser tabs with independent state. Your agent can compare search results, cross-reference documentation, or manage several workflows in parallel through one TideSurf instance.
+One TideSurf instance can manage several tabs with independent state. Agents can compare results, cross-reference documentation, and move between workflows.
 
 ## Opening and managing tabs
 
 ```typescript
-// Open a new tab and navigate to a URL
+// Open a URL in a new tab
 const tab = await browser.newTab("https://example.com");
 
-// Open a blank tab (navigates later)
+// Open a blank tab
 const blankTab = await browser.newTab();
 await browser.navigate("https://docs.example.com");
 
-// List all open tabs with their IDs and URLs
+// List tabs
 const tabs = await browser.listTabs();
 // → [{ id: "abc123", url: "https://example.com", title: "Example" }, ...]
 
 // Switch the active tab
 await browser.switchTab(tabs[0].id);
 
-// Close a specific tab
+// Close a tab
 await browser.closeTab(tab.id);
 ```
 
 ## How tab state works
 
-Each tab keeps its own URL, DOM tree, navigation history, and element ID assignments. When you call `getState()`, it always returns the state of the currently active tab. Switching tabs changes which page all subsequent operations, such as click, type, scroll, and navigate, apply to.
+Each tab keeps its own URL, DOM, history, and element IDs. `getState()` reads the active tab; click, type, scroll, and navigation also target that tab.
 
-This means an agent can open a reference page in one tab, switch to a form in another tab, fill out the form using information from the reference page, and then close the reference tab: all through the same TideSurf instance.
+For example, an agent can read a reference page, switch to a form, enter the referenced value, and close the reference tab.
 
 ```typescript
-// Example: cross-reference between two pages
+// Cross-reference two pages
 await browser.newTab("https://docs.example.com/api");
 const docsState = await browser.getState();
 // Agent reads API details from docsState.content
@@ -42,17 +42,17 @@ await page.click("B1");
 
 ## Tab lifecycle
 
-Tabs persist until explicitly closed or until the entire browser session ends via `browser.close()`. There is no automatic tab cleanup, so if your agent opens many tabs over time, you should close the ones it no longer needs to keep resource usage reasonable.
+Tabs persist until `closeTab()` or `browser.close()`. Close unused tabs to release resources.
 
-When a tab is closed, its state is discarded and its tab ID becomes invalid. Attempting to switch to a closed tab will throw an error.
+Closing a tab discards its state and invalidates its ID. A later `switchTab()` with that ID throws an error.
 
 ## Tool definitions for multi-tab
 
-When using TideSurf's tool definitions with an LLM, four tab-related tools are available:
+The LLM tool surface includes four tab operations:
 
 | Tool | Parameters | What it does |
 |---|---|---|
-| `list_tabs` | none | Returns an array of all open tabs with their IDs, URLs, and titles |
-| `new_tab` | `url?` | Opens a new tab, optionally navigating to the given URL |
-| `switch_tab` | `tabId` | Switches the active tab to the one with the given ID |
-| `close_tab` | `tabId` | Closes the tab with the given ID |
+| `list_tabs` | none | Return open tabs with IDs, URLs, and titles |
+| `new_tab` | `url?` | Open a blank tab or a URL |
+| `switch_tab` | `tabId` | Activate a tab |
+| `close_tab` | `tabId` | Close a tab |

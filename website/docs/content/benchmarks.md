@@ -1,10 +1,10 @@
 # Benchmarks
 
-TideSurf compresses the live DOM into token-efficient text. The compression ratio depends on how bloated the source HTML is: heavy sites with deep nesting, SVGs, and generated CSS classes see the biggest gains.
+TideSurf compresses the live DOM into model-readable text. Deep nesting, SVGs, and generated CSS usually produce the largest reductions.
 
 ## Live-site results
 
-These numbers come from `scripts/benchmark-live.ts`, which launches headless Chrome, navigates to real-world sites, and compares the full rendered DOM against TideSurf's compressed output.
+`scripts/benchmark-live.ts` loads real sites in headless Chrome and compares the rendered DOM with TideSurf output.
 
 | Site | Raw HTML | TideSurf | Reduction | Ratio | Parse time |
 |------|----------|----------|-----------|-------|------------|
@@ -17,31 +17,12 @@ These numbers come from `scripts/benchmark-live.ts`, which launches headless Chr
 
 ## Understanding the numbers
 
-### Why compression varies
+Compression follows page structure:
 
-The compression ratio depends on the structure of the source HTML:
+- **10–32x:** GitHub and Wikipedia carry deep trees, inline SVG, generated classes, wrappers, and embedded scripts or styles.
+- **8–14x:** MDN and Hacker News carry less structural overhead, but text truncation, URL compression, and the compact format still remove substantial weight.
 
-- **Very high compression (10-32x):** Sites like GitHub and Wikipedia have deeply nested DOM trees, inline SVGs, auto-generated class names, wrapper `<div>`s, and embedded scripts/styles. TideSurf strips all of this while preserving every element losslessly.
-
-- **High compression (8-14x):** Sites like MDN and Hacker News have moderate structural overhead. Text truncation, URL compression, and the compact output format combine for significant gains even on leaner pages.
-
-### What gets removed
-
-TideSurf's DOM walker discards:
-
-- All `<script>` and `<style>` elements
-- CSS class names and inline styles
-- Wrapper/layout `<div>`s with no semantic meaning
-- SVG icons and decorative elements
-- Hidden elements (`display: none`, `aria-hidden`)
-- Comment nodes and processing instructions
-
-### What gets preserved
-
-- **Interactive elements**: links, buttons, inputs, selects (assigned `L`/`B`/`I`/`S` IDs)
-- **Visible text content**: headings, paragraphs, labels, table cells
-- **Semantic structure**: `<nav>`, `<main>`, `<article>`, `<form>`, `<table>`
-- **Element hierarchy**: enough nesting to understand the page layout
+The DOM walker removes scripts, styles, CSS classes, layout wrappers, decorative SVG, hidden elements, comments, and processing instructions. It keeps controls with short IDs, visible copy, semantic containers, tables, and enough hierarchy to understand the page.
 
 ## Cost impact
 
@@ -53,11 +34,11 @@ Token costs at typical LLM pricing ($5/M input tokens):
 | Wikipedia | $0.62 | $0.06 | $0.56 |
 | MDN Docs | $0.12 | $0.009 | $0.12 |
 
-For an agent that browses 100 pages per session, TideSurf can reduce input costs by **88-97%**.
+A 100-page session can reduce input cost by **88–97%**.
 
 ## Context window impact
 
-Most LLMs have context windows of 128K-200K tokens. A single raw GitHub page (84,236 tokens) uses **42-66%** of the context window. With TideSurf (2,593 tokens), the same page uses **1-2%**: leaving room for the agent's instructions, conversation history, and dozens of additional pages in a single session.
+Across a 128K–200K context window, the raw GitHub page uses **42–66%**. TideSurf output uses **1–2%**, leaving room for instructions, conversation history, and more pages.
 
 ## Running benchmarks yourself
 
@@ -69,7 +50,7 @@ bun scripts/benchmark-live.ts
 bun run test:bench
 ```
 
-The live benchmark tests 8 sites by default. Edit the `SITES` array in `scripts/benchmark-live.ts` to add your own. Unit-level compression benchmarks serve trusted local HTTP fixtures so navigation follows the same URL policy as normal browser sessions.
+The live benchmark covers eight sites by default. Add targets through the `SITES` array. Unit benchmarks use trusted local HTTP fixtures under the normal navigation policy.
 
 ## Methodology
 
@@ -79,4 +60,4 @@ The live benchmark tests 8 sites by default. Edit the `SITES` array in `scripts/
 - **TideSurf output:** `getState().content` with default settings (no token budget limit)
 - **Parse time:** Wall-clock time for `getState()` call only (excludes navigation)
 
-Results will vary based on page content at the time of measurement. Sites with dynamic content (Reddit, HN) may show different numbers on each run.
+Results vary with live page content, especially on dynamic sites such as Reddit and Hacker News.

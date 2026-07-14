@@ -2,7 +2,7 @@
 
 ## TideSurf
 
-The main class that manages the browser lifecycle, tab management, and provides access to page-level operations.
+Manages browser lifecycle, tabs, state, and page operations.
 
 ### `TideSurf.launch(options?)`
 
@@ -10,7 +10,7 @@ The main class that manages the browser lifecycle, tab management, and provides 
 static launch(options?: TideSurfOptions): Promise<TideSurf>
 ```
 
-Launches a new Chrome instance and connects to it via CDP. Returns a `TideSurf` instance ready for use. Automatically retries up to 3 times on connection failure.
+Launches Chrome, connects through CDP, and returns a ready `TideSurf` instance. Connection failures retry up to 3 times.
 
 **Options:**
 
@@ -31,7 +31,7 @@ Launches a new Chrome instance and connects to it via CDP. Returns a `TideSurf` 
 static connect(options?: TideSurfConnectOptions): Promise<TideSurf>
 ```
 
-Connects to an already-running Chrome instance via CDP. Does not launch or manage the Chrome process: `close()` will only disconnect CDP, not kill the browser.
+Connects to a running Chrome instance through CDP. TideSurf does not own that process; `close()` only disconnects.
 
 Requires Chrome to have remote debugging enabled (Chrome 144+: `chrome://inspect#remote-debugging`, or launch with `--remote-debugging-port`).
 
@@ -46,7 +46,7 @@ Requires Chrome to have remote debugging enabled (Chrome 144+: `chrome://inspect
 | `readOnly` | `boolean` | `false` | Disable mutating and sensitive tools, including `evaluate` and `clipboard_read` |
 | `fileAccessRoots` | `string[]` | `[cwd, tmpdir]` | Allowed host filesystem roots for `upload` and `download` |
 
-**Throws:** `CDPConnectionError` if no Chrome instance is found on the specified port, with an actionable error message explaining how to enable remote debugging.
+**Throws:** `CDPConnectionError` for a missing Chrome instance on the target port, with remote-debugging setup guidance.
 
 ### `navigate(url)`
 
@@ -54,7 +54,7 @@ Requires Chrome to have remote debugging enabled (Chrome 144+: `chrome://inspect
 navigate(url: string): Promise<void>
 ```
 
-Navigates the active tab to the given URL and waits for the page to load. Throws `NavigationError` if the URL is unreachable or `ValidationError` if the URL format is invalid.
+Navigates the active tab and waits for load. An unreachable URL throws `NavigationError`; an invalid URL throws `ValidationError`.
 
 ### `getState(options?)`
 
@@ -73,9 +73,9 @@ Returns the compressed text representation of the active tab's DOM. The returned
 | `mode` | `"full" \| "minimal" \| "interactive"` | `"full"` | Output filtering mode |
 | `includeHidden` | `boolean` | `false` | Include elements hidden by CSS (opacity:0, visibility:hidden, display:none). Useful for debugging. |
 
-Modes compose: `getState({ viewport: true, mode: "interactive", maxTokens: 200 })` filters to visible interactive elements, then prunes to 200 tokens.
+Modes compose. `getState({ viewport: true, mode: "interactive", maxTokens: 200 })` keeps visible controls within 200 tokens.
 
-The internal `OSNode` tree used during serialization includes a `state` field on each node. This field carries the element's runtime state flags (e.g. `disabled`, `inert`, `obscured`, `checked`, `required`, `readonly`) and toggle state (`expanded`/`collapsed` from `aria-expanded`), which are serialized inline in the compressed output: disabled/inert as `~~strikethrough~~`, toggle as `open`/`closed` keywords. See the [page format](#page-format) documentation for details on how state flags appear in the text representation.
+Each internal `OSNode` carries runtime state such as `disabled`, `inert`, `obscured`, `checked`, `required`, `readonly`, and `aria-expanded`. Serialization turns these into `~~strikethrough~~`, `open`, `closed`, and other inline markers described in [Page format](#page-format).
 
 ## Types
 
@@ -146,7 +146,7 @@ interface DownloadResult {
 
 ## Tool response formats
 
-Each tool returns a specific response format. When using the tool executor or MCP, responses are wrapped appropriately. Direct SDK methods return the following:
+The executor and MCP wrap tool responses; direct SDK methods return these values:
 
 | Tool | Return Type | Description |
 |------|-------------|-------------|
@@ -175,7 +175,7 @@ Each tool returns a specific response format. When using the tool executor or MC
 getPage(): SurfingPage
 ```
 
-Returns a `SurfingPage` instance for the currently active tab, which provides element-level interaction methods (click, type, scroll, etc.).
+Returns the active tab's `SurfingPage` for element-level actions.
 
 ### `getToolExecutor()`
 
@@ -183,7 +183,7 @@ Returns a `SurfingPage` instance for the currently active tab, which provides el
 getToolExecutor(): (tool: { name: string; input: Record<string, unknown> }) => Promise<ToolResult>
 ```
 
-Returns a function that executes TideSurf tools by name. Designed for use in LLM agent loops: pass the tool call from your LLM directly to this executor.
+Returns a named-tool executor for LLM agent loops.
 
 ### `getToolDefinitions()`
 
@@ -191,7 +191,7 @@ Returns a function that executes TideSurf tools by name. Designed for use in LLM
 getToolDefinitions(): ToolDefinition[]
 ```
 
-Returns an array of 18 tool schemas formatted for LLM function calling. Pass these to your LLM's tool/function parameter so it knows which browser actions are available.
+Returns 18 function-calling schemas for the model's tool parameter.
 
 ### Tab management
 
@@ -203,11 +203,9 @@ closeTab(tabId: string): Promise<void>  // Close a tab
 close(): Promise<void>                  // Shut down browser
 ```
 
----
-
 ## SurfingPage
 
-Provides page-level interaction methods. Obtain an instance via `browser.getPage()`.
+Provides page-level actions through `browser.getPage()`.
 
 ### `click(id)`
 
@@ -215,7 +213,7 @@ Provides page-level interaction methods. Obtain an instance via `browser.getPage
 click(id: string): Promise<void>
 ```
 
-Clicks the element with the given TideSurf ID (e.g. `"B1"`, `"L3"`). Throws `ElementNotFoundError` if the ID doesn't exist in the current DOM.
+Clicks a TideSurf ID such as `"B1"` or `"L3"`. A missing current-DOM ID throws `ElementNotFoundError`.
 
 ### `type(id, text, clear?)`
 
@@ -223,7 +221,7 @@ Clicks the element with the given TideSurf ID (e.g. `"B1"`, `"L3"`). Throws `Ele
 type(id: string, text: string, clear?: boolean): Promise<void>
 ```
 
-Types text into an input or textarea identified by the given ID. When `clear` is `true`, the existing value is cleared before typing. Defaults to appending to the current value.
+Types into an input or textarea. `clear: true` replaces its value; the default appends.
 
 ### `select(id, value)`
 
@@ -247,7 +245,7 @@ Scrolls the page in the given direction. The `amount` parameter is measured in p
 extract(selector: string): Promise<string>
 ```
 
-Extracts the text content of elements matching the given CSS selector. Useful for reading content that isn't included in the compressed output, or for targeting specific elements precisely.
+Extracts text from elements matching a CSS selector, including content outside compressed state.
 
 ### `navigate(url)`
 
@@ -263,7 +261,7 @@ Navigates the current page to a new URL. Equivalent to calling `browser.navigate
 evaluate(expression: string): Promise<unknown>
 ```
 
-Executes arbitrary JavaScript in the page context and returns the result. Use with caution because this bypasses TideSurf's structured interaction model. It is useful for edge cases where the standard tools don't cover your needs. `evaluate` is not available when `readOnly: true` is enabled.
+Executes JavaScript in the page context and returns its result. This bypasses TideSurf's structured interaction model and needs DevTools-level caution. Read-only sessions omit `evaluate`.
 
 ### `search(query, maxResults?)`
 
@@ -271,7 +269,7 @@ Executes arbitrary JavaScript in the page context and returns the result. Use wi
 search(query: string, maxResults?: number): Promise<SearchResult[]>
 ```
 
-Finds text on the page (case-insensitive). Returns up to `maxResults` matches (default 10) with surrounding text context and the nearest interactive TideSurf ID when one exists.
+Finds text case-insensitively. Returns up to `maxResults` matches (default 10), surrounding context, and an available nearest interactive ID.
 
 ### `screenshot(options?)`
 
@@ -297,7 +295,7 @@ clipboardRead(): Promise<string>
 
 Reads the current clipboard text content.
 
-This method is intentionally unavailable when `readOnly: true` is enabled.
+Read-only sessions do not expose this method.
 
 ### `clipboardWrite(text)`
 
@@ -315,11 +313,9 @@ download(id: string, options?: { downloadDir?: string; timeout?: number }): Prom
 
 Clicks a download link/button and waits for the file to download. Returns the file path, name, and size. Custom `downloadDir` paths must stay inside `fileAccessRoots`, which default to the current working directory and the OS temp directory.
 
----
-
 ## Tool definitions
 
-These 18 tools are returned by `getToolDefinitions()` and can be used with any LLM that supports function calling. They map directly to the methods above.
+`getToolDefinitions()` returns 18 provider-neutral tools mapped to the methods above.
 
 The `get_state` tool description informs the LLM that elements in `~~strikethrough~~` are disabled or inert and should not be passed to interaction tools like `click`, `type`, or `select`.
 

@@ -1,101 +1,36 @@
-/* ==========================================================================
-   TideSurf landing — calm blue-grey paper, flat color, product-grade type.
-   One accent (steel blue) locked page-wide; the spectrum lives only in soft
-   highlight pills. A cool, low-saturation field with a coral punctum.
-   No outline · no border · no shadow · no glow · radius 0 · color diffs only.
-   ========================================================================== */
+@import "../../shared/foundation.css";
 
 :root {
-  /* Cool neutral blue-grey field, a whisper of steel and coral */
-  --paper:      #E7EBEF;
-  --paper-2:    #DAE0E6;
-  --paper-3:    #CAD2DA;
-
-  --ink:        #0F1820;
-  --ink-2:      #222E38;
-  --ink-3:      #384450;
-
-  --grey-1:     #566472;
-  --grey-2:     #84929E;
-
-  /* Single punctum: deep steel blue — the page-wide accent */
-  --accent:       #265F7E;
-  --accent-soft:  #4E8AAA;
-
-  /* Spectrum: worn only by highlight pills, never by structure */
-  --c-teal:    #265F7E;
-  --c-green:   #4F7E84;
-  --c-gold:    #8A8166;
-  --c-rust:    #C76B5C;
-  --c-rose:    #B86A8E;
-  --c-violet:  #3A5A78;
-
-  --font: "Zalando Sans", "Gothic A1", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-
-  --page: min(100% - 6rem, 960px);
-  --ease: cubic-bezier(0.16, 1, 0.3, 1);
-
-  color-scheme: light;
+  --page: min(100% - 4rem, 880px);
 }
-
-[data-theme="dark"] {
-  --paper:      #0D1218;
-  --paper-2:    #131A22;
-  --paper-3:    #1B2430;
-
-  --ink:        #E7EBEF;
-  --ink-2:      #CFD8DF;
-  --ink-3:      #A4B2BD;
-
-  --grey-1:     #94A4B0;
-  --grey-2:     #6A7884;
-
-  --accent:       #6BA3C4;
-  --accent-soft:  #265F7E;
-
-  color-scheme: dark;
-}
-
-/* ---------- Reset ---------- */
 
 *,
 *::before,
 *::after {
+  box-sizing: border-box;
   margin: 0;
   padding: 0;
-  box-sizing: border-box;
   border: 0;
 }
 
 html {
   scroll-behavior: smooth;
-  scroll-padding-top: 4rem;
+  scroll-padding-top: 2rem;
 }
 
 body {
   min-width: 320px;
   overflow-x: clip;
+  position: relative;
   font-family: var(--font);
-  background: var(--paper);
+  background: var(--canvas);
   color: var(--ink);
-  font-size: 1.06rem;
-  line-height: 1.6;
+  font-size: 1.02rem;
+  line-height: 1.58;
   font-weight: 400;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
-}
-
-/* Ocean mosaic — a screen of tiny squares whose colour ripples left→right.
-   Drawn on a <canvas> behind the content (z-index -1). Slow drift normally;
-   scrolls spool the wave faster. Colour diffs only, blue-ish, no strokes. */
-.waves-canvas {
-  position: fixed;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  z-index: -1;
-  pointer-events: none;
 }
 
 ::selection {
@@ -120,29 +55,58 @@ a[href] {
   display: none !important;
 }
 
-a:focus-visible,
-button:focus-visible {
-  background: var(--ink);
+a:not(.patch-control):focus-visible,
+button:not(.patch-control):focus-visible {
   color: var(--paper);
+  background: var(--ink);
+  outline: 0;
+  text-decoration: none;
 }
 
-/* ---------- Skip link ---------- */
+code,
+pre {
+  font-family: var(--mono);
+}
+
+.waves-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100dvh;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.58;
+}
+
+.topnav,
+.page,
+.site-footer,
+.cookie-notice,
+.theme-float,
+.skip-link {
+  position: relative;
+  z-index: 1;
+}
 
 .skip-link {
   position: absolute;
   left: -9999px;
   top: 1rem;
-  z-index: 50;
-  padding: 0.55rem 0.75rem;
-  background: var(--ink);
+  padding: 0.6rem 0.85rem;
   color: var(--paper);
+  background: var(--ink);
 }
 
 .skip-link:focus-visible {
   left: 1rem;
+  z-index: 50;
 }
 
-/* ---------- Top nav — a light in-flow row at the very top (not a fixed bar) ---------- */
+.compact-control {
+  min-height: 2.25rem;
+  padding: 0.2rem 0.62rem;
+  font-size: 0.86rem;
+}
 
 .topnav {
   width: var(--page);
@@ -155,169 +119,95 @@ button:focus-visible {
 }
 
 .topnav-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.34rem;
+  font-size: 1.35rem;
   font-weight: 600;
-  font-size: 1.5rem;
   letter-spacing: -0.022em;
-  color: var(--ink);
 }
 
-.topnav-links {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.4rem;
-}
-
-/* ---------- Page column ---------- */
-
-.page {
-  width: var(--page);
-  margin-inline: auto;
-  padding: 0 0 2rem;
-  display: flex;
-  flex-direction: column;
-  gap: clamp(4rem, 9vh, 7rem);
-}
-
-/* ---------- Highlight pill (mercuriusdream .logos-hl lineage) ---------- */
-
-.hl {
-  display: inline-block;
-  vertical-align: baseline;
-  font-weight: 500;
-  color: var(--ink);
-  background: color-mix(in srgb, var(--hl, var(--accent-soft)), var(--paper) 72%);
-  padding: 0.02em 0.26em 0.08em;
-  transition: background-color 0.45s var(--ease), transform 0.45s var(--ease);
-}
-
-.hl:hover {
-  background: color-mix(in srgb, var(--hl, var(--accent-soft)), var(--paper) 46%);
-  transform: scale(1.06) rotate(-1.5deg);
-}
-
-.hl-i {
-  transition: opacity 0.14s var(--ease);
-}
-
-.hl.is-swapping .hl-i {
-  opacity: 0;
-}
-
-/* ---------- Thesis mark — sits to the right of the thesis (content left) ---------- */
-
-.thesis-mark {
+.brand-mark {
   flex: 0 0 auto;
-  width: clamp(9rem, 14vw, 12rem);
-  height: clamp(9rem, 14vw, 12rem);
-  color: var(--mark, var(--accent));
-  opacity: 1;
+  color: var(--accent);
 }
 
-.thesis-mark svg {
-  width: 100%;
-  height: 100%;
-  display: block;
+.brand-word {
+  display: inline-flex;
+  align-items: baseline;
 }
 
-/* Principle = content left, mark right (next to the principle). */
-.principle {
-  display: flex;
-  align-items: center;
-  gap: clamp(1.2rem, 3vw, 2.4rem);
+.brand-surf {
+  color: var(--accent-ink);
+  letter-spacing: -0.035em;
 }
 
-.principle-content {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
-}
-
-.principle-mark {
-  flex: 0 0 auto;
-  width: clamp(5.6rem, 10vw, 8rem);
-  height: clamp(5.6rem, 10vw, 8rem);
-  color: var(--mark, var(--accent));
-  opacity: 0.92;
-}
-
-.principle-mark svg {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
-
-/* ==========================================================================
-   Hero — the title is the page. TideSurf, set large and calm.
-   Fills the first viewport so the wordmark owns the screen; everything below
-   waits below the fold and reveals on scroll.
-   ========================================================================== */
-
-.hero {
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
-  padding: clamp(2rem, 6vh, 4rem) 0 1rem;
-  min-height: 100dvh;
-  justify-content: center;
-}
-
-.hero-thesis {
-  max-width: 18ch;
-  margin-top: 0.2rem;
-  color: var(--ink);
-  font-size: clamp(3rem, 6.9vw, 5.55rem);
-  line-height: 1.02;
-  font-weight: 500;
-  letter-spacing: -0.024em;
-  text-wrap: balance;
-}
-
-.hero-lede {
-  max-width: 44rem;
-  margin-top: 0.2rem;
-  color: var(--ink-2);
-  font-size: clamp(1.15rem, 1.45vw, 1.4rem);
-  line-height: 1.55;
-  text-wrap: pretty;
-}
-
-/* ---------- Actions row ---------- */
-
+.topnav-links,
 .hero-actions,
 .closing-actions,
 .footer-links,
+.footer-utilities,
 .theme-selector {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.42rem;
+  gap: 0.4rem;
+}
+
+.page {
+  width: var(--page);
+  margin-inline: auto;
+  padding-bottom: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(5rem, 10vh, 7rem);
+}
+
+.hero {
+  min-height: calc(100dvh - 3.65rem);
+  padding: clamp(4.5rem, 12vh, 8rem) 0 clamp(3.5rem, 8vh, 5.5rem);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.hero h1 {
+  max-width: 15ch;
+  font-size: clamp(3rem, 6.2vw, 4.9rem);
+  line-height: 1.01;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+
+.hero-lede {
+  max-width: 39rem;
+  color: var(--ink-2);
+  font-size: clamp(1.08rem, 1.45vw, 1.27rem);
+  line-height: 1.58;
+  text-wrap: pretty;
 }
 
 .hero-actions {
-  margin-top: 0.9rem;
+  margin-top: 0.55rem;
 }
 
 .install {
-  min-height: 3.125rem;
-  width: 35rem;
-  max-width: 100%;
+  width: min(32rem, 100%);
+  min-height: 2.75rem;
   display: flex;
   align-items: center;
-  gap: 0.625rem;
-  padding: 0 0.625rem 0 1.0625rem;
-  font-size: 1.1875rem;
-  background: var(--paper-2);
+  gap: 0.65rem;
+  padding-left: 0.9rem;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--paper-2) 86%, transparent);
 }
 
 .install .prompt {
   flex: 0 0 auto;
-  font-family: var(--font);
-  color: var(--accent);
-  font-size: 1.1875rem;
+  color: var(--accent-ink);
+  font-family: var(--mono);
   font-weight: 600;
 }
 
@@ -326,64 +216,24 @@ button:focus-visible {
   min-width: 0;
   overflow-x: auto;
   white-space: nowrap;
-  font-family: var(--font);
-  font-size: 1.1875rem;
-  text-align: left;
-}
-
-/* ---------- Patch links / buttons — flat color pills, no chrome ---------- */
-
-.patch-link,
-.copy-btn,
-.theme-btn {
-  min-height: 2.5rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.25rem 0.72rem;
-  font-size: 0.95rem;
-  background: color-mix(in srgb, var(--patch-color, var(--accent-soft)) 22%, var(--paper));
-  color: var(--ink);
-  font-weight: 500;
-  transition: color 0.45s var(--ease), background-color 0.45s var(--ease), transform 0.45s var(--ease);
-}
-
-.patch-link:hover,
-.copy-btn:hover,
-.theme-btn:hover {
-  background: color-mix(in srgb, var(--patch-color, var(--accent-soft)) 44%, var(--paper));
-  transform: scale(1.07) rotate(-2deg);
-}
-
-.patch-link:active,
-.copy-btn:active,
-.theme-btn:active {
-  transform: scale(0.96) rotate(0deg);
-  transition-duration: 0.08s;
+  font-size: 0.94rem;
 }
 
 .copy-btn {
   --patch-color: var(--c-teal);
   flex: 0 0 auto;
-  margin-left: auto;
-  width: 2.5rem;
-  min-height: 2.5rem;
+  width: 2.75rem;
+  min-height: 2.75rem;
   padding: 0;
 }
 
 .copy-btn svg {
-  display: block;
-  width: 1.2rem;
-  height: 1.2rem;
+  width: 1.1rem;
+  height: 1.1rem;
 }
 
-/* Show the check when copied, the copy glyph otherwise. */
 .copy-btn .icon-check {
   display: none;
-}
-
-.copy-btn.is-copied {
-  --patch-color: var(--c-green);
 }
 
 .copy-btn.is-copied .icon-copy {
@@ -394,277 +244,250 @@ button:focus-visible {
   display: block;
 }
 
-/* GitHub button contains the stars count as a smaller inset badge. */
-.gh-btn {
-  gap: 0.45rem;
-}
-
-.gh-stars {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.2rem;
-  min-height: 1.5rem;
-  padding: 0.05rem 0.45rem;
-  font-size: 0.72rem;
-  font-weight: 500;
-  color: var(--ink);
-  background: color-mix(in srgb, var(--c-gold) 34%, var(--paper));
-  transition: background-color 0.45s var(--ease);
-}
-
-/* ==========================================================================
-   Thesis — the core value prop, told in prose and a quiet process line.
-   No bento grid, no mockup. Just words and a row of colour steps.
-   ========================================================================== */
-
-.thesis {
-  display: flex;
-  align-items: center;
-  gap: clamp(1.2rem, 3vw, 2.4rem);
-}
-
-.thesis-content {
-  flex: 1 1 auto;
-  min-width: 0;
+.section-intro {
+  max-width: 45rem;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1rem;
 }
 
-.thesis h2 {
-  max-width: 14ch;
-  font-size: clamp(2.4rem, 5.4vw, 4.4rem);
-  line-height: 1;
+.section-intro h2,
+.closing h2 {
+  max-width: 16ch;
+  font-size: clamp(2.2rem, 4.8vw, 3.75rem);
+  line-height: 1.03;
   font-weight: 500;
   letter-spacing: -0.022em;
   text-wrap: balance;
 }
 
-.thesis-body {
+.section-intro p {
   max-width: 42rem;
   color: var(--ink-2);
-  font-size: clamp(1.15rem, 1.4vw, 1.35rem);
-  line-height: 1.6;
+  font-size: clamp(1.04rem, 1.25vw, 1.16rem);
+  line-height: 1.65;
   text-wrap: pretty;
 }
 
-/* Process line: rendered → pruned → stable → local → mcp */
-.process {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.55rem;
-  margin-top: 0.6rem;
-  font-size: 0.92rem;
+.compact-intro h2 {
+  max-width: 18ch;
+  font-size: clamp(2rem, 4vw, 3.2rem);
 }
 
-.proc-step {
-  display: inline-flex;
-  align-items: center;
-  min-height: 2rem;
-  padding: 0.15rem 0.6rem;
-  color: var(--ink);
-  background: color-mix(in srgb, var(--p, var(--accent-soft)), var(--paper) 78%);
-  font-weight: 500;
-  transition: background-color 0.45s var(--ease), transform 0.45s var(--ease);
-}
-
-.proc-step:hover {
-  background: color-mix(in srgb, var(--p, var(--accent-soft)), var(--paper) 50%);
-  transform: scale(1.06) rotate(-1.5deg);
-}
-
-.proc-arrow {
-  color: var(--grey-2);
-  font-size: 1rem;
-}
-
-/* ==========================================================================
-   Evidence — one quiet band. The before/after as large mono figures.
-   ========================================================================== */
-
-.evidence {
+.proof,
+.live-loop,
+.capabilities {
   display: flex;
   flex-direction: column;
-  gap: 1.2rem;
+  gap: clamp(2rem, 5vw, 3.2rem);
 }
 
-.evidence-band {
+.specimen {
   display: grid;
-  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
-  gap: clamp(1.5rem, 4vw, 3rem);
-  align-items: center;
-  padding: clamp(2rem, 4.5vw, 3.2rem);
+  grid-template-columns: minmax(0, 1fr) 8.5rem minmax(0, 1fr);
+  align-items: stretch;
+  gap: 0.6rem;
+}
+
+.specimen-pane,
+.action-specimen {
+  min-width: 0;
   background: var(--paper-2);
 }
 
-.evidence-figures {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 0.45rem;
+.raw-pane {
+  background: color-mix(in srgb, var(--paper-2) 76%, var(--paper));
 }
 
-.figure {
-  font-size: clamp(2.6rem, 6vw, 4.6rem);
-  line-height: 0.95;
+.output-pane {
+  background: color-mix(in srgb, var(--c-teal) 13%, var(--paper-2));
+}
+
+.specimen-label {
+  min-height: 2.2rem;
+  padding: 0.5rem 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--grey-1);
+  background: var(--paper-3);
+  font-size: 0.72rem;
   font-weight: 500;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.specimen-pane pre {
+  min-height: 21rem;
+  padding: 1rem;
+  overflow-x: auto;
+  color: var(--ink-2);
+  font-size: 0.77rem;
+  line-height: 1.62;
+  tab-size: 2;
+}
+
+.specimen-pane code {
+  white-space: pre;
+}
+
+.noise {
+  color: var(--grey-2);
+}
+
+.handle {
+  color: var(--accent-ink);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--c-teal) 20%, var(--paper));
+}
+
+.specimen-shift {
+  padding: 1.4rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
   color: var(--grey-1);
 }
 
-.figure-after {
+.tokens-before {
+  font-size: 1.35rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.shift-word {
+  margin: 0.25rem 0;
+  font-size: 0.72rem;
+}
+
+.specimen-shift strong {
   color: var(--ink);
-}
-
-.figure-arrow {
-  font-size: clamp(1.8rem, 4vw, 3rem);
-  color: var(--accent);
+  font-size: 2rem;
+  line-height: 1;
   font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 
-.evidence-note {
-  max-width: 32rem;
-  color: var(--ink-2);
-  font-size: clamp(1.05rem, 1.25vw, 1.22rem);
-  line-height: 1.6;
-  text-wrap: pretty;
+.specimen-shift small {
+  max-width: 9rem;
+  margin-top: 0.75rem;
+  font-size: 0.7rem;
+  line-height: 1.4;
 }
 
-/* ==========================================================================
-   Statement — a single calm sentence, breathing.
-   ========================================================================== */
-
-.statement {
-  max-width: 46rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1.3rem;
-}
-
-.statement h2 {
-  font-size: clamp(2.2rem, 5vw, 4rem);
-  line-height: 1.02;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  text-wrap: balance;
-}
-
-.statement p {
-  color: var(--ink-2);
-  font-size: clamp(1.1rem, 1.35vw, 1.3rem);
-  line-height: 1.6;
-  text-wrap: pretty;
-}
-
-/* ==========================================================================
-   Principles — an editorial numbered list, not a card grid.
-   Generous vertical rhythm; colour lives in the numbers and the pills.
-   ========================================================================== */
-
-.principles {
-  display: flex;
-  flex-direction: column;
-  gap: clamp(2.2rem, 5vh, 3.4rem);
-}
-
-.principle-no {
-  color: var(--accent);
-  font-size: 0.9rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-}
-
-.principle h3 {
-  font-size: clamp(1.7rem, 3.2vw, 2.6rem);
-  line-height: 1.08;
-  font-weight: 500;
-  letter-spacing: -0.016em;
-  text-wrap: balance;
-}
-
-.principle p {
-  color: var(--ink-2);
-  font-size: clamp(1.08rem, 1.3vw, 1.26rem);
-  line-height: 1.6;
-  text-wrap: pretty;
-}
-
-/* ==========================================================================
-   Runtime — four quiet details in a soft 2×2 field of colour diffs.
-   ========================================================================== */
-
-.runtime {
+.loop-layout {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.5rem;
+  grid-template-columns: minmax(0, 1.05fr) minmax(17rem, 0.95fr);
+  align-items: center;
+  gap: clamp(2rem, 6vw, 4.5rem);
 }
 
-.runtime-cell {
+.loop-steps {
+  list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
-  padding: clamp(1.3rem, 2.6vw, 1.9rem);
-  background: color-mix(in srgb, var(--paper-3) 60%, var(--paper));
-  transition: background-color 0.45s var(--ease);
+  gap: 1.4rem;
 }
 
-.runtime-cell:hover {
-  background: color-mix(in srgb, var(--paper-3) 92%, var(--paper));
+.loop-steps li {
+  display: grid;
+  grid-template-columns: 5.2rem minmax(0, 1fr);
+  align-items: start;
+  gap: 1rem;
 }
 
-.runtime-cell > span {
-  color: var(--accent);
-  font-size: 0.85rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
+.step-name,
+.capability-list dt span {
+  display: inline-flex;
+  width: fit-content;
+  padding: 0.12rem 0.42rem 0.18rem;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--step-color, var(--row-color, var(--accent-soft))) 28%, var(--paper));
+  font-size: 0.8rem;
+  font-weight: 500;
 }
 
-.runtime-cell p {
-  max-width: 26rem;
+.loop-steps p {
   color: var(--ink-2);
-  font-size: 1.05rem;
-  line-height: 1.55;
-  text-wrap: pretty;
+  line-height: 1.58;
 }
 
-/* ==========================================================================
-   Closing
-   ========================================================================== */
+.loop-steps code {
+  padding: 0.08rem 0.25rem;
+  color: var(--accent-ink);
+  background: var(--paper-2);
+  font-size: 0.88em;
+}
+
+.action-specimen code {
+  display: block;
+  padding: clamp(1.8rem, 4vw, 3rem) 1.2rem 1rem;
+  overflow-x: auto;
+  color: var(--ink);
+  font-size: clamp(0.95rem, 1.6vw, 1.18rem);
+  white-space: nowrap;
+}
+
+.action-specimen p {
+  padding: 0 1.2rem 1.6rem;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--grey-1);
+  font-size: 0.86rem;
+}
+
+.status-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  flex: 0 0 auto;
+  background: var(--c-green);
+}
+
+.capability-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.capability-list > div {
+  padding: clamp(1rem, 2.5vw, 1.4rem);
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr);
+  gap: 1.2rem;
+  background: color-mix(in srgb, var(--paper-2) 78%, var(--paper));
+}
+
+.capability-list dd {
+  max-width: 42rem;
+  color: var(--ink-2);
+  line-height: 1.6;
+}
 
 .closing {
+  padding: clamp(2rem, 5vw, 3.5rem);
   display: flex;
   flex-direction: column;
-  gap: 1.3rem;
-  padding: clamp(2.4rem, 5vw, 3.6rem);
-  background: var(--paper-2);
+  gap: 1.4rem;
+  background: var(--canvas-2);
 }
 
 .closing h2 {
   max-width: 13ch;
-  font-size: clamp(2.2rem, 5vw, 4rem);
-  line-height: 1.02;
-  font-weight: 500;
-  letter-spacing: -0.02em;
-  text-wrap: balance;
 }
-
-/* ==========================================================================
-   Footer — mercuriusdream-style: id, pill links, theme selector.
-   ========================================================================== */
 
 .site-footer {
   width: var(--page);
   margin-inline: auto;
-  padding: 0 0 clamp(4.5rem, 9vw, 6rem);
+  padding: 0 0 clamp(3rem, 8vw, 5rem);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
   color: var(--grey-1);
-  font-size: 0.9rem;
+  font-size: 0.86rem;
 }
 
 .footer-id {
@@ -673,138 +496,103 @@ button:focus-visible {
   gap: 0.5rem;
 }
 
-.site-footer strong {
+.footer-id strong {
   color: var(--ink);
   font-weight: 600;
 }
 
+.footer-utilities {
+  justify-content: flex-end;
+}
+
 .theme-btn {
-  color: var(--grey-1);
-  background: color-mix(in srgb, var(--grey-1) 10%, var(--paper));
+  --patch-color: var(--grey-1);
 }
-
-.theme-btn.active {
-  color: var(--paper);
-  background: var(--ink);
-}
-
-/* ---------- Floating theme switch — bottom-right of the screen ---------- */
 
 .theme-float {
   position: fixed;
-  right: 1rem;
-  bottom: 1rem;
-  z-index: 35;
-  display: flex;
-  gap: 0.4rem;
+  left: max(clamp(1rem, 4vw, 2.5rem), env(safe-area-inset-left));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  z-index: 50;
 }
 
-/* ---------- Cookie notice — a full-width, human bottom bar ---------- */
+body.cookie-visible .theme-float {
+  bottom: calc(0.65rem + env(safe-area-inset-bottom));
+}
 
 .cookie-notice {
   position: fixed;
-  left: 0;
   right: 0;
   bottom: 0;
+  left: 0;
   z-index: 40;
+  padding: 0.65rem clamp(1rem, 4vw, 2.5rem);
+  padding-left: calc(clamp(1rem, 4vw, 2.5rem) + 7rem);
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 0.9rem;
-  padding: 0.85rem clamp(1rem, 4vw, 3rem);
-  background: var(--paper-2);
+  gap: 0.8rem;
   color: var(--ink-2);
-  font-size: 0.9rem;
-  line-height: 1.5;
-}
-
-.cookie-text {
-  max-width: 60ch;
+  background: var(--canvas-2);
+  font-size: 0.84rem;
 }
 
 .cookie-ok {
   flex: 0 0 auto;
-  min-height: 2rem;
-  padding: 0.2rem 1.1rem;
-  color: var(--paper);
-  background: var(--ink);
-  font-weight: 500;
-  transition: background-color 0.45s var(--ease), transform 0.45s var(--ease);
 }
-
-.cookie-ok:hover {
-  background: var(--accent);
-  transform: scale(1.04);
-}
-
-.cookie-ok:active {
-  transform: scale(0.96);
-  transition-duration: 0.08s;
-}
-
-/* ==========================================================================
-   Reveal — gentle, mercuriusdream ease-out-expo lineage.
-   ========================================================================== */
-
-.reveal {
-  opacity: 0;
-  transform: translateY(1.4rem);
-  transition: opacity 0.9s var(--ease), transform 0.9s var(--ease);
-  transition-delay: var(--reveal-delay, 0ms);
-}
-
-.reveal.is-visible {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-/* ==========================================================================
-   Responsive
-   ========================================================================== */
 
 @media (max-width: 920px) {
   :root {
-    --page: min(100% - 3rem, 100%);
+    --page: min(100% - 3rem, 880px);
   }
 
-  .evidence-band {
-    grid-template-columns: 1fr;
-    gap: 1.6rem;
+  .specimen {
+    grid-template-columns: minmax(0, 1fr) 7rem minmax(0, 1fr);
+  }
+
+  .specimen-pane pre {
+    font-size: 0.7rem;
   }
 }
 
-@media (max-width: 720px) {
+@media (max-width: 760px) {
   :root {
     --page: min(100% - 2.5rem, 100%);
   }
 
   .page {
-    padding-top: 2rem;
-    gap: 4rem;
+    gap: 5rem;
+  }
+
+  .compact-control {
+    min-height: 2.75rem;
   }
 
   .hero {
-    min-height: 64dvh;
-    padding-top: 1rem;
+    min-height: calc(100svh - 3.65rem);
+    padding: 5rem 0 4rem;
   }
 
-  .install {
-    width: 100%;
-  }
-
-  .runtime {
+  .specimen {
     grid-template-columns: 1fr;
   }
 
-  .closing-actions,
-  .footer-links,
-  .theme-selector {
-    justify-content: flex-start;
+  .specimen-pane pre {
+    min-height: 0;
+    font-size: 0.78rem;
+  }
+
+  .specimen-shift {
+    min-height: 8rem;
+    padding: 1rem;
+  }
+
+  .loop-layout {
+    grid-template-columns: 1fr;
   }
 }
 
-@media (max-width: 420px) {
+@media (max-width: 560px) {
   :root {
     --page: min(100% - 2rem, 100%);
   }
@@ -813,28 +601,114 @@ button:focus-visible {
     font-size: 1rem;
   }
 
+  .topnav {
+    align-items: center;
+  }
+
+  .topnav-brand {
+    font-size: 1.2rem;
+  }
+
+  .hero {
+    padding-top: 4.5rem;
+  }
+
+  .hero h1 {
+    font-size: clamp(2.75rem, 13vw, 3.5rem);
+  }
+
+  .hero-actions {
+    align-items: stretch;
+  }
+
+  .hero-actions > .patch-control {
+    width: 100%;
+  }
+
+  .install {
+    width: 100%;
+  }
+
+  .section-intro h2,
+  .closing h2,
+  .compact-intro h2 {
+    font-size: clamp(2rem, 10vw, 2.65rem);
+  }
+
+  .loop-steps li,
+  .capability-list > div {
+    grid-template-columns: 1fr;
+    gap: 0.7rem;
+  }
+
+  .closing-actions > .patch-control {
+    flex: 1 1 auto;
+  }
+
   .site-footer {
-    font-size: 0.85rem;
+    align-items: flex-start;
+  }
+
+  .footer-utilities {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .cookie-notice {
+    align-items: center;
+  }
+
+  .theme-float {
+    left: max(1rem, env(safe-area-inset-left));
+    bottom: calc(0.75rem + env(safe-area-inset-bottom));
+  }
+
+  body.cookie-visible .theme-float {
+    bottom: calc(0.65rem + env(safe-area-inset-bottom));
+  }
+
+  .theme-float .theme-btn {
+    position: relative;
+    isolation: isolate;
+    min-width: 3.25rem;
+    background: transparent;
+  }
+
+  .theme-float .theme-btn::before {
+    position: absolute;
+    inset: 0.34rem 0;
+    z-index: -1;
+    content: "";
+    background: color-mix(in srgb, var(--grey-1) 14%, var(--paper));
+  }
+
+  .theme-float .theme-btn:hover,
+  .theme-float .theme-btn:focus-visible,
+  .theme-float .theme-btn.active {
+    background: transparent;
+  }
+
+  .theme-float .theme-btn:hover::before {
+    background: color-mix(in srgb, var(--grey-1) 30%, var(--paper));
+  }
+
+  .theme-float .theme-btn:focus-visible::before {
+    background: var(--ink);
+  }
+
+  .theme-float .theme-btn.active::before {
+    background: color-mix(in srgb, var(--grey-1) 42%, var(--paper));
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
+@media (max-width: 390px) {
+  .topnav-links .patch-control {
+    padding-inline: 0.52rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce), (prefers-reduced-data: reduce) {
   html {
     scroll-behavior: auto;
-  }
-
-  .reveal {
-    opacity: 1;
-    transform: none;
-    transition: none;
-  }
-
-  .patch-link:hover,
-  .copy-btn:hover,
-  .theme-btn:hover,
-  .hl:hover,
-  .proc-step:hover,
-  .runtime-cell:hover {
-    transform: none;
   }
 }

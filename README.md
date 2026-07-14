@@ -1,52 +1,68 @@
-<p align="center">
-  <img src="https://tidesurf.org/logo.svg" width="80" height="80" alt="TideSurf">
-</p>
+<img src="https://tidesurf.org/logo.svg" width="180" height="48" alt="TideSurf">
 
-<h2 align="center">
-    TideSurf
-</h2>
+# TideSurf
 
-<p align="center">
-    <strong>English</strong> | <a href="README.ja.md">日本語</a> | <a href="README.ko.md">한국어</a>
-</p>
+**The live page. Agents surfing.**
 
-<p align="center">
-  <strong><a href="https://tidesurf.org">About</a></strong> |
-  <strong><a href="https://tidesurf.org/docs">Documentation</a></strong> |
-  <strong><a href="https://tidesurf.org/llms.txt">llms.txt</a></strong> |
-  <strong><a href="https://github.com/sponsors/MercuriusDream">Sponsor</a></strong>
-</p>
+[Website](https://tidesurf.org) · [Docs](https://tidesurf.org/docs) · [llms.txt](https://tidesurf.org/llms.txt) · [npm](https://www.npmjs.com/package/@tidesurf/core) · [Sponsor](https://github.com/sponsors/MercuriusDream)
 
-<p align="center">
-  <a href="https://www.producthunt.com/products/tidesurf?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-tidesurf" target="_blank" rel="noopener noreferrer"><img alt="TideSurf - Ultra-token-efficient CDP library for AI agents | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1101853&theme=neutral&t=1773855834160" /></a>
-</p>
+TideSurf turns live Chromium into compact, model-readable text. Usable elements receive short IDs tied to the real page, giving an agent a direct read, choose, act loop through the Chrome DevTools Protocol.
 
-<p align="center"><strong>
-  Web browsing should not require omnimodal vision models.<br>
-  TideSurf converts the live DOM into a compressed structured representation optimized for LLMs.
-</strong><br><br>
-  TideSurf is a TypeScript library that connects Chromium to LLM agents via the
-  <a href="https://chromedevtools.github.io/devtools-protocol">Chrome DevTools Protocol</a>.
-  It walks the live DOM, compresses it into a token-efficient structured representation
-  (50-200 tokens per page), and exposes 18 tool definitions for LLM function calling.
-  In short, <strong>a DOM compression that keeps token costs 10-100x lower than screenshot-based approaches.</strong>
-</p>
+## Start
 
-<p align="center">
-  <a href="https://tidesurf.org/docs#getting-started">Getting started</a>
-  <a href="https://tidesurf.org/docs#page-format">Page format</a>
-  <a href="https://tidesurf.org/docs#token-budget">Token budget</a>
-  <a href="https://tidesurf.org/docs#agent-patterns">Agent patterns</a>
-  <a href="https://tidesurf.org/docs#security">Security</a>
-  <a href="https://tidesurf.org/docs#api-reference">API reference</a>
-</p>
+```sh
+bun add @tidesurf/core
+```
 
-<p align="center">
-  <img src="https://tidesurf.org/og.png" alt="TideSurf Social Preview">
-</p>
+```ts
+import { TideSurf } from "@tidesurf/core";
 
-<p align="center">
-  <a href="https://github.com/TideSurf/core/actions/workflows/ci.yml"><img src="https://github.com/TideSurf/core/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://www.npmjs.com/package/@tidesurf/core"><img src="https://img.shields.io/npm/v/@tidesurf/core" alt="npm"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
-</p>
+const browser = await TideSurf.launch();
+await browser.navigate("https://example.com");
+
+const state = await browser.getState();
+console.log(state.content);
+
+const page = browser.getPage();
+await page.click("B1");
+await browser.close();
+```
+
+The page comes back as plain text with live handles:
+
+```text
+# Example Search
+> example.com/search
+NAV
+  [L1](/) Home
+  [L2](/about) About
+FORM F1
+  I1 ~Search... ="TideSurf"
+  [B1] Search
+```
+
+`B1` points to the real Search button. Links, inputs, tabs, and forms keep the same compact relationship to the live page. CSS classes, wrapper markup, scripts, and decorative DOM stay out of the model context.
+
+The live benchmark compresses GitHub from 84,236 estimated tokens to 2,593. Page structure changes the result; run `bun scripts/benchmark-live.ts` for a local measurement.
+
+## Use it
+
+`getState()` supports viewport filtering, `full`, `interactive`, and `minimal` output modes, plus a `maxTokens` budget. TideSurf also provides tab control, file boundaries, typed errors, read-only mode, and 18 standard tools for LLM function calling. The package supports Bun and Node.js 18+.
+
+Read-only mode removes write and sensitive tools from the agent surface:
+
+```ts
+const browser = await TideSurf.launch({ readOnly: true });
+```
+
+Run TideSurf as an MCP server:
+
+```sh
+bunx tidesurf mcp --auto-connect
+```
+
+Chrome 144+ requires remote debugging approval at `chrome://inspect#remote-debugging`. TideSurf can launch Chromium or attach to a session already listening on port `9222`.
+
+Continue with [Getting started](https://tidesurf.org/docs#getting-started), [Page format](https://tidesurf.org/docs#page-format), [Security](https://tidesurf.org/docs#security), or the [API reference](https://tidesurf.org/docs#api-reference).
+
+[English](README.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Apache 2.0](LICENSE)

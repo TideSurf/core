@@ -2,9 +2,7 @@
 
 ## Chrome not found
 
-TideSurf looks for Chrome (or Chromium) in the standard installation paths for your operating system. If it can't find a browser binary, you'll see a `ChromeLaunchError`.
-
-**Fix:** Set the `CHROME_PATH` environment variable to point to your Chrome executable, or pass `chromePath` in the launch options:
+`ChromeLaunchError` usually means TideSurf could not find a Chrome or Chromium binary. Set `CHROME_PATH` or pass `chromePath`:
 
 ```typescript
 const browser = await TideSurf.launch({
@@ -12,29 +10,19 @@ const browser = await TideSurf.launch({
 });
 ```
 
-On macOS, the default path is usually `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`. On Linux, try `which google-chrome` or `which chromium-browser` to find it.
+The usual macOS path is `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`. On Linux, `which google-chrome` or `which chromium-browser` prints the installed path.
 
 ## CDP connection refused
 
-This happens when Chrome launched successfully but TideSurf couldn't establish a WebSocket connection to the Chrome DevTools Protocol endpoint: usually because another process is already using the debugging port.
-
-**Fix:** TideSurf retries automatically up to 3 times, so transient failures resolve on their own. If the error persists, check whether another Chrome instance or debugging tool is already bound to the same port. You can specify a different port in the launch options:
+Chrome started, but its CDP WebSocket did not accept the connection. TideSurf retries three times. A persistent failure often points to another process on the debugging port. Choose another port:
 
 ```typescript
-const browser = await TideSurf.launch({
-  port: 9223, // Default is 9222
-});
+const browser = await TideSurf.launch({ port: 9223 });
 ```
 
 ## Auto-connect can't find Chrome
 
-When using `TideSurf.connect()` or `--auto-connect`, you'll see a `CDPConnectionError` if TideSurf can't reach Chrome on the target port. This means Chrome either isn't running, or doesn't have remote debugging enabled.
-
-**Fix:** Enable remote debugging in Chrome using one of these methods:
-
-1. **Chrome 144+:** Navigate to `chrome://inspect#remote-debugging` and enable it. Chrome will show a permission dialog each time TideSurf connects.
-
-2. **Any Chrome version:** Quit Chrome and relaunch it from the terminal with the remote debugging flag:
+`TideSurf.connect()` and `--auto-connect` need a running Chrome with remote debugging enabled. Chrome 144+ uses `chrome://inspect#remote-debugging` and shows a permission dialog for each connection. Any supported Chrome can launch with a debugging flag:
 
 ```bash
 # macOS
@@ -44,7 +32,7 @@ When using `TideSurf.connect()` or `--auto-connect`, you'll see a `CDPConnection
 google-chrome --remote-debugging-port=9222
 ```
 
-3. **Custom port:** If you're using a non-default port, make sure to pass it:
+Pass the same custom port to TideSurf:
 
 ```typescript
 const browser = await TideSurf.connect({ port: 9333 });
@@ -54,85 +42,71 @@ const browser = await TideSurf.connect({ port: 9333 });
 tidesurf mcp --auto-connect --port 9333
 ```
 
-**Note:** After connecting, you should see the "Chrome is being controlled by automated test software" banner in Chrome (Chrome 144+). This is expected and indicates the CDP session is active.
+The “Chrome is being controlled by automated test software” banner confirms an active CDP session.
 
 ## Auto-connect: no page targets
 
-If TideSurf finds Chrome but reports "no open page targets," it means Chrome is running with remote debugging but has no regular tabs open (e.g., only DevTools or extension pages).
-
-**Fix:** Open at least one regular tab in Chrome before connecting.
+Chrome has remote debugging enabled but no regular page tab. Open one normal tab before connecting; DevTools and extension pages do not count.
 
 ## Timeouts
 
-If operations like `navigate()` or `getState()` are timing out, the target page may be slow to load (heavy JavaScript, large media assets, or a slow server).
-
-**Fix:** Increase the timeout globally through launch options, or accept that some pages are too slow and handle the `CDPTimeoutError` gracefully:
+Heavy scripts, media, or slow servers can push `navigate()` and `getState()` past the default timeout. Raise it at launch and handle `CDPTimeoutError` in the calling application:
 
 ```typescript
-const browser = await TideSurf.launch({
-  timeout: 60000, // 60 seconds instead of the default
-});
+const browser = await TideSurf.launch({ timeout: 60000 });
 ```
 
 ## Shadow DOM content missing
 
-Shadow DOM is pierced automatically by default. If you're not seeing shadow DOM content in the output, verify that `pierce: true` is set (this is the default behavior). Custom elements that use closed shadow roots may not be accessible because the browser keeps them private.
+TideSurf pierces open shadow roots by default. Confirm `pierce: true` remains enabled. Closed roots stay private to the browser and may not be available.
 
 ## Cross-origin iframes
 
-Iframes that load content from a different origin are subject to the browser's same-origin policy and cannot be accessed by TideSurf. These appear in the output as:
+The browser same-origin policy blocks iframe content from another origin. TideSurf reports the boundary as:
 
-```
+```text
 [iframe: inaccessible]
 ```
 
-This is a fundamental browser security boundary. Same-origin iframes are accessed and compressed normally.
+Same-origin iframe content is compressed normally.
 
 ## Empty or unexpected output
 
-If `getState()` returns very little content or doesn't include elements you expect to see:
+Three common causes cover most sparse results:
 
-- **The page may not have finished loading.** Try adding a short delay before calling `getState()`, or wait for the page to settle with `await browser.getPage().waitForStable()`
-- **Dynamic content may not have rendered yet.** Single-page apps that load content via JavaScript after the initial page load may need a moment for the framework to mount and render components
-- **The token budget may be too low.** If you're using `maxTokens`, try increasing it or omitting it entirely to see the full output
+- The page is still settling. Use `await browser.getPage().waitForStable()` before `getState()`.
+- A client-side app has not rendered its dynamic content yet. Allow the framework to mount.
+- `maxTokens` is too low. Raise it or remove it to inspect the complete compressed output.
 
 ## High token count
 
-If the compressed output is larger than expected, the page likely has a complex, deeply nested DOM with many interactive elements. Consider using `maxTokens` to cap the output, which forces TideSurf to prioritize the most actionable elements and prune the rest.
+Pages with many controls or deeply nested DOM trees can still produce large output. Add `maxTokens` so TideSurf keeps the most actionable content first.
 
 ## Common CDP connection errors
 
-### "No open page targets found"
+**“No open page targets found”**
 
-Chrome is running with remote debugging enabled, but has no regular tabs open (only DevTools or extension pages).
+Open a regular Chrome tab. A browser containing only DevTools or extension pages has no usable target.
 
-**Fix:** Open at least one regular tab in Chrome before connecting.
+**“Protocol error: Invalid session”**
 
-### "Protocol error: Invalid session"
+Chrome closed, crashed, or interrupted the CDP session. Restart Chrome and reconnect.
 
-The CDP session was interrupted, usually because Chrome crashed or was closed externally.
+**Connection hangs indefinitely**
 
-**Fix:** Restart Chrome and reconnect.
+A frozen tab or extension can block Chrome. Keep one blank tab open, disable suspect extensions, or restart with a fresh profile:
 
-### Connection hangs indefinitely
+```bash
+google-chrome --remote-debugging-port=9222 --user-data-dir=/tmp/tidesurf-profile
+```
 
-Sometimes Chrome is unresponsive due to a frozen tab or extension conflict.
+**Port conflicts on 9222**
 
-**Fix:**
-1. Try closing all tabs except one blank tab
-2. Disable extensions that might interfere with CDP
-3. Restart Chrome with a fresh profile: `--user-data-dir=/tmp/tidesurf-profile`
-
-### Port conflicts on 9222
-
-Another process is already using port 9222.
-
-**Fix:** Use a different port:
+Use the same alternate port on Chrome and TideSurf:
 
 ```typescript
 const browser = await TideSurf.launch({ port: 9223 });
-// or
-const browser = await TideSurf.connect({ port: 9223 });
+// or: await TideSurf.connect({ port: 9223 })
 ```
 
 ```bash
@@ -142,35 +116,29 @@ tidesurf inspect https://example.com --port 9223
 
 ## Chrome process leaks
 
-If TideSurf crashes or is killed, Chrome processes might remain running.
+A crash or forced exit can leave a launched Chrome process behind. Find the remote-debugging process and stop its PID:
 
-**Fix on macOS/Linux:**
 ```bash
-# Find Chrome processes with remote debugging
 ps aux | grep "remote-debugging-port"
-
-# Kill them manually
 kill -9 <pid>
 ```
 
-**Fix on Windows:**
-```powershell
-# Find Chrome with debugging port
-Get-Process chrome | Where-Object {$_.CommandLine -like "*remote-debugging-port*"}
+Windows PowerShell:
 
-# Stop the process
+```powershell
+Get-Process chrome | Where-Object {$_.CommandLine -like "*remote-debugging-port*"}
 Stop-Process -Id <pid>
 ```
 
 ## Permission denied errors
 
-### Upload/download
+**Upload/download**
 
-```
+```text
 File "/path/to/file" is outside allowed file access roots
 ```
 
-**Fix:** Files must be within the configured `fileAccessRoots` (defaults to working directory + temp directory).
+Uploads and custom download directories must resolve inside `fileAccessRoots`, which defaults to the working directory and OS temp directory:
 
 ```typescript
 const browser = await TideSurf.launch({
@@ -178,10 +146,10 @@ const browser = await TideSurf.launch({
 });
 ```
 
-### Clipboard access
+**Clipboard access**
 
-```
+```text
 clipboard_read is not available in read-only mode
 ```
 
-**Fix:** Clipboard tools are disabled in read-only mode. Launch without `readOnly: true` to use them.
+Clipboard tools stay disabled in read-only sessions. Use a regular session only for a trusted workflow that needs clipboard access.

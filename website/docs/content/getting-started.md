@@ -1,36 +1,25 @@
 # Getting started
 
-*In the modern web era, the tide is strong. Let's surf.*
-
-TideSurf connects Chromium to LLM agents. It turns the live DOM into compact text a model can read, usually 50-200 tokens instead of 5,000-50,000+ for raw HTML, then turns the model's actions back into browser commands through the Chrome DevTools Protocol.
-
-Special thanks to [SaltyAom](https://github.com/SaltyAom) and [ElysiaJS](https://elysiajs.com).
+TideSurf connects Chromium to LLM agents. It turns the live DOM into compact, model-readable text and sends model actions back through the Chrome DevTools Protocol. Thanks to [SaltyAom](https://github.com/SaltyAom) and [ElysiaJS](https://elysiajs.com).
 
 ## Prerequisites
 
-TideSurf requires a Chromium-based browser installed on the host machine. On most systems, Chrome or Chromium is already available, but you can point TideSurf to a specific binary by setting the `CHROME_PATH` environment variable or passing `chromePath` in the launch options.
-
-**Runtime compatibility:**
-- **Bun** (recommended): TideSurf is built and tested against Bun
-- **Node.js** ≥ 18: fully supported via the same npm package
+Install a Chromium-based browser and use Bun or Node.js 18+. TideSurf finds common Chrome and Chromium installs automatically. Set `CHROME_PATH` or pass `chromePath` to use another binary.
 
 ## Installation
 
 ```bash
-# Bun (recommended)
 bun add @tidesurf/core
-
-# npm / yarn / pnpm
-npm install @tidesurf/core
-yarn add @tidesurf/core
-pnpm add @tidesurf/core
+# or: npm install @tidesurf/core
+# or: yarn add @tidesurf/core
+# or: pnpm add @tidesurf/core
 ```
 
-> **Enable remote debugging:** Before using TideSurf, visit `chrome://inspect#remote-debugging` in your Chrome browser and turn on **"Allow remote debugging for this browser instance"**. This is required for TideSurf to connect to Chrome via CDP.
+Chrome 144+ also needs remote debugging approval. Open `chrome://inspect#remote-debugging` and enable **Allow remote debugging for this browser instance**.
 
 ## Quick start
 
-The simplest way to use TideSurf is to launch a browser, navigate somewhere, and read the compressed page state:
+Launch, navigate, read, and act:
 
 ```typescript
 import { TideSurf } from "@tidesurf/core";
@@ -38,49 +27,35 @@ import { TideSurf } from "@tidesurf/core";
 const browser = await TideSurf.launch();
 await browser.navigate("https://example.com");
 
-// Get compressed page state for your LLM
 const state = await browser.getState();
 console.log(state.content);
 
-// Execute agent actions using the element IDs from the output
 const page = browser.getPage();
-await page.click("B1");        // Click the first button
-await page.type("I1", "hello world");  // Type into the first input
+await page.click("B1");
+await page.type("I1", "hello world");
 
 await browser.close();
 ```
 
-The `state.content` output is the part you send to the model. It removes CSS classes, wrapper divs, scripts, and styles, then keeps the pieces an agent can actually use: buttons, links, inputs, forms, headings, and visible text. Short IDs such as `B1`, `L3`, and `I2` become the handles your agent uses for later actions. Disabled or inert elements appear in `~~strikethrough~~`, which tells the agent to leave them alone. See [Page format](#page-format) for the full output specification.
+Send `state.content` to the model. TideSurf removes styles, scripts, and wrapper markup while keeping visible copy, structure, and usable controls. Short IDs such as `B1`, `L3`, and `I2` remain tied to the live page. Disabled or inert controls appear in `~~strikethrough~~`. [Page format](#page-format) documents the full representation.
 
 ## Connecting to an existing browser
 
-Instead of launching a new Chrome instance, you can connect to one that's already running. This is useful when you want to:
-
-- **Reuse a logged-in session**: your agent can access pages behind authentication without re-entering credentials
-- **Debug a live page**: spot a bug while browsing, then hand off to your agent to investigate
-- **Keep your browsing state**: extensions, cookies, and local storage carry over
+Attach to an open Chrome session to reuse cookies, extensions, login state, and the page already under inspection:
 
 ```typescript
 import { TideSurf } from "@tidesurf/core";
 
-// Connect to Chrome running with remote debugging on port 9222
 const browser = await TideSurf.connect();
-
-// Everything works the same from here
 const state = await browser.getState();
 const page = browser.getPage();
 await page.click("B1");
 
-// close() only disconnects CDP. It will not kill your Chrome.
+// Disconnects CDP without closing your Chrome process.
 await browser.close();
 ```
 
-**Prerequisites:** Chrome must have remote debugging enabled. Either:
-
-1. **Chrome 144+:** Open `chrome://inspect#remote-debugging` and enable it. Chrome will show a permission dialog when TideSurf connects
-2. **Any Chrome:** Launch with `--remote-debugging-port=9222`
-
-You can specify a custom port and host:
+Chrome must expose a remote debugging port. Chrome 144+ uses `chrome://inspect#remote-debugging`; any supported Chrome can launch with `--remote-debugging-port=9222`. Custom hosts, ports, and timeouts are explicit:
 
 ```typescript
 const browser = await TideSurf.connect({
@@ -90,8 +65,6 @@ const browser = await TideSurf.connect({
 });
 ```
 
-Or from the CLI:
-
 ```bash
 tidesurf inspect https://example.com --auto-connect --port 9333
 tidesurf mcp --auto-connect
@@ -99,15 +72,13 @@ tidesurf mcp --auto-connect
 
 ## Read-only mode
 
-Launch or connect with `readOnly: true` to prevent the agent from modifying pages or accessing sensitive local state. Only observation tools (`get_state`, `extract`, `list_tabs`, `switch_tab`, `search`, `screenshot`) remain available. `evaluate` and `clipboard_read` are intentionally disabled in read-only mode.
+Read-only sessions expose observation tools only: `get_state`, `extract`, `list_tabs`, `switch_tab`, `search`, and `screenshot`. Mutation, clipboard, evaluation, file, and tab-creation tools stay unavailable.
 
 ```typescript
 const browser = await TideSurf.launch({ readOnly: true });
-// or
-const browser = await TideSurf.connect({ readOnly: true });
+// or: await TideSurf.connect({ readOnly: true })
 ```
 
-From the CLI:
 ```bash
 tidesurf mcp --read-only
 tidesurf mcp --auto-connect --read-only
@@ -115,7 +86,7 @@ tidesurf mcp --auto-connect --read-only
 
 ## Filesystem access
 
-By default, TideSurf only allows `upload` and custom `downloadDir` paths inside the current working directory and the OS temp directory. Override that policy explicitly when you need a wider host filesystem boundary:
+Uploads and custom download paths stay inside the current working directory and OS temp directory by default. Expand the boundary explicitly:
 
 ```typescript
 const browser = await TideSurf.launch({
@@ -125,40 +96,26 @@ const browser = await TideSurf.launch({
 
 ## Integrating with an LLM agent
 
-TideSurf ships with standardized tool definitions that you can pass directly to any LLM that supports function calling. In an agent loop, the model receives the compressed page state as context, chooses a tool, and TideSurf executes the browser action:
+`getToolDefinitions()` returns 18 provider-neutral function schemas. The executor accepts the model's selected tool call:
 
 ```typescript
 import { TideSurf, getToolDefinitions } from "@tidesurf/core";
 
-const surfing = await TideSurf.launch();
-const tools = getToolDefinitions();   // Standard tool schemas for your LLM
-const executor = surfing.getToolExecutor();
+const browser = await TideSurf.launch();
+const tools = getToolDefinitions();
+const executor = browser.getToolExecutor();
 
-// In your agent loop:
 const result = await executor({
   name: "navigate",
   input: { url: "https://example.com" },
 });
 ```
 
-The `getToolDefinitions()` function returns an array of 18 tool schemas (navigate, click, type, scroll, extract, and more) formatted for LLM function calling. You can pass these directly to the Anthropic API, OpenAI API, or any other provider that supports tool use.
+The schemas work with Anthropic, OpenAI, and other providers that support function calling.
 
 ## Using as an MCP server
 
-If you're working with Claude Code or another MCP-compatible client, TideSurf can run as a Model Context Protocol server. Add the following to your MCP configuration:
-
-```json
-{
-  "mcpServers": {
-    "tidesurf": {
-      "command": "bunx",
-      "args": ["tidesurf", "mcp"]
-    }
-  }
-}
-```
-
-To connect to your running Chrome instead of launching a headless instance, add `--auto-connect`:
+Add TideSurf to an MCP client:
 
 ```json
 {
@@ -171,34 +128,22 @@ To connect to your running Chrome instead of launching a headless instance, add 
 }
 ```
 
-Once configured, all 18 TideSurf tools become available as MCP tools that your AI assistant can invoke directly.
+Remove `--auto-connect` to launch a separate headless browser.
 
 ## Output modes
 
-`getState` accepts a `mode` parameter for different levels of detail:
+Choose the amount of page detail needed for the next action:
 
 ```typescript
-// Full mode, viewport only (default)
 const full = await browser.getState();
-
-// Only interactive elements visible in viewport
 const interactive = await browser.getState({ mode: "interactive" });
-
-// Landmarks and summaries only
 const minimal = await browser.getState({ mode: "minimal" });
-
-// Full page content (all content, not just viewport)
 const fullPage = await browser.getState({ viewport: false });
-
-// Viewport mode is on by default: set viewport: false for the entire page
-const viewport = await browser.getState(); // equivalent to { viewport: true }
+const bounded = await browser.getState({ maxTokens: 500 });
 ```
 
-Modes compose with each other and `maxTokens`.
+Viewport filtering is on by default. Modes compose with `viewport` and `maxTokens`.
 
 ## What to read next
 
-- **[Page format](#page-format)**: understand the output format TideSurf produces and how element IDs work
-- **[Token budget](#token-budget)**: control output size with `maxTokens` and learn how TideSurf prioritizes content
-- **[API reference](#api-reference)**: full method signatures and tool definitions (including `TideSurf.connect()`)
-- **[Migration guide](#migration)**: upgrade guide for breaking changes between versions
+[Page format](#page-format) explains the text and IDs. [Token budget](#token-budget) covers output limits. [Security](#security) defines the trust boundary. [API reference](#api-reference) lists every method and tool. [Migration](#migration) tracks breaking changes.

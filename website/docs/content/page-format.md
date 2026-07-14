@@ -1,10 +1,10 @@
 # Page format
 
-When you call `getState()`, TideSurf walks the live DOM tree, strips away everything an LLM doesn't need, and produces a compact text representation that preserves only the parts that matter: interactive elements, semantic structure, and visible text.
+`getState()` walks the live DOM and returns compact text containing usable controls, semantic structure, and visible copy.
 
 ## Before and after
 
-Consider a typical page fragment with navigation and a search form. The raw HTML carries plenty of presentational markup: CSS classes, wrapper divs, ARIA roles, and layout attributes. Those details inflate token usage without giving the model more useful actions:
+A small navigation and search form still carries classes, wrappers, roles, and layout attributes that add tokens without adding useful actions:
 
 ```html
 <div class="header">
@@ -25,7 +25,7 @@ Consider a typical page fragment with navigation and a search form. The raw HTML
 </div>
 ```
 
-TideSurf compresses this into a handful of tokens while retaining everything an agent needs to understand and interact with the page:
+TideSurf keeps the meaning and live controls:
 
 ```
 # Example Search
@@ -42,7 +42,7 @@ FORM F1
 
 ## Element ID scheme
 
-Every interactive element in the output receives a short, prefixed ID that your agent can reference when performing actions like `click("B1")` or `type("I1", "query")`. The prefix indicates the element type:
+Every interactive element receives a short ID for actions such as `click("B1")` and `type("I1", "query")`. Its prefix identifies the element type:
 
 | Prefix | Element type | Example |
 |---|---|---|
@@ -54,11 +54,11 @@ Every interactive element in the output receives a short, prefixed ID that your 
 | `T` | Tables | `T1` |
 | `D` | Dialogs | `D1` |
 
-IDs are assigned sequentially as TideSurf traverses the DOM from top to bottom, so `L1` is always the first link on the page and `B3` is the third button. These IDs are stable within a single `getState()` call but may shift between calls if the page content changes (for example, after navigating or triggering a dynamic UI update).
+TideSurf assigns IDs from top to bottom: `L1` is the first link and `B3` is the third button. IDs belong to one state snapshot and can shift after navigation or a dynamic update. Read fresh state before acting on a changed page.
 
 ## What gets stripped vs preserved
 
-TideSurf applies a clear set of rules to decide what stays and what goes:
+The compressor removes presentation and keeps meaning:
 
 | Stripped | Preserved |
 |---|---|
@@ -72,19 +72,19 @@ TideSurf applies a clear set of rules to decide what stays and what goes:
 
 ## Special cases
 
-**Images** are preserved as `[img: alt text]`, but `src` is omitted to save tokens. The alt text is usually enough for an LLM to understand what the image represents.
+**Images** become `[img: alt text]`; `src` stays out of the output.
 
-**Shadow DOM** is pierced automatically, so elements inside web components appear in the output as if they were part of the regular DOM tree.
+**Shadow DOM** is pierced automatically. Web-component content appears in the regular tree.
 
-**Cross-origin iframes** cannot be accessed due to browser security restrictions and appear as `[iframe: inaccessible]` in the output.
+**Cross-origin iframes** remain inaccessible under browser security rules and appear as `[iframe: inaccessible]`.
 
-**Headings** maintain their hierarchy using markdown heading markers (`#`, `##`, `###`) to give the LLM a sense of page structure and content organization.
+**Headings** keep their hierarchy as `#`, `##`, and `###`.
 
 ## Element state
 
-TideSurf serializes element state directly into the compressed output using conventions that LLMs understand natively from markdown pre-training.
+Element state appears inline through familiar text conventions.
 
-### Quick reference
+**Quick reference**
 
 | Format | Meaning |
 |---|---|
@@ -96,9 +96,9 @@ TideSurf serializes element state directly into the compressed output using conv
 | `[L1](/url →) text` | Link opens in new tab |
 | `> Option` | Currently selected option in a select |
 
-### Disabled and inert elements: `~~strikethrough~~`
+**Disabled and inert: `~~strikethrough~~`**
 
-Elements that cannot receive interaction are wrapped in markdown `~~strikethrough~~`. An agent should never pass a struck-through element's ID to `click`, `type`, or `select`, because the browser will either ignore the action or throw an error.
+Unavailable elements use `~~strikethrough~~`. Do not pass their IDs to `click`, `type`, or `select`.
 
 ```
 ~~[B1] Submit~~              # button has disabled attribute
@@ -108,11 +108,11 @@ Elements that cannot receive interaction are wrapped in markdown `~~strikethroug
 ~~[B2] Save~~                # inert (pointer-events:none or HTML inert)
 ```
 
-The strikethrough convention covers multiple underlying causes, including the HTML `disabled` attribute, `aria-disabled="true"`, inherited disabled state from a `<fieldset disabled>` ancestor, CSS `pointer-events: none`, and the HTML `inert` attribute. From the agent's perspective, the reason does not matter. `~~` means "leave this alone."
+The marker covers `disabled`, `aria-disabled="true"`, `<fieldset disabled>`, `pointer-events: none`, and `inert`. To the agent, `~~` simply means “leave this alone.”
 
-### Toggle state: `open` / `closed`
+**Toggle state: `open` / `closed`**
 
-Buttons and links that control expandable regions show their toggle state:
+Expandable controls show their toggle state:
 
 ```
 [B1] Menu open               # aria-expanded="true"
@@ -120,23 +120,23 @@ Buttons and links that control expandable regions show their toggle state:
 ~~[B3] Options closed~~       # disabled AND collapsed
 ```
 
-### Obscured elements: `obscured`
+**Obscured controls: `obscured`**
 
-Elements behind overlays (modals, cookie banners) are still actionable but blocked. The agent should dismiss the overlay first:
+Controls behind an overlay remain in the output as blocked. Dismiss the overlay first:
 
 ```
 [B1] Submit obscured          # behind an overlay
 ```
 
-### Links with target
+**Links with a target**
 
-Links that open in a new tab show `→` inside the href:
+Links opening a new tab include `→` inside the href:
 
 ```
 [L1](/docs →) Documentation   # target="_blank"
 ```
 
-### Input constraints
+**Input constraints**
 
 Inputs display their validation constraints inline:
 
@@ -149,9 +149,9 @@ I5 ~Email ="" required
 I6:checkbox checked
 ```
 
-### Select options
+**Select options**
 
-Select dropdowns show `>` for the selected option, plus `required`/`multiple` flags:
+Selects mark chosen options with `>` and retain `required` or `multiple`:
 
 ```
 S1:select required
@@ -166,9 +166,9 @@ S2:select multiple
 
 ## Computed visibility
 
-Before serializing the DOM, TideSurf inspects each element's computed CSS styles to filter out anything that isn't actually visible or usable on the page. The following properties are checked:
+TideSurf checks computed styles before serialization:
 
-| CSS property | Filtered when |
+| CSS property | Result |
 |---|---|
 | `display` | `none` |
 | `visibility` | `hidden` or `collapse` |
@@ -176,6 +176,6 @@ Before serializing the DOM, TideSurf inspects each element's computed CSS styles
 | `clip-path` | Element is clipped to zero area |
 | `pointer-events` | `none` (element is marked as inert/`~~strikethrough~~` instead of removed) |
 
-This filtering prevents agents from interacting with honeypot fields, off-screen traps, or CSS-hidden elements that are present in the DOM but not visible to a real user.
+This keeps CSS-hidden elements, honeypots, and off-screen traps out of the agent surface.
 
-Use `getState({ includeHidden: true })` to bypass this filtering for debugging. This helps when you need to inspect hidden menus, lazy-loaded content, or off-screen elements before they become visible.
+`getState({ includeHidden: true })` bypasses the filter for debugging hidden menus, lazy content, and off-screen elements.

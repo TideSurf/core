@@ -1,6 +1,12 @@
-<svg viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="128" height="128" rx="28" fill="#09090b"/>
-  <path d="M24 50 C38 36, 54 36, 64 50 C74 64, 90 64, 104 50" stroke="white" stroke-width="3.5" stroke-linecap="round" opacity="0.1"/>
-  <path d="M24 68 C38 54, 54 54, 64 68 C74 82, 90 82, 104 68" stroke="white" stroke-width="4.5" stroke-linecap="round" opacity="0.25"/>
-  <path d="M24 86 C38 72, 54 72, 64 86 C74 100, 90 100, 104 86" stroke="#2563eb" stroke-width="5.5" stroke-linecap="round"/>
+<svg width="480" height="128" viewBox="0 0 480 128" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title">
+  <title id="title">TideSurf</title>
+  <style>
+    .ink { fill: #161716; }
+    @media (prefers-color-scheme: dark) { .ink { fill: #E8E9E6; } }
+  </style>
+  <g transform="translate(6 24) scale(1.25)">
+    <path fill="#4F7B86" fill-rule="evenodd" d="M4 4H60V60H4ZM4 29C13 29 14 18 24 18C36 18 38 42 49 42C55 42 58 33 60 29V35C58 39 55 48 49 48C34 48 33 24 24 24C16 24 14 35 4 35Z"/>
+  </g>
+  <text class="ink" x="100" y="94" font-family="'Zalando Sans','Gothic A1',system-ui,sans-serif" font-size="88" font-weight="600" letter-spacing="-2.5">Tide</text>
+  <text x="268" y="94" fill="#4F7B86" font-family="'Zalando Sans','Gothic A1',system-ui,sans-serif" font-size="88" font-weight="600" letter-spacing="-3">Surf</text>
 </svg>

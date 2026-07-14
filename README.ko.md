@@ -1,50 +1,68 @@
-<p align="center">
-  <img src="https://tidesurf.org/logo.svg" width="80" height="80" alt="TideSurf">
-</p>
+<img src="https://tidesurf.org/logo.svg" width="180" height="48" alt="TideSurf">
 
-<h2 align="center">
-    TideSurf
-</h2>
+# TideSurf
 
-<p align="center">
-    <a href="README.md">English</a> | <a href="README.ja.md">日本語</a> | <strong>한국어</strong>
-</p>
+**살아 있는 페이지. 서핑하는 에이전트.**
 
-<p align="center">
-  <strong><a href="https://tidesurf.org">About</a></strong> |
-  <strong><a href="https://tidesurf.org/docs">Documentation</a></strong> |
-  <strong><a href="https://tidesurf.org/llms.txt">llms.txt</a></strong> |
-  <strong><a href="https://github.com/sponsors/MercuriusDream">Sponsor</a></strong>
-</p>
+[웹사이트](https://tidesurf.org) · [문서](https://tidesurf.org/docs) · [llms.txt](https://tidesurf.org/llms.txt) · [npm](https://www.npmjs.com/package/@tidesurf/core) · [후원](https://github.com/sponsors/MercuriusDream)
 
-<p align="center">
-  <a href="https://www.producthunt.com/products/tidesurf?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-tidesurf" target="_blank" rel="noopener noreferrer"><img alt="TideSurf - Ultra-token-efficient CDP library for AI agents | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1101853&theme=neutral&t=1773855834160" /></a>
-</p>
+TideSurf는 실행 중인 Chromium을 모델이 읽기 좋은 간결한 텍스트로 바꿉니다. 조작 가능한 요소에는 실제 페이지와 연결된 짧은 ID가 붙습니다. 에이전트는 Chrome DevTools Protocol을 통해 페이지를 읽고, 고르고, 조작합니다.
 
-<p align="center">
-  사실, 웹 탐색에는 옴니모달도 비전 모델도 필요하지 않습니다.<br>
-  TideSurf는 라이브 DOM을 토큰 효율적인 구조화된 표현으로 변환하여 LLM이 이해하고 상호작용할 수 있도록 합니다.
-</p>
+## 시작하기
 
-<p align="center">
-  TideSurf는 <a href="https://chromedevtools.github.io/devtools-protocol">Chrome DevTools Protocol</a>을 통해 Chromium을 LLM 에이전트에 연결하는 TypeScript 라이브러리입니다. 라이브 DOM을 탐색하고 50-200 토큰의 토큰 효율적인 구조화된 표현(스크린샷 기반 접근법보다 10-100배 낮은 토큰 비용)으로 압축하며, 18개의 도구 정의를 LLM 함수 호출용으로 노출합니다.
-</p>
+```sh
+bun add @tidesurf/core
+```
 
-<p align="center">
-  <a href="https://tidesurf.org/docs#getting-started">Getting started</a>
-  <a href="https://tidesurf.org/docs#page-format">Page format</a>
-  <a href="https://tidesurf.org/docs#token-budget">Token budget</a>
-  <a href="https://tidesurf.org/docs#agent-patterns">Agent patterns</a>
-  <a href="https://tidesurf.org/docs#security">Security</a>
-  <a href="https://tidesurf.org/docs#api-reference">API reference</a>
-</p>
+```ts
+import { TideSurf } from "@tidesurf/core";
 
-<p align="center">
-  <img src="https://tidesurf.org/og.png" alt="TideSurf Social Preview">
-</p>
+const browser = await TideSurf.launch();
+await browser.navigate("https://example.com");
 
-<p align="center">
-  <a href="https://github.com/TideSurf/core/actions/workflows/ci.yml"><img src="https://github.com/TideSurf/core/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://www.npmjs.com/package/@tidesurf/core"><img src="https://img.shields.io/npm/v/@tidesurf/core" alt="npm"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
-</p>
+const state = await browser.getState();
+console.log(state.content);
+
+const page = browser.getPage();
+await page.click("B1");
+await browser.close();
+```
+
+페이지는 실제로 조작할 수 있는 핸들이 포함된 일반 텍스트로 돌아옵니다.
+
+```text
+# Example Search
+> example.com/search
+NAV
+  [L1](/) Home
+  [L2](/about) About
+FORM F1
+  I1 ~Search... ="TideSurf"
+  [B1] Search
+```
+
+`B1`은 실제 Search 버튼을 가리킵니다. 링크, 입력창, 탭, 폼도 같은 방식으로 살아 있는 페이지에 연결됩니다. CSS 클래스, 래퍼, 스크립트, 장식용 DOM은 모델 컨텍스트에서 빠집니다.
+
+라이브 벤치마크에서 GitHub의 추정 84,236토큰을 2,593토큰으로 압축했습니다. 결과는 페이지 구조에 따라 달라집니다. 로컬 측정은 `bun scripts/benchmark-live.ts`로 실행할 수 있습니다.
+
+## 활용하기
+
+`getState()`는 뷰포트 필터, `full`·`interactive`·`minimal` 출력 모드, `maxTokens` 예산을 지원합니다. 탭 제어, 파일 경계, 타입 오류, 읽기 전용 모드, LLM 함수 호출용 표준 도구 18개도 제공합니다. Bun과 Node.js 18+를 지원합니다.
+
+읽기 전용 모드는 쓰기 도구와 민감한 도구를 에이전트 표면에서 제거합니다.
+
+```ts
+const browser = await TideSurf.launch({ readOnly: true });
+```
+
+MCP 서버로 실행할 수 있습니다.
+
+```sh
+bunx tidesurf mcp --auto-connect
+```
+
+Chrome 144+에서는 `chrome://inspect#remote-debugging`에서 원격 디버깅을 허용해야 합니다. TideSurf는 Chromium을 새로 실행하거나 `9222` 포트에서 대기 중인 세션에 연결할 수 있습니다.
+
+다음으로 [Getting started](https://tidesurf.org/docs#getting-started), [Page format](https://tidesurf.org/docs#page-format), [Security](https://tidesurf.org/docs#security), [API reference](https://tidesurf.org/docs#api-reference)를 확인하세요.
+
+[English](README.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Apache 2.0](LICENSE)

@@ -1,154 +1,9 @@
 import { marked } from "marked";
 import "./style.css";
+import { initScrollTone } from "../../shared/scroll-tone";
 
 type Language = "en" | "ja" | "ko";
 type Theme = "light" | "dark";
-
-interface Translations {
-  [key: string]: {
-    en: string;
-    ja: string;
-    ko: string;
-  };
-}
-
-const translations: Translations = {
-  "nav.github": { en: "GitHub", ja: "GitHub", ko: "GitHub" },
-  "nav.npm": { en: "npm", ja: "npm", ko: "npm" },
-  "docs.title": { en: "Documentation", ja: "ドキュメント", ko: "문서" },
-  "search.placeholder": {
-    en: "Search docs",
-    ja: "ドキュメントを検索",
-    ko: "문서 검색",
-  },
-  "search.empty": {
-    en: "Nothing found",
-    ja: "結果はありません",
-    ko: "검색 결과가 없습니다",
-  },
-  "sidebar.gettingstarted": {
-    en: "Getting started",
-    ja: "はじめに",
-    ko: "시작하기",
-  },
-  "sidebar.intro": { en: "Introduction", ja: "導入", ko: "소개" },
-  "sidebar.guide": { en: "Guide", ja: "ガイド", ko: "가이드" },
-  "sidebar.pageformat": {
-    en: "Page format",
-    ja: "ページ形式",
-    ko: "페이지 형식",
-  },
-  "sidebar.tokenbudget": {
-    en: "Token budget",
-    ja: "トークン予算",
-    ko: "토큰 예산",
-  },
-  "sidebar.multitab": {
-    en: "Multi-tab",
-    ja: "マルチタブ",
-    ko: "멀티탭",
-  },
-  "sidebar.errors": {
-    en: "Error handling",
-    ja: "エラー処理",
-    ko: "오류 처리",
-  },
-  "sidebar.troubleshoot": {
-    en: "Troubleshooting",
-    ja: "トラブルシューティング",
-    ko: "문제 해결",
-  },
-  "sidebar.security": {
-    en: "Security",
-    ja: "セキュリティ",
-    ko: "보안",
-  },
-  "sidebar.agentpatterns": {
-    en: "Agent patterns",
-    ja: "エージェントパターン",
-    ko: "에이전트 패턴",
-  },
-  "sidebar.reference": {
-    en: "Reference",
-    ja: "リファレンス",
-    ko: "참조",
-  },
-  "sidebar.api": {
-    en: "API reference",
-    ja: "APIリファレンス",
-    ko: "API 참조",
-  },
-  "sidebar.bench": {
-    en: "Benchmarks",
-    ja: "ベンチマーク",
-    ko: "벤치마크",
-  },
-  "sidebar.arch": {
-    en: "Architecture",
-    ja: "アーキテクチャ",
-    ko: "아키텍처",
-  },
-  "sidebar.changelog": {
-    en: "Changelog",
-    ja: "変更履歴",
-    ko: "변경 이력",
-  },
-  "sidebar.feedback": {
-    en: "Feedback",
-    ja: "フィードバック",
-    ko: "피드백",
-  },
-  "toc.heading": {
-    en: "On this page",
-    ja: "このページの内容",
-    ko: "이 페이지",
-  },
-  "content.loading": {
-    en: "Loading docs",
-    ja: "ドキュメントを読み込み中",
-    ko: "문서를 불러오는 중",
-  },
-  "error.missing.title": {
-    en: "Page not found",
-    ja: "ページが見つかりません",
-    ko: "페이지를 찾을 수 없습니다",
-  },
-  "error.missing.link": {
-    en: "Go to Introduction",
-    ja: "導入へ移動",
-    ko: "소개로 이동",
-  },
-  "content.share.title": {
-    en: "Share",
-    ja: "共有",
-    ko: "공유",
-  },
-  "content.share.copy": {
-    en: "Copy link",
-    ja: "リンクをコピー",
-    ko: "링크 복사",
-  },
-  "content.share.copied": {
-    en: "Copied",
-    ja: "コピーしました",
-    ko: "복사됨",
-  },
-  "content.share.llms": {
-    en: "Open llms.txt",
-    ja: "llms.txtを開く",
-    ko: "llms.txt 열기",
-  },
-  "content.copy.md": {
-    en: "Copy markdown",
-    ja: "マークダウンをコピー",
-    ko: "마크다운 복사",
-  },
-  "content.copy.text": {
-    en: "Copy text",
-    ja: "テキストをコピー",
-    ko: "텍스트 복사",
-  },
-};
 
 interface SearchEntry {
   name: string;
@@ -156,7 +11,39 @@ interface SearchEntry {
   snippet: string;
 }
 
+interface TranslationSet {
+  en: string;
+  ja: string;
+  ko: string;
+}
+
+const translations: Record<string, TranslationSet> = {
+  "search.placeholder": { en: "Search docs", ja: "ドキュメントを検索", ko: "문서 검색" },
+  "search.empty": { en: "Nothing found", ja: "結果はありません", ko: "검색 결과가 없습니다" },
+  "sidebar.gettingstarted": { en: "Getting started", ja: "はじめに", ko: "시작하기" },
+  "sidebar.intro": { en: "Introduction", ja: "導入", ko: "소개" },
+  "sidebar.guide": { en: "Guide", ja: "ガイド", ko: "가이드" },
+  "sidebar.pageformat": { en: "Page format", ja: "ページ形式", ko: "페이지 형식" },
+  "sidebar.tokenbudget": { en: "Token budget", ja: "トークン予算", ko: "토큰 예산" },
+  "sidebar.multitab": { en: "Multi-tab", ja: "マルチタブ", ko: "멀티탭" },
+  "sidebar.errors": { en: "Error handling", ja: "エラー処理", ko: "오류 처리" },
+  "sidebar.troubleshoot": { en: "Troubleshooting", ja: "トラブルシューティング", ko: "문제 해결" },
+  "sidebar.security": { en: "Security", ja: "セキュリティ", ko: "보안" },
+  "sidebar.agentpatterns": { en: "Agent patterns", ja: "エージェントパターン", ko: "에이전트 패턴" },
+  "sidebar.reference": { en: "Reference", ja: "リファレンス", ko: "참조" },
+  "sidebar.api": { en: "API reference", ja: "APIリファレンス", ko: "API 참조" },
+  "sidebar.bench": { en: "Benchmarks", ja: "ベンチマーク", ko: "벤치마크" },
+  "sidebar.arch": { en: "Architecture", ja: "アーキテクチャ", ko: "아키텍처" },
+  "sidebar.changelog": { en: "Changelog", ja: "変更履歴", ko: "변경 이력" },
+  "sidebar.feedback": { en: "Feedback", ja: "フィードバック", ko: "피드백" },
+  "toc.heading": { en: "On this page", ja: "このページ", ko: "이 페이지" },
+  "content.loading": { en: "Loading docs…", ja: "読み込み中…", ko: "불러오는 중…" },
+  "error.missing.title": { en: "Page not found", ja: "ページが見つかりません", ko: "페이지를 찾을 수 없습니다" },
+  "error.missing.link": { en: "Go to Introduction", ja: "導入へ", ko: "소개로" },
+};
+
 const DEFAULT_PAGE = "getting-started";
+const MOBILE_QUERY = "(max-width: 860px)";
 const SAFE_URL_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
 const DROP_CONTENT_TAGS = new Set([
   "script",
@@ -224,19 +111,19 @@ const TAG_ALLOWED_ATTRS: Record<string, Set<string>> = {
   img: new Set(["src", "alt", "title"]),
 };
 
-let currentLang: Language = "en";
-let currentTheme: Theme = "dark";
-let currentPageName: string = DEFAULT_PAGE;
-let pages: Record<string, string> = {};
-let pageMap: Record<string, string> = {};
-let tocObserver: IntersectionObserver | null = null;
-let tocScrollHandler: (() => void) | null = null;
+const contentEl = document.getElementById("content") as HTMLElement;
+const mobileMedia = window.matchMedia(MOBILE_QUERY);
 
-const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-const contentEl = document.getElementById("content")!;
+let currentLang: Language = "en";
+let currentTheme: Theme = "light";
+let currentPageName = DEFAULT_PAGE;
+let pageMap: Record<string, string> = {};
+let tocScrollFrame = 0;
+let initialNavigation = true;
+let removeTocTracking: (() => void) | null = null;
 
 function prefersReducedMotion(): boolean {
-  return motionQuery.matches;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
 function safeStorageGet(key: string): string | null {
@@ -251,7 +138,7 @@ function safeStorageSet(key: string, value: string): void {
   try {
     window.localStorage.setItem(key, value);
   } catch {
-    // Ignore storage failures.
+    // Storage can be unavailable in hardened browser contexts.
   }
 }
 
@@ -266,20 +153,14 @@ async function loadContent(): Promise<void> {
     import: "default",
   });
 
-  pages = modules as Record<string, string>;
   pageMap = {};
-
-  for (const [path, content] of Object.entries(pages)) {
+  Object.entries(modules).forEach(([path, content]) => {
     const name = path.split("/").pop()?.replace(".md", "") ?? "";
-    pageMap[name] = content as string;
-  }
+    pageMap[name] = String(content);
+  });
 }
 
 function isSafeUrl(rawValue: string): boolean {
-  if (!rawValue) {
-    return false;
-  }
-
   try {
     const url = new URL(rawValue, window.location.origin);
     return SAFE_URL_PROTOCOLS.has(url.protocol);
@@ -288,120 +169,44 @@ function isSafeUrl(rawValue: string): boolean {
   }
 }
 
-function isAllowedAttribute(tag: string, attributeName: string): boolean {
-  return (
-    GLOBAL_ALLOWED_ATTRS.has(attributeName) ||
-    TAG_ALLOWED_ATTRS[tag]?.has(attributeName) === true
-  );
-}
-
 function sanitizeHtmlFragment(html: string): DocumentFragment {
   const doc = new DOMParser().parseFromString(html, "text/html");
 
-  for (const element of Array.from(doc.body.querySelectorAll("*"))) {
+  Array.from(doc.body.querySelectorAll("*")).forEach((element) => {
     const tag = element.tagName.toLowerCase();
 
     if (DROP_CONTENT_TAGS.has(tag)) {
       element.remove();
-      continue;
+      return;
     }
 
     if (!ALLOWED_TAGS.has(tag)) {
       element.replaceWith(...Array.from(element.childNodes));
-      continue;
+      return;
     }
 
-    for (const attribute of Array.from(element.attributes)) {
+    Array.from(element.attributes).forEach((attribute) => {
       const name = attribute.name.toLowerCase();
       const value = attribute.value.trim();
+      const globallyAllowed = GLOBAL_ALLOWED_ATTRS.has(name);
+      const tagAllowed = TAG_ALLOWED_ATTRS[tag]?.has(name) === true;
+      const unsafeUrl = (name === "href" || name === "src") && !isSafeUrl(value);
 
-      if (name.startsWith("on") || name === "style") {
+      if (name.startsWith("on") || name === "style" || (!globallyAllowed && !tagAllowed) || unsafeUrl) {
         element.removeAttribute(attribute.name);
-        continue;
-      }
-
-      if (!isAllowedAttribute(tag, name)) {
-        element.removeAttribute(attribute.name);
-        continue;
-      }
-
-      if ((name === "href" || name === "src") && !isSafeUrl(value)) {
-        element.removeAttribute(attribute.name);
-      }
-    }
-
-    if (tag === "a") {
-      const target = element.getAttribute("target");
-      if (target === "_blank") {
-        element.setAttribute("rel", "noopener noreferrer");
-      }
-    }
-  }
-
-  const fragment = document.createDocumentFragment();
-  for (const child of Array.from(doc.body.childNodes)) {
-    fragment.appendChild(document.importNode(child, true));
-  }
-
-  return fragment;
-}
-
-function addCodeHeaders(): void {
-  contentEl.querySelectorAll("pre").forEach((pre) => {
-    // Skip if already wrapped or has header
-    if (pre.parentElement?.classList.contains("code-wrapper")) {
-      return;
-    }
-    
-    const wrapper = document.createElement("div");
-    wrapper.className = "code-wrapper";
-    
-    // Create header with dots
-    const header = document.createElement("div");
-    header.className = "code-header";
-    header.innerHTML = `
-      <span class="dot dot-red"></span>
-      <span class="dot dot-yellow"></span>
-      <span class="dot dot-green"></span>
-    `;
-    
-    pre.parentNode?.insertBefore(wrapper, pre);
-    wrapper.appendChild(header);
-    wrapper.appendChild(pre);
-  });
-}
-
-function addCodeCopyButtons(): void {
-  contentEl.querySelectorAll(".code-wrapper").forEach((wrapper) => {
-    // Skip if button already exists
-    if (wrapper.querySelector(".copy-code-btn")) {
-      return;
-    }
-    
-    const pre = wrapper.querySelector("pre");
-    if (!pre) return;
-    
-    const copyBtn = document.createElement("button");
-    copyBtn.className = "copy-code-btn";
-    copyBtn.type = "button";
-    copyBtn.setAttribute("aria-label", "Copy code");
-    copyBtn.textContent = "copy";
-    copyBtn.addEventListener("click", async () => {
-      const code = pre.querySelector("code")?.textContent || "";
-      try {
-        await navigator.clipboard.writeText(code);
-        copyBtn.textContent = "copied";
-        copyBtn.classList.add("copied");
-        window.setTimeout(() => {
-          copyBtn.textContent = "copy";
-          copyBtn.classList.remove("copied");
-        }, 1500);
-      } catch (err) {
-        console.error("Failed to copy:", err);
       }
     });
-    wrapper.appendChild(copyBtn);
+
+    if (tag === "a" && element.getAttribute("target") === "_blank") {
+      element.setAttribute("rel", "noopener noreferrer");
+    }
   });
+
+  const fragment = document.createDocumentFragment();
+  Array.from(doc.body.childNodes).forEach((child) => {
+    fragment.appendChild(document.importNode(child, true));
+  });
+  return fragment;
 }
 
 function escapeHtml(value: string): string {
@@ -422,14 +227,14 @@ function tokenClass(token: string): string {
 }
 
 function highlightCode(): void {
-  const tokenRe = /\/\/.*$|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|\b\d+(?:\.\d+)?\b|\b(?:const|let|var|import|export|from|await|async|return|if|else|new|function|class|extends|implements|interface|type|enum|throw|try|catch|for|of|in|while|do|switch|case|default|break|continue|void|null|undefined|true|false|this|super)\b|\b[A-Z][A-Za-z0-9]*\b|\.[a-zA-Z_]\w*(?=\s*\()/gm;
+  const tokenPattern = /\/\/.*$|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`|\b\d+(?:\.\d+)?\b|\b(?:const|let|var|import|export|from|await|async|return|if|else|new|function|class|extends|implements|interface|type|enum|throw|try|catch|for|of|in|while|do|switch|case|default|break|continue|void|null|undefined|true|false|this|super)\b|\b[A-Z][A-Za-z0-9]*\b|\.[a-zA-Z_]\w*(?=\s*\()/gm;
 
   contentEl.querySelectorAll("pre code").forEach((block) => {
     const source = block.textContent ?? "";
     let html = "";
     let cursor = 0;
 
-    source.replace(tokenRe, (token, offset: number) => {
+    source.replace(tokenPattern, (token, offset: number) => {
       html += escapeHtml(source.slice(cursor, offset));
       if (token.startsWith(".")) {
         html += `.<span class="${tokenClass(token)}">${escapeHtml(token.slice(1))}</span>`;
@@ -440,690 +245,448 @@ function highlightCode(): void {
       return token;
     });
 
-    html += escapeHtml(source.slice(cursor));
-    block.innerHTML = html;
+    block.innerHTML = html + escapeHtml(source.slice(cursor));
   });
 }
 
-function generateLlmsTxt(pageName: string, content: string): string {
-  const titleMatch = content.match(/^#\s+(.+)/m);
-  const title = titleMatch ? titleMatch[1] : pageName;
-  
-  // Extract all headings for structure
-  const headings: string[] = [];
-  const headingRegex = /^(#{2,4})\s+(.+)$/gm;
-  let match;
-  while ((match = headingRegex.exec(content)) !== null) {
-    const level = match[1].length;
-    const text = match[2];
-    headings.push(`${"  ".repeat(level - 2)}- ${text}`);
-  }
-  
-  // Clean up markdown for llms.txt format
-  const cleanContent = content
-    .replace(/```[\s\S]*?```/g, "[code block]")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "[$1]")
-    .replace(/>\s+/g, "")
-    .replace(/\*{2,}/g, "")
-    .replace(/^#{1,4}\s+/gm, "")
-    .replace(/\n{3,}/g, "\n\n");
-  
-  return `# ${title}
+function prepareCodeBlocks(): void {
+  contentEl.querySelectorAll("pre").forEach((pre) => {
+    const wrapper = document.createElement("div");
+    wrapper.className = "code-wrapper";
+    pre.parentNode?.insertBefore(wrapper, pre);
+    wrapper.appendChild(pre);
 
-URL: https://tidesurf.org/docs#${pageName}
-
-## Overview
-
-${cleanContent.slice(0, 800).trim()}...
-
-## Structure
-
-${headings.length > 0 ? headings.join("\n") : "- Main content"}
-
-## Full Content
-
-${cleanContent.trim()}
-
----
-Generated from TideSurf documentation (https://tidesurf.org/docs)
-For LLM context: This is a technical documentation page for TideSurf, a TypeScript library that connects Chromium to LLM agents via CDP with token-efficient DOM compression.
-`;
+    const copyButton = document.createElement("button");
+    copyButton.className = "copy-code-btn";
+    copyButton.type = "button";
+    copyButton.setAttribute("aria-label", "Copy code");
+    copyButton.setAttribute("title", "Copy code");
+    copyButton.innerHTML = `
+      <svg class="icon-copy" viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="5.5" y="5.5" width="8" height="8" rx="1.5"></rect>
+        <path d="M3.5 10.5H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h6.5a1 1 0 0 1 1 1v.5"></path>
+      </svg>
+      <svg class="icon-check" viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M3.5 8.5l3 3 6-6.5"></path>
+      </svg>`;
+    copyButton.addEventListener("click", async () => {
+      const code = pre.querySelector("code")?.textContent ?? "";
+      try {
+        await navigator.clipboard.writeText(code);
+        copyButton.classList.add("is-copied");
+        copyButton.setAttribute("aria-label", "Code copied");
+        copyButton.setAttribute("title", "Copied");
+        window.setTimeout(() => {
+          copyButton.classList.remove("is-copied");
+          copyButton.setAttribute("aria-label", "Copy code");
+          copyButton.setAttribute("title", "Copy code");
+        }, 1500);
+      } catch {
+        copyButton.setAttribute("aria-label", "Copy failed");
+        copyButton.setAttribute("title", "Copy failed");
+      }
+    });
+    wrapper.appendChild(copyButton);
+  });
 }
 
-function openLlmsTxt(pageName: string): void {
-  const content = pageMap[pageName];
-  if (!content) return;
-  
-  const llmsContent = generateLlmsTxt(pageName, content);
-  const blob = new Blob([llmsContent], { type: "text/plain" });
-  const url = URL.createObjectURL(blob);
-  
-  // Open in new tab
-  const newTab = window.open(url, "_blank");
-  if (newTab) {
-    newTab.document.title = `llms.txt - ${pageName}`;
-  }
-  
-  // Clean up blob URL after a delay
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
+function wrapTables(): void {
+  contentEl.querySelectorAll("table").forEach((table) => {
+    const wrapper = document.createElement("div");
+    wrapper.className = "table-wrapper";
+    table.parentNode?.insertBefore(wrapper, table);
+    wrapper.appendChild(table);
+  });
+}
+
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^\w\s-]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .slice(0, 60);
+}
+
+function ensureHeadingIds(headings: HTMLElement[]): void {
+  const used = new Set<string>();
+  headings.forEach((heading, index) => {
+    const base = heading.id || slugify(heading.textContent ?? "") || `section-${index + 1}`;
+    let id = base;
+    let suffix = 2;
+    while (used.has(id)) {
+      id = `${base}-${suffix}`;
+      suffix += 1;
+    }
+    heading.id = id;
+    used.add(id);
+  });
+}
+
+function makeTocLink(heading: HTMLElement): HTMLAnchorElement {
+  const link = document.createElement("a");
+  const level = heading.tagName.toLowerCase();
+  link.href = `#${currentPageName}:${heading.id}`;
+  link.className = `toc-link toc-${level}`;
+  link.dataset.target = heading.id;
+  link.textContent = heading.textContent ?? "";
+  return link;
+}
+
+function startTocTracking(headings: HTMLElement[]): void {
+  removeTocTracking?.();
+
+  const update = (): void => {
+    tocScrollFrame = 0;
+    let activeId = headings[0]?.id ?? "";
+    headings.forEach((heading) => {
+      if (heading.getBoundingClientRect().top <= 112) activeId = heading.id;
+    });
+
+    document.querySelectorAll<HTMLElement>(".toc-link[data-target]").forEach((link) => {
+      const active = link.dataset.target === activeId;
+      link.classList.toggle("active", active);
+      if (active) link.setAttribute("aria-current", "location");
+      else link.removeAttribute("aria-current");
+    });
+  };
+
+  const schedule = (): void => {
+    if (tocScrollFrame) return;
+    tocScrollFrame = window.requestAnimationFrame(update);
+  };
+
+  window.addEventListener("scroll", schedule, { passive: true });
+  update();
+  removeTocTracking = () => {
+    window.removeEventListener("scroll", schedule);
+    if (tocScrollFrame) window.cancelAnimationFrame(tocScrollFrame);
+    tocScrollFrame = 0;
+  };
+}
+
+function buildTOC(): void {
+  const desktopNav = document.getElementById("toc-nav");
+  const mobileNav = document.getElementById("mobile-toc-nav");
+  if (!desktopNav || !mobileNav) return;
+
+  desktopNav.replaceChildren();
+  mobileNav.replaceChildren();
+
+  const headings = Array.from(contentEl.querySelectorAll<HTMLElement>("h2, h3"));
+  ensureHeadingIds(headings);
+  headings.forEach((heading) => {
+    desktopNav.appendChild(makeTocLink(heading));
+    mobileNav.appendChild(makeTocLink(heading));
+  });
+  startTocTracking(headings);
 }
 
 function renderMissingPage(): void {
   const wrapper = document.createElement("div");
   wrapper.className = "error-page";
-
   const title = document.createElement("h1");
   title.textContent = "404";
-
   const description = document.createElement("p");
   description.textContent = translate("error.missing.title");
-
   const link = document.createElement("a");
   link.href = `#${DEFAULT_PAGE}`;
   link.textContent = translate("error.missing.link");
-
   wrapper.append(title, description, link);
   contentEl.replaceChildren(wrapper);
   contentEl.setAttribute("aria-busy", "false");
 }
 
 function renderPage(pageName: string): void {
-  const md = pageMap[pageName];
-  if (!md) {
+  const markdown = pageMap[pageName];
+  if (!markdown) {
     renderMissingPage();
     return;
   }
 
   currentPageName = pageName;
-
-  const html = marked.parse(md, { async: false }) as string;
-  const fragment = sanitizeHtmlFragment(html);
-  contentEl.replaceChildren(fragment);
+  const html = marked.parse(markdown, { async: false }) as string;
+  contentEl.replaceChildren(sanitizeHtmlFragment(html));
   contentEl.setAttribute("aria-busy", "false");
-
-  // Wrap tables for horizontal scroll on mobile
-  contentEl.querySelectorAll("table").forEach((table) => {
-    if (!table.parentElement?.classList.contains("table-wrapper")) {
-      const wrapper = document.createElement("div");
-      wrapper.className = "table-wrapper";
-      table.parentNode?.insertBefore(wrapper, table);
-      wrapper.appendChild(table);
-    }
-  });
-
-  addCodeHeaders();
-  addCodeCopyButtons();
+  wrapTables();
+  prepareCodeBlocks();
   highlightCode();
+  buildTOC();
 
-  document.querySelectorAll(".sidebar-link").forEach((link) => {
-    link.classList.toggle("active", link.getAttribute("data-page") === pageName);
+  document.querySelectorAll<HTMLElement>(".sidebar-link[data-page]").forEach((link) => {
+    const active = link.dataset.page === pageName;
+    link.classList.toggle("active", active);
+    if (active) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
   });
 
   const title = contentEl.querySelector("h1")?.textContent;
-  if (title) {
-    document.title = `${title} | TideSurf Docs`;
-  }
+  document.title = title ? `${title} | TideSurf Docs` : "TideSurf Docs";
+}
 
-  // Add doc meta (path + action buttons) after h1
-  const h1 = contentEl.querySelector("h1");
-  if (h1 && !contentEl.querySelector(".doc-meta")) {
-    const docMeta = document.createElement("div");
-    docMeta.className = "doc-meta";
-
-    const pathEl = document.createElement("div");
-    pathEl.className = "page-path";
-    pathEl.textContent = `/docs#${pageName}`;
-    pathEl.title = "Click to copy link";
-    pathEl.addEventListener("click", () => {
-      const url = `${window.location.origin}/docs#${pageName}`;
-      navigator.clipboard.writeText(url).then(() => {
-        pathEl.textContent = translate("content.share.copied");
-        setTimeout(() => { pathEl.textContent = `/docs#${pageName}`; }, 1500);
-      });
-    });
-
-    const actions = document.createElement("div");
-    actions.className = "doc-actions";
-
-    const makeAction = (
-      label: string,
-      ariaLabel: string,
-      action: () => void | Promise<void>
-    ): HTMLButtonElement => {
-      const button = document.createElement("button");
-      button.className = "doc-action-btn";
-      button.type = "button";
-      button.setAttribute("aria-label", ariaLabel);
-      button.textContent = label;
-      button.addEventListener("click", async () => {
-        const originalLabel = button.textContent ?? label;
-        await action();
-        button.textContent = translate("content.share.copied");
-        setTimeout(() => {
-          button.textContent = originalLabel;
-        }, 1500);
-      });
-      return button;
-    };
-
-    actions.append(
-      makeAction("markdown", translate("content.copy.md"), () =>
-        navigator.clipboard.writeText(pageMap[pageName] || "")
-      ),
-      makeAction("text", translate("content.copy.text"), () =>
-        navigator.clipboard.writeText(contentEl.innerText || "")
-      ),
-      makeAction("link", translate("content.share.copy"), () =>
-        navigator.clipboard.writeText(`${window.location.origin}/docs#${pageName}`)
-      ),
-      makeAction("llms.txt", translate("content.share.llms"), () => openLlmsTxt(pageName))
-    );
-
-    docMeta.appendChild(pathEl);
-    docMeta.appendChild(actions);
-    h1.insertAdjacentElement("afterend", docMeta);
-  }
-
-  buildTOC();
+function parseLocation(): { page: string; heading: string | null } {
+  const hash = decodeURIComponent(window.location.hash.slice(1) || DEFAULT_PAGE);
+  const separator = hash.indexOf(":");
+  return separator < 0
+    ? { page: hash, heading: null }
+    : { page: hash.slice(0, separator), heading: hash.slice(separator + 1) };
 }
 
 function navigate(): void {
-  const hash = decodeURIComponent(window.location.hash.slice(1) || DEFAULT_PAGE);
+  const { page, heading } = parseLocation();
+  renderPage(page);
 
-  if (hash.includes(":")) {
-    const colonIndex = hash.indexOf(":");
-    const pagePart = hash.slice(0, colonIndex);
-    const headingPart = hash.slice(colonIndex + 1);
-    renderPage(pagePart);
-    const target = document.getElementById(headingPart);
-    if (target) {
-      target.scrollIntoView({
-        behavior: prefersReducedMotion() ? "auto" : "smooth",
-        block: "start",
-      });
-    }
-  } else {
-    renderPage(hash);
-    window.scrollTo({
-      top: 0,
-      behavior: prefersReducedMotion() ? "auto" : "smooth",
-    });
-  }
-
-  closeMobileMenu();
-}
-
-function buildTOC(): void {
-  const tocNav = document.getElementById("toc-nav");
-  if (!tocNav) {
-    return;
-  }
-
-  tocObserver?.disconnect();
-  tocObserver = null;
-  if (tocScrollHandler) {
-    window.removeEventListener("scroll", tocScrollHandler);
-    tocScrollHandler = null;
-  }
-  tocNav.replaceChildren();
-
-  const headings = Array.from(contentEl.querySelectorAll("h2, h3, h4"));
-  if (headings.length === 0) {
-    return;
-  }
-
-  const fragment = document.createDocumentFragment();
-  let currentGroup: HTMLElement | null = null;
-
-  headings.forEach((heading) => {
-    // Generate slug from heading text for better URLs
-    const text = heading.textContent ?? "";
-    const slug = text
-      .toLowerCase()
-      .replace(/[^\w\s-]/g, "")
-      .replace(/\s+/g, "-")
-      .substring(0, 50);
-
-    // Add unique suffix if needed
-    const id = heading.id || slug || `heading-${Math.random().toString(36).substr(2, 9)}`;
-    heading.id = id;
-
-    // Add anchor link with copy-to-clipboard
-    if (!heading.querySelector('.anchor-link')) {
-      const anchor = document.createElement("a");
-      anchor.href = `#${currentPageName}:${id}`;
-      anchor.className = "anchor-link";
-      anchor.setAttribute("aria-label", `Link to ${text}`);
-      anchor.textContent = "link";
-      anchor.addEventListener("click", (event) => {
-        event.preventDefault();
-        const url = `${window.location.origin}${window.location.pathname}#${currentPageName}:${id}`;
-        navigator.clipboard.writeText(url).then(() => {
-          anchor.textContent = "copied";
-          anchor.classList.add("copied");
-          setTimeout(() => {
-            anchor.textContent = "link";
-            anchor.classList.remove("copied");
-          }, 1500);
-        });
-      });
-      heading.appendChild(anchor);
-    }
-
-    const link = document.createElement("a");
-    link.href = `#${currentPageName}:${id}`;
-
-    // Set class based on heading level
-    const level = heading.tagName.toLowerCase();
-    link.className = level === "h4" ? "toc-link toc-h4" :
-                     level === "h3" ? "toc-link toc-h3" :
-                     "toc-link toc-h2";
-    link.dataset.target = id;
-    link.textContent = text;
-    link.addEventListener("click", (event) => {
-      event.preventDefault();
-      document.getElementById(id)?.scrollIntoView({
-        behavior: prefersReducedMotion() ? "auto" : "smooth",
-        block: "start",
-      });
-    });
-
-    if (level === "h2") {
-      // Start a new group for this h2
-      currentGroup = document.createElement("div");
-      currentGroup.className = "toc-group";
-      currentGroup.dataset.collapsed = "true";
-      fragment.appendChild(link);
-      fragment.appendChild(currentGroup);
-
-      // Toggle collapse on h2 click
-      link.addEventListener("click", () => {
-        const group = link.nextElementSibling as HTMLElement;
-        if (group?.classList.contains("toc-group")) {
-          const wasCollapsed = group.dataset.collapsed === "true";
-          // Collapse all groups first
-          tocNav.querySelectorAll(".toc-group").forEach((g) => {
-            (g as HTMLElement).dataset.collapsed = "true";
-          });
-          if (wasCollapsed) {
-            group.dataset.collapsed = "false";
-          }
-        }
-      });
+  window.requestAnimationFrame(() => {
+    const behavior: ScrollBehavior = initialNavigation || prefersReducedMotion() ? "auto" : "smooth";
+    if (heading) {
+      document.getElementById(heading)?.scrollIntoView({ behavior, block: "start" });
     } else {
-      // h3/h4 go into the current group
-      if (currentGroup) {
-        currentGroup.appendChild(link);
-      } else {
-        fragment.appendChild(link);
-      }
+      window.scrollTo({ top: 0, behavior });
     }
-  });
-
-  tocNav.appendChild(fragment);
-
-  // Scroll-based active heading tracking for precise detection
-  const navHeight = 80;
-
-  tocScrollHandler = () => {
-    let activeId = headings[0]?.id || "";
-
-    for (const heading of headings) {
-      const rect = heading.getBoundingClientRect();
-      if (rect.top <= navHeight) {
-        activeId = heading.id;
-      }
-    }
-
-    tocNav.querySelectorAll(".toc-link").forEach((link) => {
-      link.classList.toggle("active", (link as HTMLElement).dataset.target === activeId);
-    });
-
-    // Auto-expand the group containing the active heading
-    tocNav.querySelectorAll(".toc-group").forEach((group) => {
-      const hasActive = group.querySelector(".toc-link.active");
-      const h2Link = group.previousElementSibling;
-      const h2Active = h2Link?.classList.contains("active");
-      if (hasActive || h2Active) {
-        (group as HTMLElement).dataset.collapsed = "false";
-      } else {
-        (group as HTMLElement).dataset.collapsed = "true";
-      }
-    });
-  };
-
-  window.addEventListener("scroll", tocScrollHandler, { passive: true });
-  tocScrollHandler();
-}
-
-function setSearchResultsVisible(resultsEl: HTMLElement, visible: boolean): void {
-  resultsEl.hidden = !visible;
-}
-
-function clearSidebarFilters(): void {
-  document.querySelectorAll(".sidebar-section").forEach((section) => {
-    (section as HTMLElement).style.display = "";
+    initialNavigation = false;
   });
 }
 
-function renderSearchResults(resultsEl: HTMLElement, results: SearchEntry[]): void {
+function setSearchResultsVisible(results: HTMLElement, visible: boolean): void {
+  results.hidden = !visible;
+}
+
+function renderSearchResults(resultsEl: HTMLElement, entries: SearchEntry[]): void {
   resultsEl.replaceChildren();
-
-  if (results.length === 0) {
-    const emptyState = document.createElement("div");
-    emptyState.className = "search-empty";
-    emptyState.textContent = translate("search.empty");
-    resultsEl.appendChild(emptyState);
+  if (entries.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "search-empty";
+    empty.textContent = translate("search.empty");
+    resultsEl.appendChild(empty);
     setSearchResultsVisible(resultsEl, true);
     return;
   }
 
   const fragment = document.createDocumentFragment();
-
-  for (const result of results) {
+  entries.slice(0, 8).forEach((entry) => {
     const link = document.createElement("a");
-    link.href = `#${result.name}`;
+    link.href = `#${entry.name}`;
     link.className = "search-result";
-
-    const title = document.createElement("span");
-    title.className = "search-result-title";
-    title.textContent = result.title;
-
+    const title = document.createElement("strong");
+    title.textContent = entry.title;
     const snippet = document.createElement("span");
-    snippet.className = "search-result-snippet";
-    snippet.textContent = result.snippet;
-
+    snippet.textContent = entry.snippet;
     link.append(title, snippet);
     fragment.appendChild(link);
-  }
-
+  });
   resultsEl.appendChild(fragment);
   setSearchResultsVisible(resultsEl, true);
 }
 
 function initSearch(): void {
-  const searchInput = document.getElementById("search-input") as HTMLInputElement | null;
-  const resultsEl = document.getElementById("search-results") as HTMLElement | null;
-  if (!searchInput || !resultsEl) {
-    return;
-  }
+  const input = document.getElementById("search-input") as HTMLInputElement | null;
+  const results = document.getElementById("search-results");
+  if (!input || !results) return;
 
-  searchInput.addEventListener("input", (event) => {
-    const query = (event.target as HTMLInputElement).value.toLowerCase().trim();
+  const closeResults = (): void => {
+    results.replaceChildren();
+    setSearchResultsVisible(results, false);
+  };
+
+  input.addEventListener("input", () => {
+    const query = input.value.trim().toLowerCase();
     if (!query) {
-      resultsEl.replaceChildren();
-      setSearchResultsVisible(resultsEl, false);
-      clearSidebarFilters();
+      closeResults();
       return;
     }
 
-    const results: SearchEntry[] = [];
-    for (const [name, content] of Object.entries(pageMap)) {
-      const lower = content.toLowerCase();
+    const matches: SearchEntry[] = [];
+    Object.entries(pageMap).forEach(([name, markdown]) => {
+      const lower = markdown.toLowerCase();
       const index = lower.indexOf(query);
-      if (index === -1) {
-        continue;
-      }
+      if (index < 0) return;
 
-      const titleMatch = content.match(/^#\s+(.+)/m);
-      const title = titleMatch ? titleMatch[1] : name;
-      const start = Math.max(0, index - 40);
-      const end = Math.min(content.length, index + query.length + 60);
-      let snippet = content
+      const title = markdown.match(/^#\s+(.+)/m)?.[1] ?? name;
+      const start = Math.max(0, index - 42);
+      const end = Math.min(markdown.length, index + query.length + 72);
+      const body = markdown
         .slice(start, end)
         .replace(/<[^>]+>/g, " ")
         .replace(/[#*`_>\n]/g, " ")
         .replace(/\s+/g, " ")
         .trim();
-
-      if (start > 0) {
-        snippet = `...${snippet}`;
-      }
-      if (end < content.length) {
-        snippet = `${snippet}...`;
-      }
-
-      results.push({ name, title, snippet });
-    }
-
-    renderSearchResults(resultsEl, results);
-
-    document.querySelectorAll(".sidebar-section").forEach((section) => {
-      const links = section.querySelectorAll(".sidebar-link");
-      let hasMatch = false;
-
-      links.forEach((link) => {
-        const pageName = link.getAttribute("data-page") || "";
-        const text = link.textContent?.toLowerCase() || "";
-        if (
-          text.includes(query) ||
-          (pageMap[pageName] && pageMap[pageName].toLowerCase().includes(query))
-        ) {
-          hasMatch = true;
-        }
-      });
-
-      (section as HTMLElement).style.display = hasMatch ? "" : "none";
+      const snippet = `${start > 0 ? "…" : ""}${body}${end < markdown.length ? "…" : ""}`;
+      matches.push({ name, title, snippet });
     });
+    renderSearchResults(results, matches);
   });
 
-  searchInput.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape") {
-      return;
-    }
-
-    searchInput.value = "";
-    resultsEl.replaceChildren();
-    setSearchResultsVisible(resultsEl, false);
-    clearSidebarFilters();
+  input.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return;
+    input.value = "";
+    closeResults();
   });
 
-  resultsEl.addEventListener("click", () => {
-    searchInput.value = "";
-    resultsEl.replaceChildren();
-    setSearchResultsVisible(resultsEl, false);
-    clearSidebarFilters();
+  results.addEventListener("click", () => {
+    input.value = "";
+    closeResults();
   });
-}
 
-function initTheme(): void {
-  const savedTheme = safeStorageGet("tidesurf-docs-theme") as Theme | null;
-  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-  currentTheme = savedTheme || (prefersDark ? "dark" : "light");
-  applyTheme();
-
-  document.querySelectorAll(".theme-btn[data-theme]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const theme = (btn as HTMLElement).dataset.theme as Theme;
-      if (theme) {
-        currentTheme = theme;
-        safeStorageSet("tidesurf-docs-theme", theme);
-        applyTheme();
-      }
-    });
+  document.addEventListener("pointerdown", (event) => {
+    if (!(event.target instanceof Node) || input.contains(event.target) || results.contains(event.target)) return;
+    closeResults();
   });
 }
 
 function applyTheme(): void {
-  document.documentElement.setAttribute("data-theme", currentTheme);
-  document.querySelectorAll(".theme-btn[data-theme]").forEach((btn) => {
-    btn.classList.toggle(
-      "active",
-      (btn as HTMLElement).dataset.theme === currentTheme
-    );
+  document.documentElement.dataset.theme = currentTheme;
+  document.querySelectorAll<HTMLButtonElement>(".theme-btn[data-theme]").forEach((button) => {
+    const active = button.dataset.theme === currentTheme;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+}
+
+function initTheme(): void {
+  const saved = safeStorageGet("tidesurf-theme") as Theme | null;
+  currentTheme = saved || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  applyTheme();
+
+  document.querySelectorAll<HTMLButtonElement>(".theme-btn[data-theme]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const theme = button.dataset.theme as Theme | undefined;
+      if (!theme) return;
+      currentTheme = theme;
+      safeStorageSet("tidesurf-theme", theme);
+      applyTheme();
+    });
+  });
+}
+
+function initCookieNotice(): void {
+  const notice = document.getElementById("cookie-notice");
+  const dismiss = document.getElementById("cookie-dismiss");
+  if (!notice || !dismiss) return;
+
+  if (safeStorageGet("tidesurf-cookie-dismissed") === "true") {
+    notice.hidden = true;
+    document.body.classList.remove("cookie-visible");
+    return;
+  }
+
+  notice.hidden = false;
+  document.body.classList.add("cookie-visible");
+  dismiss.addEventListener("click", () => {
+    safeStorageSet("tidesurf-cookie-dismissed", "true");
+    notice.hidden = true;
+    document.body.classList.remove("cookie-visible");
+  });
+}
+
+function applyLanguage(): void {
+  document.querySelectorAll<HTMLElement>("[data-i18n]").forEach((element) => {
+    const key = element.dataset.i18n;
+    if (key) element.textContent = translate(key);
+  });
+  document.querySelectorAll<HTMLInputElement>("[data-i18n-placeholder]").forEach((element) => {
+    const key = element.dataset.i18nPlaceholder;
+    if (key) element.placeholder = translate(key);
+  });
+  document.documentElement.lang = currentLang;
+  document.querySelectorAll<HTMLButtonElement>(".lang-btn[data-lang]").forEach((button) => {
+    const active = button.dataset.lang === currentLang;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
   });
 }
 
 function initLanguage(): void {
-  const savedLang = safeStorageGet("tidesurf-docs-lang") as Language | null;
-  currentLang = savedLang || detectLanguage();
-
+  currentLang = (safeStorageGet("tidesurf-docs-lang") as Language | null) ?? "en";
   applyLanguage();
-
-  document.querySelectorAll(".lang-btn").forEach((btn) => {
-    btn.addEventListener("click", (event) => {
-      const lang = (event.currentTarget as HTMLElement).dataset.lang as Language;
-      if (!lang || lang === currentLang) {
-        return;
-      }
-
-      currentLang = lang;
-      safeStorageSet("tidesurf-docs-lang", lang);
+  document.querySelectorAll<HTMLButtonElement>(".lang-btn[data-lang]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const language = button.dataset.lang as Language | undefined;
+      if (!language) return;
+      currentLang = language;
+      safeStorageSet("tidesurf-docs-lang", currentLang);
       applyLanguage();
-      updateLangButtons();
-      renderPage(currentPageName);
     });
   });
 }
 
-function detectLanguage(): Language {
-  const browserLang = navigator.language.toLowerCase();
-  if (browserLang.startsWith("ja")) {
-    return "ja";
-  }
-  if (browserLang.startsWith("ko")) {
-    return "ko";
-  }
-  return "en";
-}
-
-function applyLanguage(): void {
-  document.querySelectorAll("[data-i18n]").forEach((element) => {
-    const key = element.getAttribute("data-i18n");
-    if (key && translations[key]) {
-      element.textContent = translate(key);
-    }
-  });
-
-  document.querySelectorAll("[data-i18n-placeholder]").forEach((element) => {
-    const key = element.getAttribute("data-i18n-placeholder");
-    if (key && translations[key]) {
-      (element as HTMLInputElement).placeholder = translate(key);
-    }
-  });
-
-  document.documentElement.lang = currentLang;
-}
-
-function updateLangButtons(): void {
-  document.querySelectorAll(".lang-btn").forEach((btn) => {
-    btn.classList.toggle("active", btn.getAttribute("data-lang") === currentLang);
-  });
-}
-
-function closeMobileMenu(): void {
-  const toggle = document.getElementById("mobile-menu-toggle");
-  const sidebar = document.getElementById("sidebar");
-  document.body.classList.remove("mobile-menu-open");
-  toggle?.setAttribute("aria-expanded", "false");
-  syncSidebarInteractive(sidebar, false);
-}
-
-function syncSidebarInteractive(sidebar: Element | null, isOpen: boolean): void {
-  if (!sidebar) return;
-  const isMobile = window.matchMedia("(max-width: 768px)").matches;
-  const closedOnMobile = isMobile && !isOpen;
-  const inertSidebar = sidebar as HTMLElement & { inert?: boolean };
-  inertSidebar.inert = closedOnMobile;
-  sidebar.toggleAttribute("inert", closedOnMobile);
-  sidebar.setAttribute("aria-hidden", String(closedOnMobile));
-  const tabIndex = closedOnMobile ? -1 : 0;
-  sidebar.querySelectorAll<HTMLAnchorElement>("a").forEach((link) => {
-    link.tabIndex = tabIndex;
-  });
-  const input = sidebar.querySelector<HTMLInputElement>("input");
-  if (input) input.tabIndex = tabIndex;
-}
-
-function initMobileMenu(): void {
+function initMobileNavigation(): void {
+  const sidebar = document.getElementById("sidebar") as HTMLElement | null;
   const toggle = document.getElementById("mobile-menu-toggle") as HTMLButtonElement | null;
-  const overlay = document.getElementById("mobile-overlay");
-  const sidebar = document.getElementById("sidebar");
-  if (!toggle || !sidebar) return;
+  const close = document.getElementById("docs-index-close") as HTMLButtonElement | null;
+  const scrim = document.getElementById("drawer-scrim");
+  if (!sidebar || !toggle || !close || !scrim) return;
 
-  const mobileQuery = window.matchMedia("(max-width: 768px)");
+  let open = false;
 
-  function openMobileMenu(): void {
-    document.body.classList.add("mobile-menu-open");
-    toggle!.setAttribute("aria-expanded", "true");
-    syncSidebarInteractive(sidebar, true);
-  }
+  const setOpen = (nextOpen: boolean, restoreFocus = true): void => {
+    open = mobileMedia.matches && nextOpen;
+    sidebar.dataset.open = String(open);
+    toggle.setAttribute("aria-expanded", String(open));
+    document.body.classList.toggle("nav-open", open);
+    scrim.classList.toggle("visible", open);
 
-  syncSidebarInteractive(sidebar, false);
-
-  toggle.addEventListener("click", () => {
-    const isOpen = toggle.getAttribute("aria-expanded") === "true";
-    if (isOpen) closeMobileMenu();
-    else openMobileMenu();
-  });
-
-  overlay?.addEventListener("click", closeMobileMenu);
-
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && document.body.classList.contains("mobile-menu-open")) {
-      closeMobileMenu();
-      toggle.focus();
+    if (mobileMedia.matches) {
+      sidebar.setAttribute("aria-hidden", String(!open));
+      sidebar.inert = !open;
+    } else {
+      sidebar.removeAttribute("aria-hidden");
+      sidebar.inert = false;
     }
+
+    if (open) close.focus();
+    else if (restoreFocus && mobileMedia.matches) toggle.focus();
+  };
+
+  const syncBreakpoint = (): void => setOpen(false, false);
+  toggle.addEventListener("click", () => setOpen(!open));
+  close.addEventListener("click", () => setOpen(false));
+  scrim.addEventListener("click", () => setOpen(false));
+  sidebar.querySelectorAll("a").forEach((link) => {
+    link.addEventListener("click", () => setOpen(false, false));
   });
 
-  sidebar.querySelectorAll<HTMLAnchorElement>("a").forEach((link) => {
-    link.addEventListener("click", closeMobileMenu);
-  });
-
-  mobileQuery.addEventListener("change", () => {
-    const isOpen = document.body.classList.contains("mobile-menu-open");
-    syncSidebarInteractive(sidebar, isOpen);
-  });
-}
-
-async function initGitHubStars(): Promise<void> {
-  const el = document.getElementById("star-count");
-  if (!el) {
-    return;
-  }
-
-  try {
-    const response = await fetch("https://api.github.com/repos/TideSurf/core", {
-      headers: { Accept: "application/vnd.github+json" },
-    });
-    if (!response.ok) {
+  sidebar.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setOpen(false);
       return;
     }
+    if (event.key !== "Tab" || !open) return;
 
-    const data = (await response.json()) as { stargazers_count?: number };
-    if (data.stargazers_count == null) {
-      return;
+    const focusable = Array.from(
+      sidebar.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])')
+    ).filter((element) => !element.hidden);
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (!first || !last) return;
+
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
     }
+  });
 
-    el.textContent =
-      data.stargazers_count >= 1000
-        ? `${(data.stargazers_count / 1000).toFixed(1)}k`
-        : String(data.stargazers_count);
-  } catch {
-    // Ignore network failures for the decorative star counter.
-  }
+  mobileMedia.addEventListener("change", syncBreakpoint);
+  syncBreakpoint();
 }
 
 async function init(): Promise<void> {
   await loadContent();
-
   initTheme();
   initLanguage();
+  initCookieNotice();
   initSearch();
-  initMobileMenu();
-  await initGitHubStars();
-
+  initMobileNavigation();
   window.addEventListener("hashchange", navigate);
   navigate();
-  updateLangButtons();
+  initScrollTone({ source: window, observe: contentEl });
 }
 
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", () => {
-    void init();
-  });
+  document.addEventListener("DOMContentLoaded", () => void init(), { once: true });
 } else {
   void init();
 }

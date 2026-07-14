@@ -1,0 +1,123 @@
+:root {
+  --paper: #ECEDEA;
+  --paper-2: #E0E1DD;
+  --paper-3: #D2D3CF;
+
+  --ink: #161716;
+  --ink-2: #2B2C2A;
+  --ink-3: #45463F;
+
+  --grey-1: #5F5E58;
+  --grey-2: #8E8D86;
+
+  --accent: #4F7B86;
+  --accent-ink: #365F68;
+  --accent-soft: #7D9AA1;
+
+  --c-teal: #4F7B86;
+  --c-green: #6F7D63;
+  --c-gold: #8A6D4E;
+  --c-rust: #B8634A;
+  --c-rose: #B86A8E;
+  --c-violet: #76668D;
+
+  /* A single flat canvas that deepens with page depth. JavaScript only changes
+     the mix amount; there is no spatial gradient or section boundary. */
+  --scroll-shade: 0%;
+  --scroll-shade-target: #070806;
+  --canvas: color-mix(in srgb, var(--paper), var(--scroll-shade-target) var(--scroll-shade));
+  --canvas-2: color-mix(in srgb, var(--paper-2), var(--scroll-shade-target) var(--scroll-shade));
+  --canvas-3: color-mix(in srgb, var(--paper-3), var(--scroll-shade-target) var(--scroll-shade));
+
+  --font: "Zalando Sans", "Gothic A1", system-ui, -apple-system,
+    BlinkMacSystemFont, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, monospace;
+
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --control-speed: 180ms;
+
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --paper: #1A1A18;
+  --paper-2: #242422;
+  --paper-3: #2E2E2C;
+
+  --ink: #E8E9E6;
+  --ink-2: #D2D3CF;
+  --ink-3: #A8A9A4;
+
+  --grey-1: #9E9D97;
+  --grey-2: #6E6D67;
+
+  --accent: #8AAAB1;
+  --accent-ink: #A9C3C8;
+  --accent-soft: #4F7B86;
+
+  color-scheme: dark;
+}
+
+.patch-control {
+  --patch-color: var(--accent-soft);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.5rem;
+  padding: 0.25rem 0.72rem;
+  border: 0;
+  border-radius: 0;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--patch-color) 24%, var(--paper));
+  font-family: var(--font);
+  font-size: 0.92rem;
+  font-weight: 500;
+  line-height: 1.2;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    color var(--control-speed) ease,
+    background-color var(--control-speed) ease;
+}
+
+.patch-control:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--patch-color) 42%, var(--paper));
+  transform: none;
+}
+
+.patch-control:active {
+  background: color-mix(in srgb, var(--patch-color) 54%, var(--paper));
+  transform: none;
+}
+
+.patch-control:focus-visible {
+  color: var(--paper);
+  background: var(--ink);
+  text-decoration: none;
+  outline: 0;
+}
+
+.patch-control[aria-pressed="true"],
+.patch-control.active {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--patch-color) 54%, var(--paper));
+}
+
+@media (max-width: 768px) {
+  .patch-control {
+    min-height: 2.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

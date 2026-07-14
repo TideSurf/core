@@ -1,32 +1,32 @@
 # Token budget
 
-Complex web pages can produce output that's larger than what you want to send to your LLM, especially for token-constrained models or high-frequency agent loops where cost matters. The `maxTokens` parameter lets you set an upper bound on output size, and TideSurf will intelligently prune the page to fit within that budget.
+`maxTokens` caps page output for constrained models and frequent agent loops. TideSurf prunes lower-value content to meet the budget.
 
 ## Setting a budget
 
-Pass `maxTokens` to `getState()` to cap the output:
+Pass the limit to `getState()`:
 
 ```typescript
 const state = await browser.getState({ maxTokens: 500 });
 ```
 
-If the full page output would exceed 500 tokens, TideSurf removes the least important content first until the output fits within the budget.
+Output above 500 tokens loses the least important content first.
 
 ## How TideSurf prioritizes content
 
-When pruning is necessary, TideSurf uses a priority system that keeps the most actionable content and discards decorative or redundant elements first. The priority order, from highest (kept first) to lowest (pruned first):
+The priority order runs from highest value to lowest:
 
-1. **Interactive elements**: buttons, links, inputs, selects, and forms are always prioritized because they represent actions the agent can take
-2. **Visible text content**: headings, paragraphs, and labels that help the agent understand the page context
-3. **Semantic structure**: nav, section, and article containers that provide organizational cues
-4. **Supplementary content**: secondary text, nested descriptions, and metadata that's useful but not essential
-5. **Decorative elements**: elements that don't carry actionable or informational content
+1. **Controls:** buttons, links, inputs, selects, and forms
+2. **Visible copy:** headings, paragraphs, and labels
+3. **Structure:** navigation, sections, and articles
+4. **Supporting copy:** descriptions and metadata
+5. **Decoration:** content with no action or information
 
-Within each priority tier, elements closer to the top of the page take precedence, since the beginning of a page typically contains the most relevant context (navigation, primary content area, main CTAs).
+Earlier elements take precedence within each tier.
 
 ## Truncation indicator
 
-When TideSurf removes elements to meet the token budget, it appends a truncation indicator at the end of the output so the LLM knows that additional content exists beyond what's shown:
+Pruned output ends with a truncation indicator:
 
 ```
 # Example
@@ -38,17 +38,17 @@ NAV
 [...12 more sections truncated]
 ```
 
-The number indicates how many top-level sections were removed. This gives the agent the option to request a larger budget on the next call, or to scroll down and get a different view of the page.
+The count reports removed top-level sections. The agent can raise the budget or scroll for another view.
 
 ## Choosing the right budget
 
-The right token budget depends on the job:
+Choose a budget around the next task:
 
 | Scenario | Suggested budget | Rationale |
 |---|---|---|
-| Quick navigation checks | 200-400 | Only need to see links and buttons for the next action |
-| Form filling | 400-600 | Need to see inputs, labels, and submit buttons |
-| Full page understanding | 600-1000 | Need headings, text content, and all interactive elements |
+| Quick navigation checks | 200-400 | Links and buttons for the next action |
+| Form filling | 400-600 | Inputs, labels, and submission controls |
+| Full page understanding | 600-1000 | Headings, copy, and all controls |
 | No budget (default) | Unlimited | TideSurf returns the complete compressed page |
 
-For agent loops with many iterations, starting with a lower budget (300-500 tokens) and increasing it only when the agent needs more context is a practical strategy that balances cost and capability.
+Long loops can start at 300–500 tokens and grow only as the agent needs more context.

@@ -1,6 +1,6 @@
 # Architecture
 
-TideSurf sits between your LLM agent and a Chromium browser. It compresses the live DOM into token-efficient text for the agent, then converts the agent's tool calls into browser commands through the Chrome DevTools Protocol (CDP).
+TideSurf connects an LLM agent to Chromium. It compresses the live DOM into agent-readable text and resolves tool calls back to browser actions through CDP.
 
 ## System overview
 
@@ -15,22 +15,22 @@ TideSurf sits between your LLM agent and a Chromium browser. It compresses the l
                                   connect()   ▲ auto-connect
 ```
 
-TideSurf provides two connection modes:
+Two connection modes share the same API:
 
-- **`TideSurf.launch()`**: spawns a new Chrome process, owns its lifecycle, and cleans up on close
-- **`TideSurf.connect()`**: attaches to a Chrome instance that's already running with remote debugging enabled. It does not manage the process, so `close()` only disconnects CDP
+- **`TideSurf.launch()`** starts, owns, and cleans up a Chrome process.
+- **`TideSurf.connect()`** attaches to Chrome with remote debugging enabled; `close()` only disconnects CDP.
 
 ## Data flow
 
-The information flows through TideSurf in two directions, each with a distinct transformation step:
+Data moves in two directions:
 
-**Reading (browser → agent):** When the agent requests the page state, TideSurf fetches the live DOM via CDP, walks the tree to strip presentational attributes, checks computed CSS visibility to filter out hidden elements, detects element state (disabled, inert, obscured, expanded/collapsed), collapses redundant nesting, assigns short IDs to interactive elements, and emits compact text. The raw DOM might contain tens of thousands of tokens; the compressed output typically lands between 100 and 800.
+**Browser → agent:** TideSurf fetches the live DOM, removes presentation, checks computed visibility and control state, collapses redundant nesting, assigns action IDs, and emits compact text. Tens of thousands of DOM tokens commonly become 100–800.
 
 ```
 Raw web page → Chromium renders → Live DOM → Computed visibility check → State detection → TideSurf compresses → Agent-ready text
 ```
 
-**Writing (agent → browser):** When the agent calls a tool like `click("B1")` or `type("I1", "hello")`, TideSurf resolves the short ID to a real DOM node using its internal node map, then executes the corresponding CDP command (dispatching click events, injecting keystrokes, triggering form submissions, etc.).
+**Agent → browser:** A call such as `click("B1")` or `type("I1", "hello")` resolves through the node map to a live DOM node, followed by the corresponding CDP command.
 
 ```
 Agent tool call → TideSurf resolves ID → CDP command → Browser executes action
@@ -38,29 +38,29 @@ Agent tool call → TideSurf resolves ID → CDP command → Browser executes ac
 
 ## Key components
 
-### DOM Compressor
+**DOM compressor**
 
-The core of TideSurf: a recursive tree walker that traverses the rendered DOM and makes keep/strip decisions for every node. It applies heuristics to identify interactive elements (inputs, buttons, links), semantic containers (nav, form, headings), and visible text, while discarding CSS classes, inline styles, wrapper divs, script/style tags, hidden elements, and other presentational noise. Before serialization, a computed visibility pass inspects each element's CSS styles (`display`, `visibility`, `opacity`, `clip-path`, `pointer-events`) to filter out invisible elements and detect disabled/inert state. Surviving elements carry state flags (disabled, expanded, obscured) that the serializer encodes as `~~strikethrough~~` or keyword suffixes.
+The DOM compressor is a recursive tree walker. It retains usable controls, semantic containers, and visible text; classes, inline styles, wrappers, scripts, hidden nodes, and other presentational noise drop away. A computed-style pass checks `display`, `visibility`, `opacity`, `clip-path`, and `pointer-events`. The serializer encodes surviving control state through `~~strikethrough~~` and short keyword suffixes.
 
-When a token budget is set via `maxTokens`, the compressor runs a second pass that prioritizes interactive elements over passive content and prunes from the bottom of the priority stack until the output fits within the budget.
+`maxTokens` adds a second pass that favors controls over passive copy and prunes lower-priority content to fit.
 
-### Node map
+**Node map**
 
-An in-memory map that links each short ID (like `B1`, `L3`, `I2`) back to the actual DOM node's CDP object reference. This map is rebuilt every time `getState()` is called, ensuring that IDs always correspond to the current state of the page. When the agent calls `click("B1")`, TideSurf looks up `B1` in this map to find the real node and execute the action.
+An in-memory node map links IDs such as `B1`, `L3`, and `I2` to CDP object references. Each `getState()` rebuilds it against the current page. `click("B1")` uses that map to find the live node.
 
-### CDP connector
+**CDP connector**
 
-Manages the WebSocket connection to Chrome's DevTools Protocol. Handles connection lifecycle, automatic reconnection on transient failures, and multiplexing commands across multiple tabs. Each tab has its own CDP session, enabling independent state management.
+The connector owns the CDP WebSocket lifecycle, transient reconnection, and commands across tabs. Every tab has an independent CDP session.
 
-In auto-connect mode, the connector uses `discoverBrowser()` to probe `CDP.List()` on the target port, verifying that Chrome is reachable and has at least one open page tab before establishing a connection.
+Auto-connect uses `discoverBrowser()` and `CDP.List()` to confirm a reachable Chrome instance with an open page tab.
 
-### Tool layer
+**Tool layer**
 
-Exposes TideSurf's capabilities as a set of 18 standardized tool definitions that follow common LLM function-calling conventions. These definitions include parameter schemas, descriptions, and type information that help the LLM understand what each tool does and when to use it. The tool executor validates incoming calls, dispatches them to the appropriate method, and returns structured results.
+The tool layer exposes 18 provider-neutral function schemas. It validates calls, dispatches the matching method, and returns structured results.
 
 ## Design principles
 
-- **Token efficiency over completeness**: the compressed output deliberately omits information that doesn't help an agent decide its next action. Visual styling, layout details, and decorative elements add tokens without adding utility.
-- **Stable, predictable IDs**: short prefixed IDs (`B1`, `L3`) are more reliable for LLMs than CSS selectors or XPaths, which can be brittle and verbose. The prefix tells the LLM the element type at a glance.
-- **Standard tools, any model**: by using a generic tool-calling interface, TideSurf works with Claude, GPT, Gemini, open-source models, or anything else that supports function calling. No vendor lock-in.
-- **Read-only mode**: when enabled, write tools are removed from both the executor and the definitions array. The LLM never sees tools it can't use.
+- **Useful context first:** presentation drops out so the agent can choose its next action.
+- **Predictable IDs:** short handles such as `B1` and `L3` are clearer than brittle selectors or XPath.
+- **Provider-neutral tools:** the same schemas work across function-calling models.
+- **Read-only surface:** observation sessions omit write tools from both definitions and execution.

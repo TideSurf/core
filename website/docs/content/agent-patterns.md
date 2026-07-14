@@ -1,10 +1,10 @@
 # Agent patterns
 
-Common patterns for building LLM-powered browser agents with TideSurf.
+Small, reusable patterns for TideSurf agent loops.
 
 ## Basic agent loop
 
-The standard pattern: get state → send to LLM → execute tool call → repeat.
+Read state → send it to the model → execute the selected tool → repeat.
 
 ```typescript
 import Anthropic from "@anthropic-ai/sdk";
@@ -14,7 +14,7 @@ const client = new Anthropic();
 const browser = await TideSurf.launch();
 const executor = browser.getToolExecutor();
 
-// Convert TideSurf tools to Anthropic format
+// Adapt TideSurf tools to Anthropic format.
 const tools = getToolDefinitions().map(t => ({
   name: t.name,
   description: t.description,
@@ -33,17 +33,17 @@ while (true) {
     messages,
   });
 
-  // Collect assistant response
+  // Keep the assistant response in the conversation.
   messages.push({ role: "assistant", content: response.content });
 
   if (response.stop_reason === "end_turn") {
-    // LLM is done: print final text
+    // Print the model's final text.
     const text = response.content.find(b => b.type === "text");
     if (text) console.log(text.text);
     break;
   }
 
-  // Execute tool calls
+  // Execute every requested tool.
   const toolResults: Anthropic.ToolResultBlockParam[] = [];
   for (const block of response.content) {
     if (block.type !== "tool_use") continue;
@@ -63,19 +63,18 @@ await browser.close();
 
 ## Scoped observation (read-only)
 
-Monitor a page without risk of modification:
+Observe a page without exposing mutation tools:
 
 ```typescript
 const browser = await TideSurf.connect({ readOnly: true });
 const state = await browser.getState();
-// Feed state.content to your LLM for analysis
-// The agent can observe, search, and screenshot, but cannot click, type, or navigate
+// The agent can observe, search, and screenshot.
 await browser.close();
 ```
 
 ## Authenticated sessions
 
-Connect to your logged-in Chrome to access pages behind authentication:
+Attach to a trusted, logged-in Chrome session:
 
 ```typescript
 // 1. Open Chrome with remote debugging enabled
@@ -83,56 +82,56 @@ Connect to your logged-in Chrome to access pages behind authentication:
 // 3. Connect TideSurf
 const browser = await TideSurf.connect({ port: 9222 });
 const state = await browser.getState();
-// Your agent now sees the authenticated page
+// state.content reflects the authenticated page.
 ```
 
 ## Token-efficient browsing
 
-For long agent sessions, minimize token usage:
+Long sessions can request only the context needed next:
 
 ```typescript
-// Start with interactive-only mode to see what's actionable
+// Begin with controls.
 const overview = await browser.getState({ mode: "interactive", maxTokens: 200 });
 
-// After clicking, get full viewport for context
+// Read more context after the action.
 await page.click("B1");
 const detail = await browser.getState({ maxTokens: 500 });
 
-// Use search instead of getState for targeted lookups
+// Search for targeted lookups.
 const results = await page.search("error message");
 ```
 
 ## Multi-tab workflows
 
-Compare content across tabs:
+Compare two versions across tabs:
 
 ```typescript
 const browser = await TideSurf.launch();
 
-// Open two tabs
+// Open both versions.
 await browser.navigate("https://docs.example.com/v1/api");
 const tab1 = (await browser.listTabs())[0];
 
 const tab2 = await browser.newTab("https://docs.example.com/v2/api");
 
-// Get state from both
+// Read both states.
 await browser.switchTab(tab1.id);
 const v1 = await browser.getState();
 
 await browser.switchTab(tab2.id);
 const v2 = await browser.getState();
 
-// Feed both to your LLM for comparison
+// Send v1.content and v2.content to the model.
 ```
 
 ## Form filling
 
-Automate multi-step form submission:
+Fill a form from fresh interactive state:
 
 ```typescript
 const page = browser.getPage();
 
-// Get form state
+// Read the current controls.
 const state = await browser.getState({ mode: "interactive" });
 // state.content shows: I1 ~First name  I2 ~Email  S1:select  [B1] Submit
 
@@ -141,6 +140,6 @@ await page.type("I2", "alice@example.com", true);
 await page.select("S1", "enterprise");
 await page.click("B1");
 
-// Verify result
+// Verify the result.
 const result = await browser.getState();
 ```
