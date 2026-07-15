@@ -2,27 +2,24 @@ import type { CDPConnection } from "./connection.js";
 import type {
   PageState,
   NodeMap,
+  ReadPageOptions,
   GetStateOptions,
   ScrollPosition,
   SearchResult,
   ScreenshotOptions,
   DownloadResult,
   OSNode,
-  CDPNode,
 } from "../types.js";
 import * as cdp from "./connection.js";
+import { captureDOMSnapshot } from "./snapshot.js";
 import { walkDOM } from "../parser/dom-walker.js";
 import { serialize, wrapPage } from "../parser/serializer.js";
-import {
-  clearInspectionMarkers,
-  inspectPage,
-  type PageInspection,
-} from "./viewport.js";
 import { pruneToFit } from "../parser/token-budget.js";
 import { filterViewportOnly } from "../parser/viewport-filter.js";
 import { filterInteractive, filterMinimal } from "../parser/mode-filter.js";
 import { truncateGraphemes } from "../parser/truncation.js";
 import {
+  ActionCommittedError,
   CDPConnectionError,
   ElementNotFoundError,
   ReadOnlyError,
@@ -45,6 +42,38 @@ import {
 import { downloadFromAction } from "./download-manager.js";
 import { withTimeout } from "./timeout.js";
 
+const READ_PAGE_MODES = new Set(["full", "minimal", "interactive"]);
+
+function normalizeReadPageOptions(
+  options: ReadPageOptions | undefined
+): ReadPageOptions {
+  if (options === undefined) return {};
+  if (typeof options !== "object" || options === null || Array.isArray(options)) {
+    throw new ValidationError("Page read options must be an object");
+  }
+  if (options.maxTokens !== undefined) {
+    validatePositiveInteger(options.maxTokens, "maxTokens");
+  }
+  if (options.viewport !== undefined && typeof options.viewport !== "boolean") {
+    throw new ValidationError("viewport must be a boolean");
+  }
+  if (
+    options.includeHidden !== undefined &&
+    typeof options.includeHidden !== "boolean"
+  ) {
+    throw new ValidationError("includeHidden must be a boolean");
+  }
+  if (options.mode !== undefined && !READ_PAGE_MODES.has(options.mode)) {
+    throw new ValidationError("mode must be full, minimal, or interactive");
+  }
+  return {
+    maxTokens: options.maxTokens,
+    viewport: options.viewport,
+    mode: options.mode,
+    includeHidden: options.includeHidden,
+  };
+}
+
 function retainNodeMap(nodes: OSNode[], nodeMap: NodeMap): NodeMap {
   const retained: NodeMap = new Map();
   const visit = (list: OSNode[]) => {
@@ -65,9 +94,7 @@ function retainNodeMap(nodes: OSNode[], nodeMap: NodeMap): NodeMap {
   return retained;
 }
 
-/**
- * SurfingPage — high-level page interaction built on CDP
- */
+/** Stateful page inspection and interaction over one CDP target. */
 export class SurfingPage {
   private readonly conn: CDPConnection;
   private lastNodeMap: NodeMap = new Map();
@@ -92,45 +119,42 @@ export class SurfingPage {
     this.timeout = timeout;
   }
 
-  /**
-   * Get compressed page state + nodeMap.
-   * @param options - Optional settings (maxTokens for token budgeting)
-   * @returns PageState with URL, title, compressed content, and node map
-   */
-  async getState(options?: GetStateOptions): Promise<PageState> {
+  async readPage(options?: ReadPageOptions): Promise<PageState> {
     this.assertOpen();
-    if (options?.maxTokens !== undefined) {
-      validatePositiveInteger(options.maxTokens, "maxTokens");
-    }
-
-    return this.runInspection(() => this.readState(options));
+    const snapshot = normalizeReadPageOptions(options);
+    return this.runInspection(() => this.capturePage(snapshot));
   }
 
-  private async readState(options?: GetStateOptions): Promise<PageState> {
-    const useViewport = options?.viewport !== false;
-    const includeHidden = options?.includeHidden === true;
+  /** @deprecated Use `readPage()`. */
+  getState(options?: GetStateOptions): Promise<PageState> {
+    return this.readPage(options);
+  }
+
+  private async capturePage(options: ReadPageOptions): Promise<PageState> {
+    const useViewport = options.viewport !== false;
+    const includeHidden = options.includeHidden === true;
     const markViewport =
-      !includeHidden && (useViewport || options?.maxTokens !== undefined);
-    const pageInfo = await inspectPage(this.conn, {
+      !includeHidden && (useViewport || options.maxTokens !== undefined);
+    const snapshot = await captureDOMSnapshot(this.conn, {
       markViewport,
       markHidden: !includeHidden,
-    }, this.timeout);
-    const url = pageInfo.url;
-    const title = pageInfo.title;
+      timeout: this.timeout,
+    });
+    const url = snapshot.url;
+    const title = snapshot.title;
 
     let scrollPosition: ScrollPosition | undefined;
     if (useViewport && !includeHidden) {
       scrollPosition = {
-        scrollY: pageInfo.scrollY,
-        scrollHeight: pageInfo.scrollHeight,
-        viewportHeight: pageInfo.viewportHeight,
+        scrollY: snapshot.scrollY,
+        scrollHeight: snapshot.scrollHeight,
+        viewportHeight: snapshot.viewportHeight,
       };
     }
 
-    const root = await this.readInspectedDOM(pageInfo);
-    let { nodes, nodeMap } = walkDOM(root, {
+    let { nodes, nodeMap } = walkDOM(snapshot.root, {
       includeHidden,
-      markerAttributes: pageInfo.markerAttributes,
+      markerAttributes: snapshot.markerAttributes,
       viewportMarked: markViewport,
     });
 
@@ -143,84 +167,68 @@ export class SurfingPage {
       belowSummary = filtered.belowSummary;
     }
 
-    if (options?.mode === "interactive") {
+    if (options.mode === "interactive") {
       nodes = filterInteractive(nodes);
-    } else if (options?.mode === "minimal") {
+    } else if (options.mode === "minimal") {
       nodes = filterMinimal(nodes);
     }
 
-    if (!options?.mode || options.mode === "full") {
+    if (!options.mode || options.mode === "full") {
       if (aboveSummary) nodes.unshift(aboveSummary);
       if (belowSummary) nodes.push(belowSummary);
     }
 
-    if (options?.maxTokens) {
+    if (options.maxTokens) {
       nodes = pruneToFit(nodes, { maxTokens: options.maxTokens, pageUrl: url });
     }
 
     const body = serialize(nodes, 0, url);
     const content = wrapPage(body, url, title, scrollPosition);
 
-    const filteredNodeMap = retainNodeMap(nodes, nodeMap);
-    this.lastNodeMap = filteredNodeMap;
+    this.lastNodeMap = retainNodeMap(nodes, nodeMap);
 
     return {
       url,
       title,
       content,
       xml: content,
-      nodeMap: filteredNodeMap,
+      nodeMap: new Map(this.lastNodeMap),
     };
   }
 
-  /**
-   * Click an element by its assigned ID (e.g. "B1", "L3").
-   * @param id - Element ID from getState output
-   * @throws {ElementNotFoundError} if ID is not in the current node map
-   */
   async click(id: string): Promise<void> {
     this.assertOpen();
     this.assertWritable("click");
     validateElementId(id);
     const backendNodeId = this.getBackendNodeId(id);
     await cdp.clickNode(this.conn, backendNodeId, this.timeout);
-    await cdp.waitForStable(this.conn, this.timeout);
+    await this.confirmMutation("Click", () =>
+      cdp.waitForStable(this.conn, this.timeout)
+    );
   }
 
-  /**
-   * Type text into an input by ID.
-   * @param id - Input element ID
-   * @param text - Text to type
-   * @param clear - Whether to clear the field first
-   */
   async type(id: string, text: string, clear: boolean = false): Promise<void> {
     this.assertOpen();
     this.assertWritable("type");
     validateElementId(id);
     const backendNodeId = this.getBackendNodeId(id);
     await cdp.typeText(this.conn, backendNodeId, text, clear, this.timeout);
-    await cdp.waitForStable(this.conn, this.timeout);
+    await this.confirmMutation("Typing", () =>
+      cdp.waitForStable(this.conn, this.timeout)
+    );
   }
 
-  /**
-   * Select an option in a <select> by ID.
-   * @param id - Select element ID
-   * @param value - Option value to select
-   */
   async select(id: string, value: string): Promise<void> {
     this.assertOpen();
     this.assertWritable("select");
     validateElementId(id);
     const backendNodeId = this.getBackendNodeId(id);
     await cdp.selectOption(this.conn, backendNodeId, value, this.timeout);
-    await cdp.waitForStable(this.conn, this.timeout);
+    await this.confirmMutation("Selection", () =>
+      cdp.waitForStable(this.conn, this.timeout)
+    );
   }
 
-  /**
-   * Scroll the page.
-   * @param direction - "up" or "down"
-   * @param amount - Pixels to scroll (default 500)
-   */
   async scroll(direction: "up" | "down", amount?: number): Promise<void> {
     this.assertOpen();
     this.assertWritable("scroll");
@@ -231,13 +239,8 @@ export class SurfingPage {
       validatePositiveNumber(amount, "amount");
     }
     await cdp.scroll(this.conn, direction, amount, this.timeout);
-    await cdp.waitForStable(this.conn, this.timeout);
   }
 
-  /**
-   * Wait for the page to settle.
-   * @param timeout - Max wait time in ms
-   */
   async waitForStable(timeout?: number): Promise<void> {
     this.assertOpen();
     if (timeout !== undefined) {
@@ -246,11 +249,6 @@ export class SurfingPage {
     await cdp.waitForStable(this.conn, timeout ?? this.timeout);
   }
 
-  /**
-   * Extract text content from the page via CSS selector.
-   * @param selector - CSS selector
-   * @returns Text content of the matched element
-   */
   async extract(selector: string): Promise<string> {
     this.assertOpen();
     validateSelector(selector);
@@ -262,24 +260,16 @@ export class SurfingPage {
     return String(result);
   }
 
-  /**
-   * Navigate to a URL.
-   * @param url - Target URL (http/https)
-   * @throws {NavigationError} if navigation fails
-   */
   async navigate(url: string): Promise<void> {
     this.assertOpen();
     this.assertWritable("navigate");
     validateUrl(url, this.urlValidationOptions);
     await cdp.navigate(this.conn, url, this.timeout);
-    await cdp.waitForStable(this.conn, this.timeout);
+    await this.confirmMutation("Navigation", () =>
+      cdp.waitForStable(this.conn, this.timeout)
+    );
   }
 
-  /**
-   * Execute arbitrary JS in the page.
-   * @param expression - JavaScript expression to evaluate
-   * @returns Result of the evaluation
-   */
   async evaluate(expression: string): Promise<unknown> {
     this.assertOpen();
     this.assertWritable("evaluate");
@@ -287,12 +277,6 @@ export class SurfingPage {
     return cdp.evaluate(this.conn, expression, this.timeout);
   }
 
-  /**
-   * Search the page for text matching a query.
-   * @param query - Text to search for (case-insensitive)
-   * @param maxResults - Maximum number of results (default 10)
-   * @returns Array of SearchResult with optional element IDs
-   */
   async search(query: string, maxResults: number = 10): Promise<SearchResult[]> {
     this.assertOpen();
     validateSearchQuery(query);
@@ -306,15 +290,14 @@ export class SurfingPage {
     maxResults: number
   ): Promise<SearchResult[]> {
     const needle = query.trim().toLowerCase();
-    const inspection = await inspectPage(
-      this.conn,
-      { markViewport: false, markHidden: true },
-      this.timeout
-    );
-    const root = await this.readInspectedDOM(inspection);
-    const { nodes, nodeMap: freshNodeMap } = walkDOM(root, {
+    const snapshot = await captureDOMSnapshot(this.conn, {
+      markViewport: false,
+      markHidden: true,
+      timeout: this.timeout,
+    });
+    const { nodes, nodeMap: freshNodeMap } = walkDOM(snapshot.root, {
       truncate: false,
-      markerAttributes: inspection.markerAttributes,
+      markerAttributes: snapshot.markerAttributes,
     });
 
     const backendToStableId = new Map<number, string>();
@@ -370,18 +353,13 @@ export class SurfingPage {
     return results;
   }
 
-  /**
-   * Capture a screenshot of the page.
-   * @param options - Screenshot options (elementId, fullPage)
-   * @returns Base64-encoded PNG string
-   */
   async screenshot(options?: ScreenshotOptions): Promise<string> {
     this.assertOpen();
-    if (options?.elementId && options.fullPage) {
+    if (options?.elementId !== undefined && options.fullPage) {
       throw new ValidationError("screenshot cannot target an element and fullPage at the same time");
     }
 
-    if (options?.elementId) {
+    if (options?.elementId !== undefined) {
       validateElementId(options.elementId);
       const backendNodeId = this.getBackendNodeId(options.elementId);
 
@@ -423,11 +401,6 @@ export class SurfingPage {
     return cdp.captureScreenshot(this.conn, undefined, this.timeout);
   }
 
-  /**
-   * Upload files to a file input element.
-   * @param id - Element ID of the file input
-   * @param filePaths - Array of file paths to upload
-   */
   async upload(id: string, filePaths: string[]): Promise<void> {
     this.assertOpen();
     this.assertWritable("upload");
@@ -437,36 +410,23 @@ export class SurfingPage {
     );
     const backendNodeId = this.getBackendNodeId(id);
     await cdp.setFileInput(this.conn, backendNodeId, validatedFilePaths, this.timeout);
-    await cdp.waitForStable(this.conn, this.timeout);
+    await this.confirmMutation("Upload", () =>
+      cdp.waitForStable(this.conn, this.timeout)
+    );
   }
 
-  /**
-   * Read text from the clipboard.
-   * @returns Clipboard text content
-   */
   async clipboardRead(): Promise<string> {
     this.assertOpen();
     this.assertWritable("clipboardRead");
     return cdp.clipboardRead(this.conn, this.timeout);
   }
 
-  /**
-   * Write text to the clipboard.
-   * @param text - Text to write to clipboard
-   */
   async clipboardWrite(text: string): Promise<void> {
     this.assertOpen();
     this.assertWritable("clipboardWrite");
     await cdp.clipboardWrite(this.conn, text, this.timeout);
   }
 
-  /**
-   * Download a file by clicking an element.
-   * Sets up download handling, clicks the element, and waits for download.
-   * @param id - Element ID of the download link/button
-   * @param options - Download options (downloadDir, timeout)
-   * @returns DownloadResult with file path, name, and size
-   */
   async download(
     id: string,
     options?: { downloadDir?: string; timeout?: number }
@@ -479,7 +439,7 @@ export class SurfingPage {
     }
     const backendNodeId = this.getBackendNodeId(id);
 
-    const downloadDir = options?.downloadDir
+    const downloadDir = options?.downloadDir !== undefined
       ? validateDownloadDirectory(options.downloadDir, this.fileAccessRoots)
       : undefined;
     return downloadFromAction(
@@ -496,9 +456,6 @@ export class SurfingPage {
     );
   }
 
-  /**
-   * Close the CDP connection.
-   */
   async close(): Promise<void> {
     this.closePromise ??= cdp.disconnect(this.conn);
     return this.closePromise;
@@ -522,31 +479,14 @@ export class SurfingPage {
     }
   }
 
-  private async readInspectedDOM(
-    inspection: Pick<PageInspection, "elementCount" | "markerAttributes">
-  ): Promise<CDPNode> {
-    let operationFailed = false;
+  private async confirmMutation(
+    operation: string,
+    confirm: () => Promise<void>
+  ): Promise<void> {
     try {
-      return await cdp.getFullDOM(
-        this.conn,
-        this.timeout,
-        inspection.elementCount
-      );
+      await confirm();
     } catch (error) {
-      operationFailed = true;
-      throw error;
-    } finally {
-      if (inspection.elementCount <= cdp.MAX_DOM_NODES) {
-        try {
-          await clearInspectionMarkers(
-            this.conn,
-            inspection.markerAttributes,
-            this.timeout
-          );
-        } catch (error) {
-          if (!operationFailed) throw error;
-        }
-      }
+      throw new ActionCommittedError(operation, error);
     }
   }
 

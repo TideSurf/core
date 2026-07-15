@@ -11,7 +11,7 @@ import {
   aggregateLiveResults,
   LIVE_BENCHMARK_THRESHOLDS,
 } from "./benchmark-live.js";
-import { generalHelp } from "../src/cli/help.js";
+import { commandHelp, generalHelp } from "../src/cli/help.js";
 import {
   CLI_EXIT_CODES,
   GLOBAL_OPTIONS,
@@ -19,6 +19,7 @@ import {
 } from "../src/cli/metadata.js";
 import { TOOL_REGISTRY } from "../src/tools/registry.js";
 import { translations } from "../website/docs/src/translations.js";
+import { releaseMetadataFailures } from "./check-release.js";
 
 const root = resolve(import.meta.dir, "..");
 const failures: string[] = [];
@@ -57,38 +58,39 @@ function markdownLinks(source: string): string[] {
 
 const toolCount = 18;
 check(TOOL_REGISTRY.length === toolCount, `expected ${toolCount} canonical tools`);
+const canonicalToolNames = TOOL_REGISTRY.map((tool) => tool.name);
+const nonCanonicalToolNames = canonicalToolNames
+  .filter((name) => name.includes("_"))
+  .map((name) => name.replaceAll("_", "-"));
 
 const llms = read("llms.txt");
 const publicLlms = read("website/landing/public/llms.txt");
 equal(publicLlms, llms, "website llms.txt must be byte-identical to package llms.txt");
 
 const llmsTools = [...markdownSection(llms, "Direct tool commands, in registry order:").matchAll(
-  /^(\d+)\. `([^`]+)`(?: \(`([^`]+)`\))?$/gm
+  /^(\d+)\. `([^`]+)`$/gm
 )].map((match) => ({
   index: Number(match[1]),
   command: match[2],
-  alias: match[3],
 }));
 equal(
   llmsTools,
   TOOL_REGISTRY.map((tool, index) => ({
     index: index + 1,
-    command: tool.cli.command,
-    alias: tool.cli.aliases[0],
+    command: tool.name,
   })),
-  "llms.txt direct tool list must match registry order and aliases"
+  "llms.txt direct tool list must match canonical registry order"
 );
 
 const api = read("website/docs/content/api-reference.md");
 const apiRows = [...markdownSection(api, "## Canonical tools").matchAll(
-  /^\| `([^`]+)` \| ([^|]+?) \| `([^`]+)` \| (yes|no) \|$/gm
+  /^\| `([^`]+)` \| ([^|]+?) \| (yes|no) \|$/gm
 )].map((match) => ({
   name: match[1],
   inputs: match[2] === "none"
     ? []
     : [...match[2].matchAll(/`([^`]+)`/g)].map((input) => input[1]),
-  command: match[3],
-  readOnly: match[4] === "yes",
+  readOnly: match[3] === "yes",
 }));
 equal(
   apiRows,
@@ -99,7 +101,6 @@ equal(
       inputs: Object.keys(tool.inputSchema.properties).map((name) =>
         required.has(name) ? name : `${name}?`
       ),
-      command: tool.cli.command,
       readOnly: tool.readOnlyAllowed,
     };
   }),
@@ -108,26 +109,48 @@ equal(
 
 const cliDocs = read("website/docs/content/cli.md");
 const cliRows = [...markdownSection(cliDocs, "## Direct tool commands").matchAll(
-  /^\| `([^`]+)`(?: \/ `([^`]+)`)? \|/gm
+  /^\| `([^`]+)` \|/gm
 )].map((match) => ({
   command: match[1].split(/\s/, 1)[0],
-  alias: match[2]?.split(/\s/, 1)[0],
 }));
 equal(
   cliRows,
   TOOL_REGISTRY.map((tool) => ({
-    command: tool.cli.command,
-    alias: tool.cli.aliases[0],
+    command: tool.name,
   })),
-  "CLI direct-command table must match registry commands and aliases"
+  "CLI direct-command table must match canonical registry names"
 );
+
+const generatedHelp = generalHelp();
+const generatedHelpNames = ["Read commands", "Mutation and sensitive commands"]
+  .flatMap((heading) => {
+    const body = generatedHelp.match(
+      new RegExp(`${heading}:\\n([\\s\\S]*?)(?:\\n\\n|$)`)
+    )?.[1] ?? "";
+    return [...body.matchAll(/^  ([a-z_]+)\s{2,}/gm)].map((match) => match[1]);
+  });
+equal(
+  generatedHelpNames,
+  [
+    ...TOOL_REGISTRY.filter((tool) => tool.readOnlyAllowed),
+    ...TOOL_REGISTRY.filter((tool) => !tool.readOnlyAllowed),
+  ].map((tool) => tool.name),
+  "generated CLI help must list exact registry names"
+);
+for (const tool of TOOL_REGISTRY) {
+  const help = commandHelp(tool.name) ?? "";
+  check(
+    help.startsWith(`${tool.name}\n`) && help.includes(`\n  tidesurf ${tool.name}`),
+    `generated CLI help must use the exact ${tool.name} identifier`
+  );
+}
 
 for (const readmePath of ["README.md", "README.ja.md", "README.ko.md"]) {
   const firstTextFence = read(readmePath).match(/```text\n([\s\S]*?)```/)?.[1] ?? "";
   equal(
     firstTextFence.trim().split(/\s+/),
-    TOOL_REGISTRY.map((tool) => tool.cli.command),
-    `${readmePath} direct-command block must match the registry`
+    canonicalToolNames,
+    `${readmePath} direct-command block must match canonical registry names`
   );
 }
 
@@ -217,6 +240,53 @@ const sidebarPages = [...docsIndex.matchAll(/class="sidebar-link" data-page="([^
   .sort();
 equal(sidebarPages, contentNames, "every docs content file must appear once in sidebar navigation");
 equal([...new Set(sidebarPages)], sidebarPages, "docs sidebar page entries must be unique");
+
+const publicToolNamePaths = [
+  "README.md",
+  "README.ja.md",
+  "README.ko.md",
+  "llms.txt",
+  "CHANGELOG.md",
+  "website/PRODUCT.md",
+  "website/DESIGN.md",
+  "website/docs/index.html",
+  "website/docs/src/main.ts",
+  "website/docs/src/translations.ts",
+  "website/landing/index.html",
+  "website/landing/src/main.ts",
+  "website/landing/public/llms.txt",
+  "website/landing/public/og.html",
+  "website/landing/public/og.svg",
+  ...readdirSync(resolve(root, "examples"))
+    .filter((name) => name.endsWith(".ts"))
+    .map((name) => `examples/${name}`),
+  ...contentNames.map((name) => `website/docs/content/${name}.md`),
+];
+for (const path of publicToolNamePaths) {
+  const source = read(path);
+  for (const nonCanonicalName of nonCanonicalToolNames) {
+    check(
+      !source.includes(nonCanonicalName),
+      `${path} uses non-canonical tool spelling ${nonCanonicalName}`
+    );
+  }
+}
+for (const nonCanonicalName of nonCanonicalToolNames) {
+  check(
+    !generatedHelp.includes(nonCanonicalName),
+    `generated CLI help uses non-canonical tool spelling ${nonCanonicalName}`
+  );
+}
+for (const [label, source] of [
+  ["CLI direct-command docs", markdownSection(cliDocs, "## Direct tool commands")],
+  ["API canonical-tool docs", markdownSection(api, "## Canonical tools")],
+  ["llms.txt direct-command docs", markdownSection(llms, "Direct tool commands, in registry order:")],
+] as const) {
+  check(
+    !/(?:kebab-case|CLI alias|command alias|both spellings|underscore names?)/i.test(source),
+    `${label} must not describe alternate tool spellings`
+  );
+}
 
 for (const key of [...docsIndex.matchAll(/data-i18n(?:-placeholder)?="([^"]+)"/g)].map((match) => match[1])) {
   check(Object.hasOwn(translations, key), `missing docs translation key: ${key}`);
@@ -361,6 +431,15 @@ check(
 
 const packageJson = JSON.parse(read("package.json")) as { scripts?: Record<string, string> };
 check(packageJson.scripts?.["demo"] === undefined, "package must not expose the retired demo script");
+for (const name of readdirSync(resolve(root, ".github/workflows"))) {
+  if (!name.endsWith(".yml") && !name.endsWith(".yaml")) continue;
+  for (const match of read(`.github/workflows/${name}`).matchAll(/\buses:\s*[^@\s]+@([^\s#]+)/g)) {
+    check(
+      /^[0-9a-f]{40}$/.test(match[1]),
+      `.github/workflows/${name} must pin actions to full commit SHAs`
+    );
+  }
+}
 for (const path of terminologyPaths) {
   check(!/TideTravel|demo\/serve\.ts|demo\/prompt\.md|bun run demo/.test(read(path)), `${path} contains a retired demo reference`);
 }
@@ -390,6 +469,7 @@ equal(
 
 const rootChangelog = read("CHANGELOG.md");
 const webChangelog = read("website/docs/content/changelog.md");
+failures.push(...releaseMetadataFailures());
 equal(
   markdownSection(webChangelog, "## Unreleased"),
   markdownSection(rootChangelog, "## Unreleased"),

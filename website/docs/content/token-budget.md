@@ -4,10 +4,10 @@
 
 ## Setting a budget
 
-Pass the limit to `getState()`:
+Pass the limit to `readPage()`:
 
 ```typescript
-const state = await browser.getState({ maxTokens: 500 });
+const state = await browser.readPage({ maxTokens: 500 });
 ```
 
 Body content above the target loses lower-priority nodes first. The estimator uses four characters per token; it does not run a model-specific tokenizer.

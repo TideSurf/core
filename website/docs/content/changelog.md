@@ -4,25 +4,25 @@
 
 ### Added
 
-- **Stateful agent CLI** — Direct commands for all 18 tools, named sessions, automatic browser startup, generated help, raw JSON tool calls, structured output, screenshot files/streams, and stable exit codes.
-- **Managed browser discovery** — Chrome stable, Beta, Dev, Canary, and Chromium resolution through explicit paths, environment, PATH, and platform installs. Managed launches use dynamic ports; attach-only and ordered auto-connect modes keep launch policy explicit.
-- **Session runtime** — Authenticated Unix-socket and Windows named-pipe daemons with immutable policy, serialized calls, race-safe startup, stale-state recovery, and exact tab/ID-map persistence.
+- The stateful CLI exposes all 18 tools as direct commands with named sessions, automatic browser startup, registry-generated help, raw JSON calls, structured output, screenshot files or streams, and stable exit codes.
+- Browser discovery resolves Chrome stable, Beta, Dev, Canary, and Chromium from explicit paths, the environment, `PATH`, and platform installs. Managed launches use dynamic ports; attach-only and ordered auto-connect modes keep launch policy explicit.
+- Named sessions run in authenticated Unix-socket or Windows named-pipe daemons. Policy stays immutable, calls serialize, startup races recover safely, and tab and ID state persists exactly.
 
 ### Changed
 
-- **One tool registry** — SDK definitions, executor dispatch, CLI metadata/help, MCP registration, read-only gating, and error discovery now share one canonical registry.
-- **MCP adapter** — Removed the standalone repository MCP package. The packaged adapter keeps `launch_browser`, emits screenshot image blocks, and marks failed calls with `isError`.
-- **Lifecycle and policy** — Browser setup and shutdown now clean up partial resources transactionally. Read-only policy also covers direct `SurfingPage` calls, while `switch_tab` stays available for observation.
-- **CDP action errors** — Page-side `Runtime.callFunctionOn` exceptions now fail their action instead of returning false success. Expected remote-object loss after a navigating click no longer reports a false failure.
-- **Page processing** — Corrected viewport and hidden-node filtering, made `includeHidden` a full-DOM override, retained useful children and visible omission markers during bounded token pruning, and removed repeated parser work.
-- **Runtime performance** — Deferred CLI and browser modules until needed, reduced warm session calls to one authenticated request without replaying ambiguous mutations, cached browser ancestor clipping, and removed repeated parser allocations and metric lookups. Added 65,536-branch and 10,000-element performance gates.
-- **Runtime cleanup** — Removed dead session and benchmark paths, duplicate parser traversals and adapter checks, message-based error rewriting, and broad state-file fallbacks. Cleanup preserves primary failures and surfaces non-recoverable I/O errors.
-- **JavaScript evaluation** — `evaluate` now validates input shape and size; arbitrary page JavaScript remains unsandboxed. CDP unserializable values use a JSON-safe form.
-- **Documentation and release checks** — Rewrote CLI, API, architecture, security, and troubleshooting guidance. Release verification now runs executable benchmarks and the packaged MCP/CLI path.
+- `readPage()` is now the preferred SDK method. The deprecated `getState()` method and `GetStateOptions` type remain compatibility aliases.
+- One canonical registry now drives SDK definitions, dispatch, CLI metadata and help, MCP registration, read-only policy, and unknown-tool errors.
+- MCP is a thin packaged adapter over the shared executor. It retains `launch_browser`, emits screenshot image blocks, and marks failures with `isError`.
+- Browser setup and shutdown clean up partial resources transactionally. Read-only policy covers direct `SurfingPage` calls, while `switch_tab` remains readable.
+- Committed actions return a distinct result when post-action confirmation fails, preventing unsafe agent retries. Page-side CDP exceptions still preserve their original failure.
+- Page processing now handles viewport clipping and hidden nodes consistently. `includeHidden` reads the full DOM, bounded pruning keeps useful descendants, and oversized page or form state fails before capture.
+- Runtime paths defer optional modules, remove redundant CDP round trips and parser allocations, serialize SDK tab mutations, and preserve primary cleanup errors. Executable 65,536-branch and 10,000-element gates enforce near-linear behavior.
+- `evaluate` validates only input shape and size. It runs arbitrary unsandboxed page JavaScript and returns CDP unserializable values in a JSON-safe form.
+- CLI, API, architecture, security, troubleshooting, benchmark, and website content now share drift checks. Release verification exercises the packaged MCP and CLI under Node and Bun.
 
 ### Removed
 
-- **Stale demo command** — Removed the TideTravel server and prompt after their referenced web assets were retired.
+- Removed the TideTravel server and prompt after their web assets were retired.
 
 ## 0.5.4 (2026-04-26)
 
@@ -46,7 +46,7 @@
 - **MCP browser boot**: Register Chrome crash listeners on the Inspector CDP domain instead of the Page domain, fixing launch/connect failures caused by unsupported `Page.targetCrashed` handlers.
 - **Launch cleanup**: Failed `TideSurf.launch()` setup now disconnects any opened CDP session, terminates the spawned Chrome process, and removes owned temporary profiles before rethrowing.
 - **Trusted local development URLs**: Added explicit `allowLocalhost` and `allowPrivateHosts` options for CLI, MCP, and SDK navigation. Local/private URLs remain blocked by default, while trusted MCP/dev sessions can opt in.
-- **Tool validation flow**: Removed duplicate URL validation in tool execution and routed navigation/new-tab tools through the authoritative `TideSurf` instance methods.
+- **Tool validation flow**: Removed duplicate URL validation in tool execution and routed `navigate` and `new_tab` through the authoritative `TideSurf` instance methods.
 - **Auto-connect fallback**: CLI and MCP auto-connect now fall back to launching only for CDP connection failures instead of swallowing unrelated errors.
 - **Tab policy preservation**: Switching to an untracked tab now preserves the instance URL policy and filesystem access roots.
 

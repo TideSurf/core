@@ -81,7 +81,6 @@ pre {
 .topnav,
 .page,
 .site-footer,
-.cookie-notice,
 .theme-float,
 .skip-link {
   position: relative;
@@ -194,7 +193,7 @@ pre {
 }
 
 .install {
-  width: min(32rem, 100%);
+  width: min(33rem, 100%);
   min-height: 2.75rem;
   display: flex;
   align-items: center;
@@ -516,31 +515,6 @@ pre {
   z-index: 50;
 }
 
-body.cookie-visible .theme-float {
-  bottom: calc(0.65rem + env(safe-area-inset-bottom));
-}
-
-.cookie-notice {
-  position: fixed;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  z-index: 40;
-  padding: 0.65rem clamp(1rem, 4vw, 2.5rem);
-  padding-left: calc(clamp(1rem, 4vw, 2.5rem) + 7rem);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.8rem;
-  color: var(--ink-2);
-  background: var(--canvas-2);
-  font-size: 0.84rem;
-}
-
-.cookie-ok {
-  flex: 0 0 auto;
-}
-
 @media (max-width: 920px) {
   :root {
     --page: min(100% - 3rem, 880px);
@@ -629,6 +603,12 @@ body.cookie-visible .theme-float {
     width: 100%;
   }
 
+  .install code {
+    overflow-x: visible;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
   .section-intro h2,
   .closing h2,
   .compact-intro h2 {
@@ -654,17 +634,9 @@ body.cookie-visible .theme-float {
     justify-content: flex-start;
   }
 
-  .cookie-notice {
-    align-items: center;
-  }
-
   .theme-float {
     left: max(1rem, env(safe-area-inset-left));
     bottom: calc(0.75rem + env(safe-area-inset-bottom));
-  }
-
-  body.cookie-visible .theme-float {
-    bottom: calc(0.65rem + env(safe-area-inset-bottom));
   }
 
   .theme-float .theme-btn {

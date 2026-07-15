@@ -21,8 +21,12 @@ const REQUEST_IDLE_TIMEOUT_MS = 30_000;
 interface IncomingRequest {
   id: string;
   secret: string;
+  deadline: number;
+  executionTimeout: number;
   request: SessionRequest;
 }
+
+type ActiveSessionRequest = Exclude<SessionRequest, { method: "stop" }>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -58,7 +62,10 @@ function parseIncomingRequest(value: unknown): IncomingRequest {
     typeof value["protocol"] !== "number" ||
     typeof value["id"] !== "string" ||
     value["id"].length === 0 ||
-    typeof value["secret"] !== "string"
+    typeof value["secret"] !== "string" ||
+    !Number.isFinite(value["deadline"]) ||
+    !Number.isFinite(value["executionTimeout"]) ||
+    (value["executionTimeout"] as number) <= 0
   ) {
     throw new SessionProtocolError("Invalid session request");
   }
@@ -68,6 +75,8 @@ function parseIncomingRequest(value: unknown): IncomingRequest {
   return {
     id: value["id"],
     secret: value["secret"],
+    deadline: value["deadline"] as number,
+    executionTimeout: value["executionTimeout"] as number,
     request: parseSessionRequest(value["request"]),
   };
 }
@@ -130,31 +139,63 @@ export async function runDaemon(
   const expectedSecret = Buffer.from(initial.secret);
   let server!: Server;
   let closing: Promise<void> | null = null;
+  let serverClosing: Promise<void> | null = null;
+  let resourceCleanup: Promise<Error | undefined> | null = null;
   let queue: Promise<void> = Promise.resolve();
   let stopping = false;
   const sockets = new Set<Socket>();
+
+  const stopListening = (): Promise<void> => {
+    if (serverClosing) return serverClosing;
+    serverClosing = new Promise<void>((resolveClose) => {
+      if (!server.listening) return resolveClose();
+      server.close(() => resolveClose());
+    });
+    return serverClosing;
+  };
+
+  const cleanupResources = (): Promise<Error | undefined> => {
+    if (resourceCleanup) return resourceCleanup;
+    resourceCleanup = (async () => {
+      const failures: string[] = [];
+      try {
+        await controller.close();
+      } catch (error) {
+        failures.push(`browser shutdown: ${errorDetails(error).error}`);
+      }
+      if (failures.length === 0) {
+        try {
+          removeSessionFiles(paths);
+        } catch (error) {
+          failures.push(`session cleanup: ${errorDetails(error).error}`);
+        }
+      }
+      if (failures.length === 0) {
+        try {
+          rmSync(paths.logFile, { force: true });
+        } catch (error) {
+          failures.push(`log cleanup: ${errorDetails(error).error}`);
+        }
+      }
+      if (failures.length === 0) return undefined;
+      return new SessionProtocolError(
+        `Session shutdown failed (${failures.join("; ")}). Log: ${paths.logFile}`
+      );
+    })();
+    return resourceCleanup;
+  };
 
   const shutdown = (exitCode = 0): Promise<void> => {
     if (closing) return closing;
     stopping = true;
     closing = (async () => {
-      const serverClosed = new Promise<void>((resolveClose) => {
-        if (!server.listening) return resolveClose();
-        server.close(() => resolveClose());
-      });
+      const serverClosed = stopListening();
       for (const socket of sockets) socket.destroy();
       await queue;
-      try {
-        await controller.close();
-      } catch (error) {
-        console.error(`[tidesurf] Browser shutdown failed: ${errorDetails(error).error}`);
-        exitCode = 1;
-      }
+      const cleanupError = await cleanupResources();
       await serverClosed;
-      try {
-        removeSessionFiles(paths, true);
-      } catch (error) {
-        console.error(`[tidesurf] Session cleanup failed: ${errorDetails(error).error}`);
+      if (cleanupError) {
+        console.error(`[tidesurf] ${cleanupError.message}`);
         exitCode = 1;
       }
       process.exitCode = exitCode;
@@ -162,10 +203,8 @@ export async function runDaemon(
     return closing;
   };
 
-  const handle = async (request: SessionRequest): Promise<unknown> => {
-    if (stopping && request.method !== "stop") {
-      throw new SessionProtocolError("Session is stopping");
-    }
+  const handle = async (request: ActiveSessionRequest): Promise<unknown> => {
+    if (stopping) throw new SessionProtocolError("Session is stopping");
     switch (request.method) {
       case "ping":
         return { pid: process.pid };
@@ -174,6 +213,9 @@ export async function runDaemon(
           session: initial.session,
           daemonPid: process.pid,
           version: initial.version,
+          running: true,
+          starting: false,
+          ready: true,
           browser: controller.status(),
           config: initial.config,
         };
@@ -187,9 +229,6 @@ export async function runDaemon(
         };
       case "tool":
         return controller.execute(request.name, request.input);
-      case "stop":
-        stopping = true;
-        return { stopped: true, session: initial.session };
     }
   };
 
@@ -244,12 +283,41 @@ export async function runDaemon(
 
       const task = async () => {
         try {
-          const data = await handle(authenticated.request);
-          if (authenticated.request.method === "stop") {
-            send(socket, authenticated.id, { success: true, data }, () => void shutdown(0));
-          } else {
-            send(socket, authenticated.id, { success: true, data });
+          if (
+            authenticated.request.method !== "ping" &&
+            authenticated.request.method !== "status"
+          ) {
+            if (socket.destroyed) return;
+            if (
+              Date.now() + authenticated.executionTimeout > authenticated.deadline
+            ) {
+              throw new SessionProtocolError(
+                "Session request was cancelled before execution because its queue deadline expired"
+              );
+            }
           }
+          if (authenticated.request.method === "stop") {
+            stopping = true;
+            void stopListening();
+            const cleanupError = await cleanupResources();
+            if (cleanupError) {
+              send(socket, authenticated.id, {
+                success: false,
+                ...errorDetails(cleanupError),
+              }, () => setTimeout(() => void shutdown(1), 0));
+              return;
+            }
+            send(socket, authenticated.id, {
+              success: true,
+              data: {
+                stopped: true,
+                session: initial.session,
+              },
+            }, () => setTimeout(() => void shutdown(0), 0));
+            return;
+          }
+          const data = await handle(authenticated.request);
+          send(socket, authenticated.id, { success: true, data });
         } catch (error) {
           send(socket, authenticated.id, { success: false, ...errorDetails(error) });
         }

@@ -2,6 +2,16 @@
 
 Upgrade notes for TideSurf releases with API or output changes.
 
+## Preferred page-read method
+
+Use `readPage()` in new SDK code:
+
+```typescript
+const state = await browser.readPage();
+```
+
+The deprecated `getState()` method remains as a compatibility alias and returns the same `PageState`. `GetStateOptions` likewise aliases `ReadPageOptions`.
+
 ## v0.3.0 breaking changes
 
 v0.3.0 replaced XML with a markdown-like format that uses **4–5x fewer tokens**.
@@ -17,28 +27,24 @@ v0.3.0 replaced XML with a markdown-like format that uses **4–5x fewer tokens*
 
 **Page state field**
 
-```typescript
-// Before
-const state = await browser.getState();
-console.log(state.xml);
+Use `state.content`. `state.xml` remains as a deprecated alias.
 
-// After
-const state = await browser.getState();
+```typescript
+const state = await browser.readPage();
 console.log(state.content);
-// state.xml remains as a deprecated alias.
 ```
 
 **Viewport default**
 
 ```typescript
 // Before: full page
-const state = await browser.getState(); // viewport: false
+const state = await browser.readPage({ viewport: false });
 
 // After: current viewport
-const state = await browser.getState(); // viewport: true
+const state = await browser.readPage(); // viewport: true
 
 // Request the full page explicitly.
-const fullPage = await browser.getState({ viewport: false });
+const fullPage = await browser.readPage({ viewport: false });
 ```
 
 Update old XML examples in prompt templates, adapt custom parsers to the new text format, and review `maxTokens` values against the smaller output. Agents that need the full page must pass `{ viewport: false }`.

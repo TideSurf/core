@@ -1,8 +1,5 @@
 import type { IDPrefixMap } from "../types.js";
 
-/**
- * Tag → ID prefix mapping. Only interactive elements get IDs.
- */
 const TAG_PREFIX: IDPrefixMap = {
   link: "L",
   button: "B",
@@ -13,16 +10,10 @@ const TAG_PREFIX: IDPrefixMap = {
   dialog: "D",
 };
 
-/**
- * Manages positional ID assignment for a single getState() call.
- * Counters reset each call.
- */
+/** Assigns positional action IDs; counters reset for each page read. */
 export class IDAssigner {
   private counters: Map<string, number> = new Map();
 
-  /**
-   * Get the next ID for a mapped tag, or undefined when the tag has no ID.
-   */
   assign(mappedTag: string): string | undefined {
     const prefix = TAG_PREFIX[mappedTag];
     if (!prefix) return undefined;

@@ -2,12 +2,10 @@ import type { OSNode, ScrollPosition } from "../types.js";
 import { compressUrl } from "./url-compressor.js";
 import { formatTruncation } from "./truncation.js";
 
-/** Escape double quotes in values rendered between quotes. */
 function escapeQuotes(text: string): string {
   return text.replace(/"/g, '\\"');
 }
 
-/** Escape text that could otherwise look like markup in agent output. */
 function escapeHtml(text: string): string {
   let result = "";
   let chunkStart = 0;
@@ -43,8 +41,7 @@ interface ElementState {
 
 interface SerializationContext {
   pageUrl?: string;
-  text: Map<OSNode, string>;
-  nonInteractiveText: Map<OSNode, string>;
+  text: Map<OSNode, { all: string; nonInteractive: string }>;
 }
 
 /**
@@ -63,9 +60,6 @@ function getElementState(node: OSNode, hasAttrDisabled: boolean): ElementState {
   return { struck, flags };
 }
 
-/**
- * Container tags that get their own line and indented children.
- */
 const STRUCTURAL_CONTAINERS = new Set([
   "form",
   "nav",
@@ -89,30 +83,47 @@ const HEADING_MAP: Record<string, string> = {
   heading: "##",
 };
 
-/**
- * Collect all text from a node and its children.
- * Uses memoization cache to avoid re-traversing subtrees.
- */
-function collectTextMemoized(node: OSNode, context: SerializationContext): string {
+function collectText(
+  node: OSNode,
+  context: SerializationContext
+): { all: string; nonInteractive: string } {
   const cached = context.text.get(node);
   if (cached !== undefined) return cached;
 
-  let result: string;
+  let result: { all: string; nonInteractive: string };
   if (node.tag === "#text") {
-    result = escapeHtml(node.text ?? "");
+    const value = escapeHtml(node.text ?? "");
+    result = { all: value, nonInteractive: value };
   } else {
-    const parts: string[] = [];
+    const all: string[] = [];
+    let nonInteractive: string[] | undefined;
     const text = serializableText(node);
-    if (text) parts.push(escapeHtml(text));
-    for (const child of node.children) {
-      const t = collectTextMemoized(child, context);
-      if (t) parts.push(t);
+    if (text) {
+      all.push(escapeHtml(text));
     }
-    result = parts.join(" ");
+    for (const child of node.children) {
+      const childText = collectText(child, context);
+      if (!childText.all) continue;
+      const retained = child.id ? "" : childText.nonInteractive;
+      if (!nonInteractive && childText.all !== retained) {
+        nonInteractive = all.slice();
+      }
+      all.push(childText.all);
+      if (nonInteractive && retained) nonInteractive.push(retained);
+    }
+    const allText = all.join(" ");
+    result = {
+      all: allText,
+      nonInteractive: nonInteractive?.join(" ") ?? allText,
+    };
   }
 
   context.text.set(node, result);
   return result;
+}
+
+function collectTextMemoized(node: OSNode, context: SerializationContext): string {
+  return collectText(node, context).all;
 }
 
 function appendAction(
@@ -131,14 +142,10 @@ function appendAction(
   }
 }
 
-/**
- * Serialize an array of OSNodes to compact markdown-like text.
- */
 export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string): string {
   return serializeNodes(nodes, indent, {
     pageUrl,
     text: new Map(),
-    nonInteractiveText: new Map(),
   });
 }
 
@@ -366,13 +373,11 @@ function serializeNodes(
   return parts.join("\n");
 }
 
-/**
- * Serialize children of a <select>, marking selected options with `>` prefix.
- */
 function serializeSelectChildren(
   nodes: OSNode[],
   indent: number,
-  context: SerializationContext
+  context: SerializationContext,
+  inheritedDisabled: boolean = false
 ): string {
   const parts: string[] = [];
   const pad = "  ".repeat(indent);
@@ -387,11 +392,12 @@ function serializeSelectChildren(
     }
     if (node.tag === "optgroup") {
       const label = node.attributes["aria-label"] || node.attributes["label"] || "";
-      if (label) parts.push(`${pad}${label}:`);
+      const disabled = inheritedDisabled || node.attributes["disabled"] !== undefined;
+      if (label) parts.push(`${pad}${disabled ? `~~${label}~~` : label}:`);
       if (node.children.length > 0) {
         pushIfNotEmpty(
           parts,
-          serializeSelectChildren(node.children, indent + 1, context)
+          serializeSelectChildren(node.children, indent + 1, context, disabled)
         );
       }
       continue;
@@ -399,15 +405,13 @@ function serializeSelectChildren(
     const text = collectTextMemoized(node, context).trim();
     if (!text) continue;
     const isSelected = node.attributes["selected"] !== undefined || node.attributes["aria-selected"] === "true";
-    parts.push(`${pad}${isSelected ? "> " : ""}${text}`);
+    const disabled = inheritedDisabled || node.attributes["disabled"] !== undefined;
+    parts.push(`${pad}${isSelected ? "> " : ""}${disabled ? `~~${text}~~` : text}`);
   }
 
   return parts.join("\n");
 }
 
-/**
- * Serialize a list item's content inline.
- */
 function serializeItem(
   node: OSNode,
   context: SerializationContext
@@ -491,23 +495,7 @@ function collectNonInteractiveText(
   node: OSNode,
   context: SerializationContext
 ): string {
-  const visit = (current: OSNode): string => {
-    const cached = context.nonInteractiveText.get(current);
-    if (cached !== undefined) return cached;
-    const parts: string[] = [];
-    const text = serializableText(current);
-    if (text) parts.push(escapeHtml(text));
-    for (const child of current.children) {
-      if (!child.id) {
-        const value = visit(child);
-        if (value) parts.push(value);
-      }
-    }
-    const value = parts.join(" ");
-    context.nonInteractiveText.set(current, value);
-    return value;
-  };
-  return visit(node);
+  return collectText(node, context).nonInteractive;
 }
 
 function compressPageUrl(url: string): string {

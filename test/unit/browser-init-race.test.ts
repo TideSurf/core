@@ -224,6 +224,36 @@ describe("BrowserController initialization", () => {
     await controller.close();
   });
 
+  it("continues local discovery after an explicit connect-only endpoint fails", async () => {
+    const browser = fakeBrowser();
+    const connect = mock(async (options: Parameters<typeof TideSurf.connect>[0]) => {
+      if (options?.port === 9_333) {
+        throw new CDPConnectionError("explicit endpoint unavailable");
+      }
+      return browser;
+    });
+    const launch = mock(async () => fakeBrowser());
+    replaceConnect(connect);
+    replaceLaunch(launch);
+    const controller = new BrowserController({
+      ...config,
+      browserMode: "connect",
+      host: "127.0.0.1",
+      port: 9_333,
+      timeout: 1_000,
+      userDataDir: emptyProfile(),
+    });
+
+    expect(await controller.getBrowser()).toBe(browser);
+    expect(connect).toHaveBeenCalledTimes(2);
+    expect(connect.mock.calls[1]?.[0]).toMatchObject({
+      host: "127.0.0.1",
+      port: 9222,
+    });
+    expect(launch).toHaveBeenCalledTimes(0);
+    await controller.close();
+  });
+
   it("does not turn a failed remote attachment into local discovery or launch", async () => {
     const connect = mock(async () => {
       throw new CDPConnectionError("remote endpoint unavailable");

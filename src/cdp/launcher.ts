@@ -34,22 +34,22 @@ const EXECUTABLE_NAMES: Record<ChromeChannel, Record<string, readonly string[]>>
   beta: {
     darwin: ["google-chrome-beta"],
     linux: ["google-chrome-beta"],
-    win32: ["chrome.exe"],
+    win32: [],
   },
   dev: {
     darwin: ["google-chrome-dev"],
     linux: ["google-chrome-unstable", "google-chrome-dev"],
-    win32: ["chrome.exe"],
+    win32: [],
   },
   canary: {
     darwin: ["google-chrome-canary"],
     linux: ["google-chrome-canary"],
-    win32: ["chrome.exe"],
+    win32: [],
   },
   chromium: {
     darwin: ["chromium"],
     linux: ["chromium", "chromium-browser"],
-    win32: ["chrome.exe", "chromium.exe"],
+    win32: ["chromium.exe"],
   },
 };
 
@@ -100,6 +100,8 @@ interface DevToolsActivePort {
   port: number;
   browserPath: string;
 }
+
+class DevToolsEndpointMismatchError extends ChromeLaunchError {}
 
 function selectedChannels(channel?: ChromeChannel): readonly ChromeChannel[] {
   return channel ? [channel] : CHANNEL_ORDER;
@@ -212,7 +214,7 @@ export function resolveChromeExecutable(options: ResolveChromeOptions = {}): str
   const platform = options.platform ?? process.platform;
   const env = options.env ?? process.env;
 
-  if (options.chromePath) {
+  if (options.chromePath !== undefined) {
     if (isExecutableFile(options.chromePath, platform)) return options.chromePath;
     throw new ChromeLaunchError(
       `Chrome executable is missing, not a regular file, or not executable: ${options.chromePath}`
@@ -220,7 +222,7 @@ export function resolveChromeExecutable(options: ResolveChromeOptions = {}): str
   }
 
   const envPath = env["CHROME_PATH"];
-  if (envPath) {
+  if (envPath !== undefined) {
     if (isExecutableFile(envPath, platform)) return envPath;
     throw new ChromeLaunchError(
       `CHROME_PATH is missing, not a regular file, or not executable: ${envPath}`
@@ -395,6 +397,56 @@ function isConnectionRefused(error: unknown): boolean {
   );
 }
 
+function browserPathFromVersion(version: unknown): string {
+  const webSocketUrl =
+    version && typeof version === "object"
+      ? (version as { webSocketDebuggerUrl?: unknown }).webSocketDebuggerUrl
+      : undefined;
+  if (typeof webSocketUrl !== "string") {
+    throw new ChromeLaunchError(
+      "Chrome /json/version response has no browser WebSocket endpoint"
+    );
+  }
+
+  try {
+    const endpoint = new URL(webSocketUrl);
+    if (
+      (endpoint.protocol !== "ws:" && endpoint.protocol !== "wss:") ||
+      !endpoint.pathname.startsWith("/devtools/browser/")
+    ) {
+      throw new Error("invalid browser WebSocket endpoint");
+    }
+    return endpoint.pathname;
+  } catch (error) {
+    throw new ChromeLaunchError(
+      "Chrome /json/version response has an invalid browser WebSocket endpoint",
+      { cause: error instanceof Error ? error : undefined }
+    );
+  }
+}
+
+async function inspectMarkedEndpoint(
+  active: DevToolsActivePort,
+  timeout: number,
+  operation: string
+): Promise<Awaited<ReturnType<typeof CDP.List>>> {
+  const [version, targets] = await withTimeout(
+    Promise.all([
+      CDP.Version({ port: active.port, host: "localhost", useHostName: true }),
+      CDP.List({ port: active.port, host: "localhost", useHostName: true }),
+    ]),
+    timeout,
+    operation
+  );
+  const actualPath = browserPathFromVersion(version);
+  if (actualPath !== active.browserPath) {
+    throw new DevToolsEndpointMismatchError(
+      `DevToolsActivePort browser endpoint ${active.browserPath} does not match ${actualPath}`
+    );
+  }
+  return targets;
+}
+
 function waitForProcessExit(proc: ChildProcess, timeout: number): Promise<boolean> {
   if (processExited(proc)) return Promise.resolve(true);
   return new Promise((resolve) => {
@@ -452,9 +504,10 @@ async function waitForLaunchedBrowser(
     }
 
     let port = requestedPort;
+    let active: DevToolsActivePort | null = null;
     if (port === 0) {
       try {
-        const active = readDevToolsActivePort(userDataDir);
+        active = readDevToolsActivePort(userDataDir);
         port = active?.port ?? 0;
         if (!active) malformedMarkerSince = undefined;
       } catch (error) {
@@ -469,16 +522,20 @@ async function waitForLaunchedBrowser(
     if (port !== 0) {
       malformedMarkerSince = undefined;
       try {
-        const targets = await withTimeout(
-          CDP.List({ port, host: "localhost", useHostName: true }),
-          Math.min(500, Math.max(1, deadline - Date.now())),
-          "Chrome readiness"
-        );
+        const probeTimeout = Math.min(500, Math.max(1, deadline - Date.now()));
+        const targets = active
+          ? await inspectMarkedEndpoint(active, probeTimeout, "Chrome readiness")
+          : await withTimeout(
+            CDP.List({ port, host: "localhost", useHostName: true }),
+            probeTimeout,
+            "Chrome readiness"
+          );
         const page = targets.find(
           (target) => target.type === "page"
         );
         if (page) return { port, host: "localhost", targetId: page.id };
       } catch (error) {
+        if (error instanceof DevToolsEndpointMismatchError) throw error;
         lastError = error;
       }
     }
@@ -503,7 +560,7 @@ export async function launchChrome(options: LaunchOptions = {}): Promise<LaunchR
     await assertPortAvailable(options.port);
   }
 
-  const ownsTempDir = !options.userDataDir;
+  const ownsTempDir = options.userDataDir === undefined;
   const userDataDir = options.userDataDir ?? join(tmpdir(), `tidesurf-${randomUUID()}`);
   mkdirSync(userDataDir, { recursive: true, mode: 0o700 });
 
@@ -516,11 +573,7 @@ export async function launchChrome(options: LaunchOptions = {}): Promise<LaunchR
     let reachable = false;
     let probeError: unknown;
     try {
-      await withTimeout(
-        CDP.List({ port: active.port, host: "localhost", useHostName: true }),
-        250,
-        "active Chrome profile"
-      );
+      await inspectMarkedEndpoint(active, 250, "active Chrome profile");
       reachable = true;
     } catch (error) {
       probeError = error;
@@ -528,7 +581,10 @@ export async function launchChrome(options: LaunchOptions = {}): Promise<LaunchR
     if (reachable) {
       throw new ChromeLaunchError(`The Chrome profile is already active: ${userDataDir}`);
     }
-    if (!isConnectionRefused(probeError)) {
+    if (
+      !(probeError instanceof DevToolsEndpointMismatchError) &&
+      !isConnectionRefused(probeError)
+    ) {
       throw new ChromeLaunchError(
         `Could not verify whether the Chrome profile is active: ${userDataDir}`,
         { cause: probeError instanceof Error ? probeError : undefined }
@@ -542,36 +598,40 @@ export async function launchChrome(options: LaunchOptions = {}): Promise<LaunchR
     port: requestedPort,
     userDataDir,
   });
-  const proc = spawn(chromePath, args, { stdio: ["ignore", "pipe", "pipe"] });
-  proc.stdout?.resume();
-  proc.stderr?.resume();
-
+  let proc: ChildProcess | undefined;
   try {
+    const launchedProcess = spawn(chromePath, args, {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    proc = launchedProcess;
+    launchedProcess.stdout?.resume();
+    launchedProcess.stderr?.resume();
+
     let onSpawnError: ((error: Error) => void) | undefined;
     const spawnFailure = new Promise<never>((_resolve, reject) => {
       onSpawnError = (error: Error) =>
         reject(new ChromeLaunchError(`Chrome process error: ${error.message}`, { cause: error }));
-      proc.once("error", onSpawnError);
+      launchedProcess.once("error", onSpawnError);
     });
     const endpoint = await Promise.race([
       waitForLaunchedBrowser(
-        proc,
+        launchedProcess,
         requestedPort,
         userDataDir,
         options.timeout ?? 15_000
       ),
       spawnFailure,
     ]).finally(() => {
-      if (onSpawnError) proc.removeListener("error", onSpawnError);
+      if (onSpawnError) launchedProcess.removeListener("error", onSpawnError);
     });
     return {
-      process: proc,
+      process: launchedProcess,
       ...endpoint,
       userDataDir,
       ownsTempDir,
     };
   } catch (error) {
-    const exited = await terminateChromeProcess(proc);
+    const exited = proc ? await terminateChromeProcess(proc) : true;
     const launchError = error instanceof ChromeLaunchError
       ? error
       : new ChromeLaunchError(
@@ -658,11 +718,18 @@ export async function discoverActiveBrowser(
     const remaining = deadline - Date.now();
     if (remaining <= 0) break;
     try {
-      return await discoverBrowser({
-        port: active.port,
-        host: "localhost",
-        timeout: Math.min(1_000, remaining),
-      });
+      const targets = await inspectMarkedEndpoint(
+        active,
+        Math.min(1_000, remaining),
+        "active Chrome profile discovery"
+      );
+      const page = targets.find((target) => target.type === "page");
+      if (!page) {
+        throw new CDPConnectionError(
+          `Chrome is available on localhost:${active.port}, but it has no page target`
+        );
+      }
+      return { port: active.port, host: "localhost", targetId: page.id };
     } catch (error) {
       lastError = error;
     }

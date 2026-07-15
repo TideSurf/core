@@ -282,6 +282,34 @@ describe("serialize", () => {
     expect(result).toBe("S1:select");
   });
 
+  it("marks disabled options and disabled optgroups", () => {
+    const nodes: OSNode[] = [{
+      tag: "select",
+      id: "S1",
+      attributes: {},
+      children: [
+        {
+          tag: "option",
+          attributes: { disabled: "" },
+          children: [{ tag: "#text", attributes: {}, children: [], text: "Direct" }],
+        },
+        {
+          tag: "optgroup",
+          attributes: { label: "Group", disabled: "" },
+          children: [{
+            tag: "option",
+            attributes: {},
+            children: [{ tag: "#text", attributes: {}, children: [], text: "Nested" }],
+          }],
+        },
+      ],
+    }];
+
+    expect(serialize(nodes)).toContain("~~Direct~~");
+    expect(serialize(nodes)).toContain("~~Group~~:");
+    expect(serialize(nodes)).toContain("~~Nested~~");
+  });
+
   it("serializes labels", () => {
     const nodes: OSNode[] = [
       {

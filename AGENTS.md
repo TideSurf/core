@@ -82,6 +82,15 @@ The website follows the design philosophy of `../mercuriusdream.github.io`.
 - Use structured parsers and DOM APIs where available.
 - Avoid broad refactors during narrow fixes.
 
+## Code and Prose Audit
+
+- Treat structural repetition, redundant adapters, overlapping fallbacks, and copied validation as defects when one authoritative path can preserve the boundary checks.
+- Remove wrappers, branches, comments, and compatibility paths that do not protect a distinct public boundary or invariant.
+- Keep one concise feature-level comment only when the invariant is not clear from names and control flow. Use a short inline note for a local exception. Do not narrate self-evident code or retain ticket history in source.
+- Write direct technical prose. Cut generic openings, repeated conclusions, inflated nouns, passive wording, and paragraphs that restate the preceding code or table.
+- Judge code and prose by observable repetition, clarity, behavior, and maintenance cost. Do not use subjective AI-word blacklists or label work by model stereotypes.
+- Before shipping, audit the complete diff for duplicated flows, unnecessary guards, broad retries, stale fallbacks, dead exports, comment noise, and documentation drift.
+
 ## Git Hygiene
 
 - Do not commit generated preview experiments, local caches, temporary Chrome profiles, or unrelated worktree changes.

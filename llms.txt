@@ -14,7 +14,7 @@ The first tool command starts a private local daemon and a managed headless brow
 
 ```sh
 tidesurf navigate https://example.com
-tidesurf get-state
+tidesurf get_state
 tidesurf click B1
 tidesurf stop
 ```
@@ -23,7 +23,7 @@ Use `--session <name>` on every command for an independent workflow:
 
 ```sh
 tidesurf --session docs navigate https://example.com/docs
-tidesurf --session docs get-state --max-tokens 800
+tidesurf --session docs get_state --max-tokens 800
 ```
 
 Session commands:
@@ -33,13 +33,13 @@ Session commands:
 - `stop`: stop the named session; repeated calls succeed
 - `tools`: list the shared tool registry
 - `help [command]`: show generated help
-- `call <tool> --input <json|->`: call a canonical name or CLI alias with JSON; `-` reads stdin
+- `call <tool> --input <json|->`: call an exact tool identifier with JSON; `-` reads stdin
 - `inspect <url>`: one-shot compatibility command
 - `mcp`: run the MCP stdio adapter
 
 Direct tool commands, in registry order:
 
-1. `get-state` (`get_state`)
+1. `get_state`
 2. `navigate`
 3. `click`
 4. `type`
@@ -47,22 +47,22 @@ Direct tool commands, in registry order:
 6. `scroll`
 7. `extract`
 8. `evaluate`
-9. `list-tabs` (`list_tabs`)
-10. `new-tab` (`new_tab`)
-11. `switch-tab` (`switch_tab`)
-12. `close-tab` (`close_tab`)
+9. `list_tabs`
+10. `new_tab`
+11. `switch_tab`
+12. `close_tab`
 13. `search`
 14. `screenshot`
 15. `upload`
-16. `clipboard-read` (`clipboard_read`)
-17. `clipboard-write` (`clipboard_write`)
+16. `clipboard_read`
+17. `clipboard_write`
 18. `download`
 
 Use `tidesurf help <command>` for exact positionals and flags. Page-state flags:
 
-- `get-state --max-tokens <n> --mode <full|minimal|interactive>`
-- `get-state --full-page` disables normal viewport filtering
-- `get-state --include-hidden` includes hidden nodes and disables viewport filtering
+- `get_state --max-tokens <n> --mode <full|minimal|interactive>`
+- `get_state --full-page` disables normal viewport filtering
+- `get_state --include-hidden` includes hidden nodes and disables viewport filtering
 - `screenshot --element-id <id> | --full-page`
 - `screenshot --output <file>` writes a selected file
 - `screenshot --output -` writes raw PNG bytes to stdout
@@ -126,7 +126,7 @@ import { TideSurf } from "@tidesurf/core";
 
 const browser = await TideSurf.launch();
 await browser.navigate("https://example.com");
-const state = await browser.getState({ maxTokens: 1000 });
+const state = await browser.readPage({ maxTokens: 1000 });
 await browser.getPage().click("B1");
 await browser.close();
 ```
@@ -166,4 +166,4 @@ Localhost, loopback, private, and link-local navigation is blocked by default. U
 }
 ```
 
-The MCP adapter registers the shared 18 tools and the compatibility-only `launch_browser` tool. Screenshot results become image blocks. Failed tool calls set `isError`. `@modelcontextprotocol/sdk` and `zod` are optional package dependencies.
+The MCP adapter registers the shared 18 tools and the `launch_browser` lifecycle tool. Screenshot results become image blocks. Failed tool calls set `isError`. `@modelcontextprotocol/sdk` and `zod` are optional package dependencies.

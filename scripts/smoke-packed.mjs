@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,6 +18,7 @@ const bin = join(
 );
 const nodeSession = `pack-node-${randomUUID()}`;
 const bunSession = `pack-bun-${randomUUID()}`;
+const packageJson = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -58,20 +59,41 @@ function assertSession(output, session) {
 
 let cliPath;
 try {
-  const packedName = run(npm, [
+  const packOutput = JSON.parse(run(npm, [
     "pack",
-    "--silent",
+    "--json",
     "--pack-destination",
     workspace,
-  ]).trim().split(/\r?\n/).at(-1);
-  if (!packedName) throw new Error("npm pack did not return a tarball name");
+  ]));
+  if (!Array.isArray(packOutput) || packOutput.length !== 1) {
+    throw new Error(`npm pack returned invalid metadata: ${JSON.stringify(packOutput)}`);
+  }
+  const packed = packOutput[0];
+  if (!packed || typeof packed !== "object") {
+    throw new Error(`npm pack returned invalid metadata: ${JSON.stringify(packed)}`);
+  }
+  if (packed.name !== packageJson.name || packed.version !== packageJson.version) {
+    throw new Error(
+      `Packed ${packed.name}@${packed.version}; expected ${packageJson.name}@${packageJson.version}`
+    );
+  }
+  if (
+    typeof packed.filename !== "string" ||
+    packed.filename !== packed.filename.split(/[\\/]/).at(-1)
+  ) {
+    throw new Error(`npm pack returned an invalid filename: ${packed.filename}`);
+  }
+  const packedPath = join(workspace, packed.filename);
+  if (!existsSync(packedPath) || !statSync(packedPath).isFile()) {
+    throw new Error(`npm pack did not create ${packed.filename}`);
+  }
 
   run(npm, [
     "install",
     "--ignore-scripts",
     "--prefix",
     installRoot,
-    join(workspace, packedName),
+    packedPath,
   ]);
   run(npm, [
     "install",
@@ -79,7 +101,7 @@ try {
     "--omit=optional",
     "--prefix",
     minimalInstallRoot,
-    join(workspace, packedName),
+    packedPath,
   ]);
   cliPath = join(
     installRoot,

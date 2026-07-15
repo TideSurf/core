@@ -76,10 +76,7 @@ Typography:
 Use the same primitive for navigation actions, theme and language controls,
 copy buttons, documentation actions, and final calls to action.
 
-The shared `light` / `dark` selector floats at bottom-left on both sites. While
-the analytics notice is visible, the selector overlays its reserved left-hand
-space at a higher z-index; it does not create a second row. Consent copy stays
-plain and its `OK` action uses the green patch.
+The shared `light` / `dark` selector floats at bottom-left on both sites.
 
 ## Landing
 

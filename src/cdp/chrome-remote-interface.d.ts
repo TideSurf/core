@@ -19,7 +19,6 @@ declare module "chrome-remote-interface" {
   interface Client {
     DOM: {
       enable(): Promise<void>;
-      getDocument(params: { depth?: number; pierce?: boolean }): Promise<{ root: unknown }>;
       resolveNode(params: { backendNodeId: number }): Promise<{ object: { objectId?: string } }>;
       setFileInputFiles(params: {
         files: string[];
@@ -39,11 +38,15 @@ declare module "chrome-remote-interface" {
     };
     Page: {
       enable(): Promise<void>;
+      setLifecycleEventsEnabled(params: { enabled: boolean }): Promise<void>;
       navigate(params: { url: string }): Promise<{
         errorText?: string;
         loaderId?: string;
       }>;
-      loadEventFired(callback: () => void): () => void;
+      lifecycleEvent(callback: (event: {
+        name: string;
+        loaderId: string;
+      }) => void): () => void;
       captureScreenshot(params: {
         format?: string;
         clip?: { x: number; y: number; width: number; height: number; scale: number };
@@ -122,7 +125,11 @@ declare module "chrome-remote-interface" {
     function List(options?: { host?: string; port?: number; useHostName?: boolean }): Promise<Target[]>;
     function New(options?: { host?: string; port?: number; url?: string; useHostName?: boolean }): Promise<Target>;
     function Close(options?: { host?: string; port?: number; id: string; useHostName?: boolean }): Promise<void>;
-    function Version(options?: { host?: string; port?: number }): Promise<unknown>;
+    function Version(options?: {
+      host?: string;
+      port?: number;
+      useHostName?: boolean;
+    }): Promise<unknown>;
   }
 
   export default CDP;

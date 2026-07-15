@@ -14,7 +14,7 @@ TideSurfは、実行中のChromiumページをエージェント向けのコン�
 
 ```sh
 bunx @tidesurf/core navigate https://example.com
-bunx @tidesurf/core get-state
+bunx @tidesurf/core get_state
 bunx @tidesurf/core click L1
 bunx @tidesurf/core status
 bunx @tidesurf/core stop
@@ -24,30 +24,30 @@ bunx @tidesurf/core stop
 
 ```sh
 bunx @tidesurf/core --session research navigate https://example.com
-bunx @tidesurf/core --session research get-state --mode interactive
+bunx @tidesurf/core --session research get_state --mode interactive
 ```
 
 直接実行できるコマンドは次の18個です。
 
 ```text
-get-state       navigate        click           type
+get_state       navigate        click           type
 select          scroll          extract         evaluate
-list-tabs       new-tab         switch-tab      close-tab
-search          screenshot      upload          clipboard-read
-clipboard-write download
+list_tabs       new_tab         switch_tab      close_tab
+search          screenshot      upload          clipboard_read
+clipboard_write download
 ```
 
-`get_state`や`switch_tab`などのMCP名もエイリアスとして使えます。`tidesurf tools`はツール一覧、`tidesurf help <command>`はコマンド別ヘルプを表示します。`tidesurf call <tool> --input '<json>'`は生のツール呼び出しを実行します。
+直接コマンドには、レジストリおよびMCPと同じツール識別子を指定します。`tidesurf tools`はツール一覧、`tidesurf help <command>`はコマンド別ヘルプを表示します。`tidesurf call <tool> --input '<json>'`は生のツール呼び出しを実行します。
 
 既定では、TideSurfが管理ブラウザーを起動します。Chrome stable、Beta、Dev、Canary、Chromiumを検索し、動的なデバッグポートを使います。検索順は`--chrome-path`、`CHROME_PATH`、`PATH`、OSの標準インストール先です。ブラウザーをダウンロードすることはありません。既存ブラウザーを優先する場合は`--auto-connect`、起動を禁止する場合は`--connect-only`を指定します。
 
 読み取り専用ポリシーはセッション終了まで固定されます。
 
 ```sh
-bunx @tidesurf/core --session audit --read-only get-state
+bunx @tidesurf/core --session audit --read-only get_state
 ```
 
-読み取り専用セッションでは、`get-state`、`extract`、`list-tabs`、`switch-tab`、`search`、`screenshot`だけを使用できます。ナビゲーション、ページ操作、JavaScript、クリップボード、アップロード/ダウンロード、タブの作成と終了はSDKとツールの全境界で拒否されます。
+読み取り専用セッションでは、`get_state`、`extract`、`list_tabs`、`switch_tab`、`search`、`screenshot`だけを使用できます。ナビゲーション、ページ操作、JavaScript、クリップボード、アップロード/ダウンロード、タブの作成と終了はSDKとツールの全境界で拒否されます。
 
 起動ポリシーは変更できません。以降の呼び出しでは起動フラグを省略できます。`--read-only`のような独立したフラグは同じ値だけを繰り返せます。異なる値は拒否されます。
 
@@ -63,7 +63,7 @@ import { TideSurf } from "@tidesurf/core";
 const browser = await TideSurf.launch();
 await browser.navigate("https://example.com");
 
-const state = await browser.getState();
+const state = await browser.readPage();
 console.log(state.content);
 
 await browser.getPage().click("B1");
@@ -88,7 +88,7 @@ FORM F1
 
 `TideSurf.launch()`はChromiumを起動して所有します。`userDataDir`を指定しない場合は、分離された一時プロファイルを使います。`TideSurf.connect()`は既存のエンドポイントにだけ接続し、既定ポートは`9222`です。接続したインスタンスを閉じても、ユーザーのブラウザーは終了しません。
 
-`getState()`は`full`、`interactive`、`minimal`モード、ビューポート絞り込み、`maxTokens`に対応します。`includeHidden: true`はフルDOMのデバッグ設定です。非表示ノードを含め、ビューポート絞り込みを無効にします。
+`readPage()`は`full`、`interactive`、`minimal`モード、ビューポート絞り込み、`maxTokens`に対応します。`includeHidden: true`は非表示ノードを含め、ビューポート絞り込みを無効にします。非推奨の`getState()`はSDK互換用で、`readPage()`へ委譲します。
 
 SDKのアップロードとダウンロードは、既定で作業ディレクトリとOSの一時ディレクトリに限定されます。SDKのファイル操作を無効にするには`fileAccessRoots: []`を指定します。
 
@@ -107,7 +107,7 @@ MCPは同じレジストリとexecutorを使う薄いアダプターとして利
 }
 ```
 
-MCPサーバーは標準18ツールと、互換性用の`launch_browser`を公開します。スクリーンショットはMCP画像ブロック、失敗は`isError`付きで返ります。
+MCPサーバーは標準18ツールと、ライフサイクル用の`launch_browser`を公開します。スクリーンショットはMCP画像ブロック、失敗は`isError`付きで返ります。
 
 続きは[Getting started](https://tidesurf.org/docs#getting-started)、[CLI](https://tidesurf.org/docs#cli)、[Security](https://tidesurf.org/docs#security)、[API reference](https://tidesurf.org/docs#api-reference)をご覧ください。
 

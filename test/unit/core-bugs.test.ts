@@ -10,10 +10,84 @@ import {
   ValidationError,
 } from "../../src/errors.js";
 import type { CDPConnection } from "../../src/cdp/connection.js";
+import { SNAPSHOT_COMPUTED_STYLES } from "../../src/cdp/snapshot.js";
+
+function snapshotData(text = "test") {
+  const strings: string[] = [];
+  const indices = new Map<string, number>();
+  const stringIndex = (value: string): number => {
+    if (value === "") return -1;
+    const cached = indices.get(value);
+    if (cached !== undefined) return cached;
+    const index = strings.length;
+    strings.push(value);
+    indices.set(value, index);
+    return index;
+  };
+  const styleValues: Record<string, string> = {
+    display: "block",
+    visibility: "visible",
+    opacity: "1",
+    "content-visibility": "visible",
+    "clip-path": "none",
+    "overflow-x": "visible",
+    "overflow-y": "visible",
+    "pointer-events": "auto",
+    contain: "none",
+    clip: "auto",
+    position: "static",
+  };
+  const style = SNAPSHOT_COMPUTED_STYLES.map((name) =>
+    stringIndex(styleValues[name])
+  );
+  const names = ["#document", "HTML", "BODY", "BUTTON", "#text"];
+
+  return {
+    strings,
+    documents: [{
+      documentURL: stringIndex("https://example.com/"),
+      title: stringIndex("Example"),
+      frameId: stringIndex("main"),
+      scrollOffsetX: 0,
+      scrollOffsetY: 0,
+      contentWidth: 800,
+      contentHeight: 600,
+      nodes: {
+        parentIndex: [-1, 0, 1, 2, 3],
+        nodeType: [9, 1, 1, 1, 3],
+        nodeName: names.map(stringIndex),
+        nodeValue: ["", "", "", "", text].map(stringIndex),
+        backendNodeId: [1, 2, 3, 4, 5],
+        attributes: names.map(() => []),
+      },
+      layout: {
+        nodeIndex: [0, 1, 2, 3, 4],
+        styles: names.map(() => style),
+        bounds: names.map(() => [0, 0, 800, 20]),
+      },
+    }],
+  };
+}
+
+function preflightResult() {
+  return {
+    result: {
+      value: {
+        nodeCount: 5,
+        characterCount: 100,
+        viewportWidth: 800,
+        viewportHeight: 600,
+      },
+    },
+  };
+}
 
 function createMockCDPConnection(overrides: Partial<CDPConnection> = {}): CDPConnection {
   return {
-    client: { close: jest.fn() } as unknown as CDPConnection["client"],
+    client: {
+      close: jest.fn(),
+      send: jest.fn().mockResolvedValue(snapshotData()),
+    } as unknown as CDPConnection["client"],
     DOM: {
       enable: jest.fn(),
       getDocument: jest.fn().mockResolvedValue({ root: { nodeId: 1 } }),
@@ -26,12 +100,16 @@ function createMockCDPConnection(overrides: Partial<CDPConnection> = {}): CDPCon
     Page: {
       enable: jest.fn(),
       navigate: jest.fn(),
-      loadEventFired: jest.fn(() => () => {}),
+      lifecycleEvent: jest.fn(() => () => {}),
       captureScreenshot: jest.fn().mockResolvedValue({ data: "base64png" }),
     } as unknown as CDPConnection["Page"],
     Runtime: {
       enable: jest.fn(),
-      evaluate: jest.fn().mockResolvedValue({ result: { value: "test" } }),
+      evaluate: jest.fn(async ({ expression }: { expression: string }) =>
+        expression.includes("const stack = [document]")
+          ? preflightResult()
+          : { result: { value: "test" } }
+      ),
       callFunctionOn: jest.fn().mockResolvedValue({}),
       releaseObject: jest.fn(),
     } as unknown as CDPConnection["Runtime"],
@@ -55,65 +133,12 @@ function getNodeMap(page: SurfingPage): Map<string, number> {
 describe("search node-map preservation", () => {
   it("truncates snippets without splitting a grapheme", async () => {
     const expected = `${"a".repeat(99)}😀`;
-    const runtimeEvaluate = jest.fn(
-      async ({ expression }: { expression: string }) => ({
-        result: {
-          value: expression.includes("const page =")
-            ? {
-                url: "https://example.com/",
-                title: "Example",
-                scrollY: 0,
-                scrollHeight: 100,
-                viewportHeight: 100,
-                elementCount: 4,
-              }
-            : undefined,
-        },
-      })
-    );
-    const textNode = {
-      nodeId: 5,
-      backendNodeId: 5,
-      nodeType: 3,
-      nodeName: "#text",
-      localName: "",
-      nodeValue: `${expected}tail`,
-    };
-    const element = (
-      nodeId: number,
-      nodeName: string,
-      children: unknown[]
-    ) => ({
-      nodeId,
-      backendNodeId: nodeId,
-      nodeType: 1,
-      nodeName,
-      localName: nodeName.toLowerCase(),
-      nodeValue: "",
-      children,
-      attributes: [],
-    });
-    const root = {
-      nodeId: 1,
-      backendNodeId: 1,
-      nodeType: 9,
-      nodeName: "#document",
-      localName: "",
-      nodeValue: "",
-      children: [
-        element(2, "HTML", [
-          element(3, "BODY", [element(4, "P", [textNode])]),
-        ]),
-      ],
-    };
     const page = new SurfingPage(
       createMockCDPConnection({
-        DOM: {
-          getDocument: jest.fn().mockResolvedValue({ root }),
-        } as unknown as CDPConnection["DOM"],
-        Runtime: {
-          evaluate: runtimeEvaluate,
-        } as unknown as CDPConnection["Runtime"],
+        client: {
+          close: jest.fn(),
+          send: jest.fn().mockResolvedValue(snapshotData(`${expected}tail`)),
+        } as unknown as CDPConnection["client"],
       })
     );
 
@@ -139,46 +164,22 @@ describe("search node-map preservation", () => {
     expect(mapAfter.get("L1")).toBe(300);
   });
 
-  it("serializes marker-bearing inspections without blocking actions", async () => {
+  it("serializes page snapshots without blocking actions", async () => {
     let releaseFirstInspection!: () => void;
     const firstInspectionGate = new Promise<void>((resolve) => {
       releaseFirstInspection = resolve;
     });
     let inspectionCalls = 0;
-    const runtimeEvaluate = jest.fn(
-      async ({ expression }: { expression: string }) => {
-        if (expression.includes("const page =")) {
+    const runtimeEvaluate = jest.fn(async ({ expression }: { expression: string }) => {
+        if (expression.includes("const stack = [document]")) {
           inspectionCalls++;
           if (inspectionCalls === 1) await firstInspectionGate;
-          return {
-            result: {
-              value: {
-                url: "https://example.com/",
-                title: "Example",
-                scrollY: 0,
-                scrollHeight: 100,
-                viewportHeight: 100,
-                elementCount: 0,
-              },
-            },
-          };
+          return preflightResult();
         }
         return { result: { value: undefined } };
-      }
-    );
+      });
     const conn = createMockCDPConnection({
       DOM: {
-        getDocument: jest.fn().mockResolvedValue({
-          root: {
-            nodeId: 1,
-            backendNodeId: 1,
-            nodeType: 9,
-            nodeName: "#document",
-            localName: "",
-            nodeValue: "",
-            children: [],
-          },
-        }),
         resolveNode: jest.fn().mockResolvedValue({
           object: { objectId: "button-1" },
         }),
@@ -194,7 +195,7 @@ describe("search node-map preservation", () => {
     const page = new SurfingPage(conn);
     setNodeMap(page, [["B1", 1]]);
 
-    const state = page.getState({ includeHidden: true });
+    const state = page.readPage({ includeHidden: true });
     while (inspectionCalls === 0) await Promise.resolve();
     const search = page.search("example");
     await Promise.resolve();
@@ -312,6 +313,64 @@ describe("SurfingPage read-only enforcement", () => {
 });
 
 describe("SurfingPage runtime validation", () => {
+  it("validates and copies page-read options before capture", async () => {
+    const send = jest.fn().mockResolvedValue(snapshotData());
+    const page = new SurfingPage(createMockCDPConnection({
+      client: { close: jest.fn(), send } as unknown as CDPConnection["client"],
+    }));
+
+    await expect(
+      page.readPage({ maxTokens: 0 })
+    ).rejects.toBeInstanceOf(ValidationError);
+    await expect(
+      page.readPage({ viewport: "yes" as unknown as boolean })
+    ).rejects.toBeInstanceOf(ValidationError);
+    await expect(
+      page.readPage({ mode: "verbose" as "full" })
+    ).rejects.toBeInstanceOf(ValidationError);
+    expect(send).not.toHaveBeenCalled();
+
+    const options = { viewport: false };
+    const reading = page.readPage(options);
+    options.viewport = true;
+    const state = await reading;
+    expect(state.content).not.toContain("scroll:");
+  });
+
+  it("does not expose the internal action ID map", async () => {
+    const resolveNode = jest.fn().mockResolvedValue({
+      object: { objectId: "button-4" },
+    });
+    const page = new SurfingPage(createMockCDPConnection({
+      DOM: { resolveNode } as unknown as CDPConnection["DOM"],
+      Runtime: {
+        evaluate: jest.fn(async ({ expression }: { expression: string }) =>
+          expression.includes("const stack = [document]")
+            ? preflightResult()
+            : { result: { value: undefined } }
+        ),
+        callFunctionOn: jest.fn().mockResolvedValue({ result: { value: true } }),
+        releaseObject: jest.fn().mockResolvedValue(undefined),
+      } as unknown as CDPConnection["Runtime"],
+    }));
+
+    const state = await page.readPage({ includeHidden: true });
+    expect(state.nodeMap.get("B1")).toBe(4);
+    state.nodeMap.clear();
+
+    await page.click("B1");
+    expect(resolveNode).toHaveBeenCalledWith({ backendNodeId: 4 });
+  });
+
+  it("keeps getState as a compatibility alias for readPage", async () => {
+    const page = new SurfingPage(createMockCDPConnection());
+    const preferred = await page.readPage({ includeHidden: true });
+    const compatibility = await page.getState({ includeHidden: true });
+
+    expect(compatibility.content).toBe(preferred.content);
+    expect(compatibility.nodeMap).not.toBe(preferred.nodeMap);
+  });
+
   it("rejects invalid scroll directions from direct JavaScript callers", async () => {
     const evaluate = jest.fn();
     const page = new SurfingPage(
@@ -332,6 +391,15 @@ describe("SurfingPage runtime validation", () => {
     );
     await expect(
       TideSurf.launch({ defaultViewport: { width: 1280, height: -1 } })
+    ).rejects.toBeInstanceOf(ValidationError);
+    await expect(TideSurf.launch({ chromePath: "" })).rejects.toBeInstanceOf(
+      ValidationError
+    );
+    await expect(TideSurf.launch({ userDataDir: "" })).rejects.toBeInstanceOf(
+      ValidationError
+    );
+    await expect(
+      TideSurf.launch({ channel: "nightly" as "stable" })
     ).rejects.toBeInstanceOf(ValidationError);
 
     const evaluate = jest.fn();
@@ -381,6 +449,21 @@ describe("SurfingPage runtime validation", () => {
     setNodeMap(page, [["L1", 100]]);
 
     await expect(page.download("L1")).rejects.toBeInstanceOf(ValidationError);
+    expect(conn.DOM.resolveNode).not.toHaveBeenCalled();
+  });
+
+  it("rejects empty screenshot IDs and download directories", async () => {
+    const conn = createMockCDPConnection();
+    const page = new SurfingPage(conn);
+    setNodeMap(page, [["L1", 100]]);
+
+    await expect(page.screenshot({ elementId: "" })).rejects.toBeInstanceOf(
+      ValidationError
+    );
+    await expect(
+      page.download("L1", { downloadDir: "" })
+    ).rejects.toBeInstanceOf(ValidationError);
+    expect(conn.DOM.getBoxModel).not.toHaveBeenCalled();
     expect(conn.DOM.resolveNode).not.toHaveBeenCalled();
   });
 });

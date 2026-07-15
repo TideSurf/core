@@ -6,7 +6,7 @@ import { createServer, type Server } from "node:http";
 import { TideSurf } from "../../src/index.js";
 import { getTideSurfConnectionInfo } from "../../src/tidesurf.js";
 import { ElementNotFoundError } from "../../src/errors.js";
-import { canLaunchBrowser } from "../support/browser.js";
+import { canResolveBrowser } from "../support/browser.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixturesDir = join(__dirname, "..", "fixtures");
@@ -15,7 +15,7 @@ let surfing: TideSurf;
 let fixtureUrls: Record<string, string> = {};
 let fixtureServer: Server | null = null;
 
-const browserAvailable = await canLaunchBrowser();
+const browserAvailable = canResolveBrowser();
 const describeBrowser = browserAvailable ? describe : describe.skip;
 
 if (!browserAvailable) {
@@ -79,7 +79,7 @@ describeBrowser("Browser integration", () => {
 
   it("navigates and gets page state", async () => {
     await surfing.navigate(fixtureUrls["basic.html"]);
-    const state = await surfing.getState();
+    const state = await surfing.readPage();
 
     expect(state.url).toContain("basic.html");
     expect(state.title).toBe("Test Page");
@@ -98,13 +98,13 @@ describeBrowser("Browser integration", () => {
 
   it("uses includeHidden as a full-DOM debugging override", async () => {
     await surfing.navigate(fixtureUrls["basic.html"]);
-    const normal = await surfing.getState({ viewport: false });
+    const normal = await surfing.readPage({ viewport: false });
     expect(normal.content).not.toContain("Hidden content");
     expect(normal.content).not.toContain("Computed hidden");
     expect(normal.content).not.toContain("Inline hidden");
     expect(normal.content).not.toContain("HTML hidden");
 
-    const debugging = await surfing.getState({ includeHidden: true });
+    const debugging = await surfing.readPage({ includeHidden: true });
     expect(debugging.content).toContain("Hidden content");
     expect(debugging.content).toContain("Computed hidden");
     expect(debugging.content).toContain("Inline hidden");
@@ -113,7 +113,7 @@ describeBrowser("Browser integration", () => {
 
   it("clicks a button", async () => {
     await surfing.navigate(fixtureUrls["interactive.html"]);
-    const state = await surfing.getState();
+    const state = await surfing.readPage();
 
     expect(state.content).toContain("[B1]");
 
@@ -131,7 +131,7 @@ describeBrowser("Browser integration", () => {
     const page = surfing.getPage();
     await page.evaluate(`document.body.innerHTML =
       '<a href="${fixtureUrls["interactive.html"]}">Next page</a>'`);
-    await surfing.getState();
+    await surfing.readPage();
 
     await expect(page.click("L1")).resolves.toBeUndefined();
     await page.waitForStable(5_000);
@@ -141,7 +141,7 @@ describeBrowser("Browser integration", () => {
 
   it("types into an input", async () => {
     await surfing.navigate(fixtureUrls["interactive.html"]);
-    await surfing.getState();
+    await surfing.readPage();
 
     const page = surfing.getPage();
     await page.type("I1", "hello world");
@@ -154,7 +154,7 @@ describeBrowser("Browser integration", () => {
 
   it("selects a dropdown option", async () => {
     await surfing.navigate(fixtureUrls["interactive.html"]);
-    await surfing.getState();
+    await surfing.readPage();
 
     const page = surfing.getPage();
     await page.select("S1", "blue");
@@ -179,9 +179,129 @@ describeBrowser("Browser integration", () => {
     expect(result.data as string).toContain("# ");
   }, 15000);
 
+  it("does not expose live password values", async () => {
+    await surfing.navigate(fixtureUrls["basic.html"]);
+    const page = surfing.getPage();
+    await page.evaluate(`(() => {
+      document.body.innerHTML = '<input id="password" type="password">';
+      document.getElementById('password').value = 'snapshot-secret';
+    })()`);
+
+    const state = await surfing.readPage({ viewport: false });
+
+    expect(state.content).toMatch(/I\d+:password/);
+    expect(state.content).not.toContain("snapshot-secret");
+  }, 15000);
+
+  it("rejects oversized live form values before snapshot capture", async () => {
+    await surfing.navigate(fixtureUrls["basic.html"]);
+    await surfing.getPage().evaluate(`(() => {
+      document.body.innerHTML = '<input id="large">';
+      document.getElementById('large').value = 'x'.repeat(16000001);
+    })()`);
+
+    await expect(
+      surfing.readPage({ viewport: false })
+    ).rejects.toThrow("exceed 16,000,000 characters");
+  }, 15000);
+
+  it("inherits disabled fieldsets except through the first legend", async () => {
+    await surfing.navigate(fixtureUrls["basic.html"]);
+    await surfing.getPage().evaluate(`document.body.innerHTML = \`
+      <fieldset disabled>
+        <legend><button>FIRST LEGEND ENABLED</button></legend>
+        <button>FIELDSET DISABLED BUTTON</button>
+        <legend><button>SECOND LEGEND DISABLED</button></legend>
+        <input value="">
+        <select><option value="a">A</option><option value="b">B</option></select>
+      </fieldset>
+      <input id="outside" value="">
+      <div inert><button>INERT ACTION BUTTON</button></div>
+      <button style="pointer-events: none">POINTER BLOCKED BUTTON</button>
+      <button aria-disabled="TRUE">ARIA DISABLED BUTTON</button>
+      <div aria-disabled="true"><button>NESTED ARIA DISABLED BUTTON</button></div>
+    \``);
+    await surfing.getPage().evaluate(`(() => {
+      window.actionClicks = 0;
+      for (const button of document.querySelectorAll('button')) {
+        button.addEventListener('click', () => window.actionClicks++);
+      }
+    })()`);
+
+    const state = await surfing.readPage({ viewport: false });
+
+    expect(state.content).toMatch(/\[B\d+\] FIRST LEGEND ENABLED/);
+    expect(state.content).not.toMatch(/~~\[B\d+\] FIRST LEGEND ENABLED~~/);
+    expect(state.content).toMatch(/~~\[B\d+\] FIELDSET DISABLED BUTTON~~/);
+    expect(state.content).toMatch(/~~\[B\d+\] SECOND LEGEND DISABLED~~/);
+    expect(state.content).toMatch(/~~\[B\d+\] NESTED ARIA DISABLED BUTTON~~/);
+    await surfing.getPage().evaluate("document.getElementById('outside').focus()");
+    await expect(surfing.getPage().type("I1", "wrong target")).rejects.toThrow(
+      "disabled or read-only"
+    );
+    await expect(surfing.getPage().select("S1", "b")).rejects.toThrow(
+      "Target is disabled or inert"
+    );
+    const actionId = (label: string): string => {
+      const id = state.content.match(new RegExp(`\\[([A-Z]\\d+)\\][^\\n]*${label}`))?.[1];
+      if (!id) throw new Error(`Missing action ID for ${label}`);
+      return id;
+    };
+    for (const label of [
+      "FIELDSET DISABLED BUTTON",
+      "INERT ACTION BUTTON",
+      "POINTER BLOCKED BUTTON",
+      "ARIA DISABLED BUTTON",
+      "NESTED ARIA DISABLED BUTTON",
+    ]) {
+      await expect(surfing.getPage().click(actionId(label))).rejects.toThrow(
+        "disabled or inert"
+      );
+    }
+    expect(await surfing.getPage().evaluate(`({
+      outside: document.getElementById('outside').value,
+      selected: document.querySelector('select').value,
+      clicks: window.actionClicks
+    })`)).toEqual({ outside: "", selected: "a", clicks: 0 });
+  }, 15000);
+
+  it("types into the resolved input when focus moves in a microtask", async () => {
+    await surfing.navigate(fixtureUrls["basic.html"]);
+    await surfing.getPage().evaluate(`(() => {
+      document.body.innerHTML = '<input id="target"><input id="other">';
+      const target = document.getElementById('target');
+      const other = document.getElementById('other');
+      target.addEventListener('focus', () => queueMicrotask(() => other.focus()));
+    })()`);
+    await surfing.readPage({ viewport: false });
+
+    await surfing.getPage().type("I1", "resolved");
+
+    expect(await surfing.getPage().evaluate(`({
+      target: document.getElementById('target').value,
+      other: document.getElementById('other').value
+    })`)).toEqual({ target: "resolved", other: "" });
+  }, 15000);
+
+  it("types into an input focused inside shadow DOM", async () => {
+    await surfing.navigate(fixtureUrls["basic.html"]);
+    await surfing.getPage().evaluate(`(() => {
+      document.body.innerHTML = '<div id="host"></div>';
+      const root = document.getElementById('host').attachShadow({ mode: 'open' });
+      root.innerHTML = '<input value="">';
+    })()`);
+    await surfing.readPage({ viewport: false });
+
+    await surfing.getPage().type("I1", "shadow text");
+
+    expect(await surfing.getPage().evaluate(
+      "document.getElementById('host').shadowRoot.querySelector('input').value"
+    )).toBe("shadow text");
+  }, 15000);
+
   it("search returns nearest interactive element IDs", async () => {
     await surfing.navigate(fixtureUrls["interactive.html"]);
-    await surfing.getState();
+    await surfing.readPage();
 
     const results = await surfing.getPage().search("Action");
 
@@ -194,15 +314,15 @@ describeBrowser("Browser integration", () => {
 
   it("viewport mode keeps visible shadow and iframe content", async () => {
     await surfing.navigate(fixtureUrls["shadow.html"]);
-    const shadowState = await surfing.getState({ viewport: true });
+    const shadowState = await surfing.readPage({ viewport: true });
     expect(shadowState.content).toContain("Shadow Button");
 
     await surfing.navigate(fixtureUrls["iframe-parent.html"]);
-    const iframeState = await surfing.getState({ viewport: true });
+    const iframeState = await surfing.readPage({ viewport: true });
     expect(iframeState.content).toContain("Child Link");
   }, 15000);
 
-  it("handles nested visibility, clipped frames, and transient markers", async () => {
+  it("handles nested visibility and clipped frames without mutating attributes", async () => {
     await surfing.navigate(fixtureUrls["visibility.html"]);
     const staleMarker = "data-tidesurf-0123456789abcdef0123456789abcdef-visible";
     await surfing.getPage().evaluate(`(() => {
@@ -213,10 +333,10 @@ describeBrowser("Browser integration", () => {
       document.head.append(style);
     })()`);
 
-    const first = await surfing.getState();
-    const second = await surfing.getState();
+    const first = await surfing.readPage();
+    const second = await surfing.readPage();
     expect(first.content).toContain("VISIBLE CHILD");
-    expect(first.content).toContain("SITE MARKER");
+    expect(first.content).not.toContain("SITE MARKER");
     expect(second.content).toContain("VISIBLE CHILD");
     expect(second.content).not.toMatch(/\[B\d+\] CLIPPED FRAME CHILD/);
     expect(second.content).not.toMatch(/\[B\d+\] OFFSCREEN FRAME CHILD/);
@@ -236,12 +356,14 @@ describeBrowser("Browser integration", () => {
       "data-os-visible": "site-value",
       "data-os-hidden": "site-hidden",
       "data-os-state": "site-state",
-      stale: null,
-      parserMarkers: [],
+      stale: "1",
+      parserMarkers: [staleMarker],
     });
 
-    const fullPage = await surfing.getState({ viewport: false });
+    const fullPage = await surfing.readPage({ viewport: false });
     expect(fullPage.content).toContain("OFFSCREEN FRAME CHILD");
+    const debug = await surfing.readPage({ includeHidden: true });
+    expect(debug.content).toContain("SITE MARKER");
   }, 15000);
 
   it("keeps collapsed viewport text scoped to its computed wrapper", async () => {
@@ -260,6 +382,14 @@ describeBrowser("Browser integration", () => {
           <div style="display: none; display: block">OVERRIDDEN DISPLAY VISIBLE</div>
           <div style="visibility: hidden; visibility: visible">OVERRIDDEN VISIBILITY VISIBLE</div>
           <div style="--display: none">CUSTOM PROPERTY VISIBLE</div>
+          <button style="clip: rect(0 0 0 0)">STATIC LEGACY CLIP VISIBLE</button>
+          <div style="position: absolute; top: 440px; left: 0; width: 100px; height: 40px; contain: paint">
+            <button style="position: absolute; left: 200px">PAINT CONTAINED BUTTON</button>
+          </div>
+          <div style="position: absolute; top: 500px; left: 0; width: 100px; height: 40px; clip-path: ellipse(50% 25%)">
+            <button style="position: absolute; left: 200px">ELLIPSE CLIPPED BUTTON</button>
+          </div>
+          <button style="position: absolute; top: 560px; clip: rect(0 0 0 0)">LEGACY CLIPPED BUTTON</button>
           <div style="height: 100px; overflow: hidden">
             <button style="margin-top: 300px">OVERFLOW CLIPPED BUTTON</button>
           </div>
@@ -275,6 +405,9 @@ describeBrowser("Browser integration", () => {
           <div style="position: absolute; top: 200px; left: 180px; width: 100px; height: 100px; clip-path: circle(30px at 30px 30px)">
             <button style="position: absolute; top: 20px; left: 45px">PARTIAL CIRCLE BUTTON</button>
           </div>
+          <div style="position: absolute; top: 350px; left: 0; width: 200px; height: 40px; clip-path: circle(50% at 50% 50%)">
+            <button style="position: absolute; top: 10px; left: 155px; width: 25px; height: 20px">WIDE PERCENT CIRCLE BUTTON</button>
+          </div>
           <div style="margin-top: 5000px">OFFSCREEN COLLAPSED SENTINEL</div>
         </main>
       \`;
@@ -286,7 +419,7 @@ describeBrowser("Browser integration", () => {
       window.scrollTo(0, 0);
     })()`);
 
-    const viewport = await surfing.getState();
+    const viewport = await surfing.readPage();
     expect(viewport.content).toContain("COLLAPSED ONSCREEN");
     expect(viewport.content).toContain("DISPLAY CONTENTS ONSCREEN");
     expect(viewport.content).toContain("DIRECT TEXT ONSCREEN");
@@ -294,16 +427,21 @@ describeBrowser("Browser integration", () => {
     expect(viewport.content).toContain("OVERRIDDEN DISPLAY VISIBLE");
     expect(viewport.content).toContain("OVERRIDDEN VISIBILITY VISIBLE");
     expect(viewport.content).toContain("CUSTOM PROPERTY VISIBLE");
+    expect(viewport.content).toContain("STATIC LEGACY CLIP VISIBLE");
+    expect(viewport.content).not.toContain("PAINT CONTAINED BUTTON");
+    expect(viewport.content).not.toContain("ELLIPSE CLIPPED BUTTON");
+    expect(viewport.content).not.toContain("LEGACY CLIPPED BUTTON");
     expect(viewport.content).not.toContain("OVERFLOW CLIPPED BUTTON");
     expect(viewport.content).not.toContain("X AXIS CLIPPED BUTTON");
     expect(viewport.content).not.toContain("CLIP PATH CLIPPED BUTTON");
     expect(viewport.content).not.toContain("CIRCLE CLIPPED BUTTON");
     expect(viewport.content).toContain("PARTIAL CIRCLE BUTTON");
+    expect(viewport.content).toContain("WIDE PERCENT CIRCLE BUTTON");
     expect(viewport.content).not.toContain("DIRECT TEXT OFFSCREEN");
     expect(viewport.content).not.toContain("SHADOW DIRECT OFFSCREEN");
     expect(viewport.content).not.toContain("OFFSCREEN COLLAPSED SENTINEL");
 
-    const fullPage = await surfing.getState({ viewport: false });
+    const fullPage = await surfing.readPage({ viewport: false });
     expect(fullPage.content).toContain("OVERFLOW CLIPPED BUTTON");
     expect(fullPage.content).toContain("X AXIS CLIPPED BUTTON");
     expect(fullPage.content).toContain("CLIP PATH CLIPPED BUTTON");
@@ -313,7 +451,7 @@ describeBrowser("Browser integration", () => {
     expect(fullPage.content).toContain("OFFSCREEN COLLAPSED SENTINEL");
   }, 15000);
 
-  it("reuses ancestor clip geometry and skips hidden subtree styles", async () => {
+  it("filters large clipped and hidden subtrees from viewport state", async () => {
     await surfing.navigate(fixtureUrls["basic.html"]);
     await surfing.getPage().evaluate(`(() => {
       document.body.innerHTML = '';
@@ -326,57 +464,22 @@ describeBrowser("Browser integration", () => {
         button.textContent = 'VISIBLE ACTION ' + index;
         clipped.append(button);
       }
-      const nativeBounds = clipped.getBoundingClientRect.bind(clipped);
-      globalThis.__clipBoundsCalls = 0;
-      clipped.getBoundingClientRect = () => {
-        globalThis.__clipBoundsCalls++;
-        return nativeBounds();
-      };
-
       const hidden = document.createElement('section');
       hidden.style.display = 'none';
       for (let index = 0; index < 200; index++) {
         const button = document.createElement('button');
-        button.className = 'hidden-style-probe';
         button.textContent = 'HIDDEN ACTION ' + index;
         hidden.append(button);
       }
-
-      const nativeComputedStyle = window.getComputedStyle.bind(window);
-      globalThis.__hiddenStyleCalls = 0;
-      globalThis.__nativeComputedStyle = window.getComputedStyle;
-      window.getComputedStyle = (element, pseudo) => {
-        if (element.classList && element.classList.contains('hidden-style-probe')) {
-          globalThis.__hiddenStyleCalls++;
-        }
-        return nativeComputedStyle(element, pseudo);
-      };
-
       document.body.append(clipped, hidden);
     })()`);
 
-    let state: Awaited<ReturnType<typeof surfing.getState>> | undefined;
-    let metrics!: { clipBoundsCalls: number; hiddenStyleCalls: number };
-    try {
-      state = await surfing.getState();
-    } finally {
-      metrics = await surfing.getPage().evaluate(`(() => {
-        window.getComputedStyle = globalThis.__nativeComputedStyle;
-        const result = {
-          clipBoundsCalls: globalThis.__clipBoundsCalls,
-          hiddenStyleCalls: globalThis.__hiddenStyleCalls
-        };
-        delete globalThis.__clipBoundsCalls;
-        delete globalThis.__hiddenStyleCalls;
-        delete globalThis.__nativeComputedStyle;
-        return result;
-      })()`) as { clipBoundsCalls: number; hiddenStyleCalls: number };
-    }
+    const state = await surfing.readPage();
 
-    expect(state!.content).toContain("VISIBLE ACTION 0");
-    expect(state!.content).not.toContain("HIDDEN ACTION");
-    expect(metrics.clipBoundsCalls).toBeLessThanOrEqual(3);
-    expect(metrics.hiddenStyleCalls).toBe(0);
+    expect(state.content).toContain("VISIBLE ACTION 0");
+    expect(state.content).toContain("VISIBLE ACTION 10");
+    expect(state.content).not.toContain("VISIBLE ACTION 100");
+    expect(state.content).not.toContain("HIDDEN ACTION");
   }, 15000);
 
   it("closing the initial active tab keeps the session usable", async () => {
@@ -389,7 +492,7 @@ describeBrowser("Browser integration", () => {
     expect(remainingTabs.length).toBeGreaterThan(0);
 
     await surfing.navigate(fixtureUrls["basic.html"]);
-    const state = await surfing.getState();
+    const state = await surfing.readPage();
     expect(state.title).toBe("Test Page");
   }, 15000);
 
@@ -422,7 +525,7 @@ describeBrowser("Browser integration", () => {
 
   it("filters nodeMap entries down to the IDs actually present in the response", async () => {
     await surfing.navigate(fixtureUrls["interactive.html"]);
-    const state = await surfing.getState({ mode: "minimal" });
+    const state = await surfing.readPage({ mode: "minimal" });
 
     expect(state.content).not.toContain("B1");
     expect(state.nodeMap.has("B1")).toBe(false);
@@ -458,7 +561,7 @@ describeBrowser("Browser integration", () => {
 
   it("uploads files to file inputs", async () => {
     await surfing.navigate(fixtureUrls["advanced-tools.html"]);
-    await surfing.getState();
+    await surfing.readPage();
 
     const tempDir = await mkdtemp(join(tmpdir(), "tidesurf-upload-"));
     const uploadPath = join(tempDir, "manifest.txt");
@@ -467,12 +570,20 @@ describeBrowser("Browser integration", () => {
       await writeFile(uploadPath, "manifest");
 
       const page = surfing.getPage();
+      await page.evaluate(`(() => {
+        const input = document.querySelector('input[type="file"]');
+        window.__uploadEvents = [];
+        input.addEventListener('input', () => window.__uploadEvents.push('input'));
+        input.addEventListener('change', () => window.__uploadEvents.push('change'));
+      })()`);
       await page.upload("I1", [uploadPath]);
 
-      const uploadedName = await page.evaluate(
-        "document.getElementById('file-output').textContent"
-      );
+      const { uploadedName, events } = await page.evaluate(`({
+        uploadedName: document.getElementById('file-output').textContent,
+        events: window.__uploadEvents,
+      })`) as { uploadedName: string; events: string[] };
       expect(uploadedName).toBe(basename(uploadPath));
+      expect(events).toEqual(["input", "change"]);
     } finally {
       await rm(tempDir, { recursive: true, force: true });
     }
@@ -480,7 +591,7 @@ describeBrowser("Browser integration", () => {
 
   it("downloads files to the requested directory", async () => {
     await surfing.navigate(fixtureUrls["advanced-tools.html"]);
-    await surfing.getState();
+    await surfing.readPage();
 
     const downloadDir = await mkdtemp(join(tmpdir(), "tidesurf-download-"));
 
@@ -508,7 +619,7 @@ describeBrowser("Browser integration", () => {
 
     try {
       await restricted.navigate(fixtureUrls["advanced-tools.html"]);
-      await restricted.getState();
+      await restricted.readPage();
       const result = await restricted.getPage().download("L1", {
         timeout: 15000,
       });
@@ -570,11 +681,11 @@ describeBrowser("Browser integration", () => {
       allowLocalhost: true,
     });
 
-    expect((await attached.getState()).title).toBe("Test Page");
+    expect((await attached.readPage()).title).toBe("Test Page");
     await attached.close();
 
     expect(await surfing.listTabs()).not.toHaveLength(0);
-    expect((await surfing.getState()).title).toBe("Test Page");
+    expect((await surfing.readPage()).title).toBe("Test Page");
   }, 20000);
 
   it("rejects an explicit managed port collision", async () => {

@@ -31,7 +31,7 @@ function setup(
   registerMcpTools({
     server,
     coordinator: {
-      executor: async () => execute,
+      execute: (name, input) => execute({ name, input }),
       launchBrowser: async ({ headless }) => ({
         alreadyRunning: false,
         headless: headless ?? true,

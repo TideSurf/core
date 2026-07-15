@@ -14,9 +14,9 @@ import {
 import type { SessionState } from "./cli/session.js";
 import type { McpServerLike } from "./mcp/adapter.js";
 import {
+  formatToolData,
   getToolDefinitions,
   getToolSpec,
-  getToolSpecByCommand,
   getToolSpecs,
   readOnlyToolMessage,
   unknownToolMessage,
@@ -28,6 +28,9 @@ import { VERSION } from "./version.js";
 
 const DAEMON_STARTUP_TIMEOUT = 10_000;
 const SESSION_STATUS_TIMEOUT = 500;
+const DEFAULT_OPERATION_TIMEOUT = 10_000;
+const MAX_SEQUENTIAL_OPERATION_PHASES = 8;
+const REQUEST_TIMEOUT_MARGIN = 15_000;
 
 let sessionModule: Promise<typeof import("./cli/session.js")> | undefined;
 
@@ -47,12 +50,6 @@ function message(error: unknown): string {
 
 function writeLine(value: string, stream: NodeJS.WriteStream = process.stdout): void {
   stream.write(`${value}\n`);
-}
-
-function pretty(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (value === undefined) return "OK";
-  return JSON.stringify(value, null, 2) ?? String(value);
 }
 
 function errorExitCode(error: unknown): number {
@@ -84,10 +81,12 @@ function requestTimeout(
   input?: Record<string, unknown>
 ): number {
   const toolTimeout = typeof input?.["timeout"] === "number" ? input["timeout"] : 0;
+  const operationTimeout = invocation.sessionConfig.timeout ?? DEFAULT_OPERATION_TIMEOUT;
   return Math.max(
     60_000,
-    (invocation.sessionConfig.timeout ?? 0) + 15_000,
-    toolTimeout + 15_000
+    operationTimeout * MAX_SEQUENTIAL_OPERATION_PHASES +
+      toolTimeout +
+      REQUEST_TIMEOUT_MARGIN
   );
 }
 
@@ -111,12 +110,23 @@ function preflightToolInput(
 async function sessionPolicy(
   invocation: ParsedInvocation
 ): Promise<SessionState["config"]> {
-  const { getSessionPaths, isProcessRunning, readSessionState } =
+  const {
+    ensureSessionRequest,
+    getSessionPaths,
+    isProcessRunning,
+    readSessionState,
+  } =
     await loadSessionModule();
   const candidate = readSessionState(getSessionPaths(invocation.session));
-  return candidate?.ready && isProcessRunning(candidate.pid)
-    ? candidate.config
-    : invocation.sessionConfig;
+  if (!candidate?.ready || !isProcessRunning(candidate.pid)) {
+    return invocation.sessionConfig;
+  }
+  const { state } = await ensureSessionRequest(
+    sessionOptions(invocation),
+    { method: "status" },
+    SESSION_STATUS_TIMEOUT
+  );
+  return state.config;
 }
 
 function readOnlyFailure(
@@ -182,22 +192,26 @@ function printToolResult(result: ToolResult, json: boolean): number {
       result.success ? process.stdout : process.stderr
     );
   } else if (result.success) {
-    writeLine(pretty(result.data));
+    writeLine(formatToolData(result.data));
   } else {
     writeLine(result.error ?? "Tool failed", process.stderr);
   }
   return result.success ? CLI_EXIT_CODES.success.code : CLI_EXIT_CODES.tool.code;
 }
 
-async function runTool(invocation: ParsedInvocation): Promise<number> {
-  const tool = invocation.tool!;
-  if (tool.outputKind === "image" && invocation.screenshotOutput === "-" && invocation.json) {
+async function executeToolCommand(
+  invocation: ParsedInvocation,
+  tool: ToolSpec,
+  readInput: () => Record<string, unknown> | Promise<Record<string, unknown>>,
+  screenshotOutput?: string
+): Promise<number> {
+  if (tool.outputKind === "image" && screenshotOutput === "-" && invocation.json) {
     throw new CliUsageError("--output - cannot be combined with --json");
   }
   const policy = await sessionPolicy(invocation);
   const denied = readOnlyFailure(policy, tool);
   if (denied) return printToolResult(denied, invocation.json);
-  const input = buildToolInput(invocation);
+  const input = await readInput();
   preflightToolInput(tool, input, policy);
   const { ensureSessionRequest, toToolResult } = await loadSessionModule();
   const { data: response } = await ensureSessionRequest<ToolResult>(
@@ -209,14 +223,23 @@ async function runTool(invocation: ParsedInvocation): Promise<number> {
   if (tool.outputKind === "image") {
     result = await outputScreenshot(
       result,
-      invocation.screenshotOutput,
+      screenshotOutput,
       invocation.json
     );
   }
-  if (tool.outputKind === "image" && invocation.screenshotOutput === "-" && result.success) {
+  if (tool.outputKind === "image" && screenshotOutput === "-" && result.success) {
     return 0;
   }
   return printToolResult(result, invocation.json);
+}
+
+async function runTool(invocation: ParsedInvocation): Promise<number> {
+  return executeToolCommand(
+    invocation,
+    invocation.tool!,
+    () => buildToolInput(invocation),
+    invocation.screenshotOutput
+  );
 }
 
 async function readCallInput(value: string | undefined): Promise<Record<string, unknown>> {
@@ -242,26 +265,18 @@ async function callTool(invocation: ParsedInvocation): Promise<number> {
   if (invocation.positionals.length > 1) {
     throw new CliUsageError(`Unexpected argument: ${invocation.positionals[1]}`);
   }
-  const spec = getToolSpecByCommand(name);
+  const spec = getToolSpec(name);
   if (!spec) {
     throw new CliUsageError(unknownToolMessage(name));
   }
-  const policy = await sessionPolicy(invocation);
-  const denied = readOnlyFailure(policy, spec);
-  if (denied) return printToolResult(denied, invocation.json);
-  const input = normalizeCliPaths(spec, await readCallInput(invocation.callInput));
-  preflightToolInput(spec, input, policy);
-  const { ensureSessionRequest, toToolResult } = await loadSessionModule();
-  const { data } = await ensureSessionRequest<ToolResult>(
-    sessionOptions(invocation),
-    { method: "tool", name: spec.name, input },
-    requestTimeout(invocation, input)
+  return executeToolCommand(
+    invocation,
+    spec,
+    async () => normalizeCliPaths(
+      spec,
+      await readCallInput(invocation.callInput)
+    )
   );
-  const result = toToolResult(data);
-  const output = spec.outputKind === "image"
-    ? await outputScreenshot(result, undefined, invocation.json)
-    : result;
-  return printToolResult(output, invocation.json);
 }
 
 async function startSession(invocation: ParsedInvocation): Promise<number> {
@@ -272,7 +287,7 @@ async function startSession(invocation: ParsedInvocation): Promise<number> {
     { method: "start" },
     requestTimeout(invocation)
   );
-  writeLine(invocation.json ? JSON.stringify({ success: true, data: status }, null, 2) : pretty(status));
+  writeLine(invocation.json ? JSON.stringify({ success: true, data: status }, null, 2) : formatToolData(status));
   return 0;
 }
 
@@ -290,16 +305,14 @@ async function statusSession(invocation: ParsedInvocation): Promise<number> {
     return 0;
   }
   const status = response.data;
-  writeLine(invocation.json ? JSON.stringify({ success: true, data: status }, null, 2) : pretty(status));
+  writeLine(invocation.json ? JSON.stringify({ success: true, data: status }, null, 2) : formatToolData(status));
   return 0;
 }
 
 async function stopSession(invocation: ParsedInvocation): Promise<number> {
   if (invocation.positionals.length) throw new CliUsageError("stop takes no arguments");
   const {
-    getSessionPaths,
     isProcessRunning,
-    removeSessionFiles,
     sendLiveSessionRequest,
   } = await loadSessionModule();
   const response = await sendLiveSessionRequest(
@@ -319,7 +332,6 @@ async function stopSession(invocation: ParsedInvocation): Promise<number> {
     if (isProcessRunning(state.pid)) {
       throw protocolError(`Session ${invocation.session} did not stop cleanly`);
     }
-    removeSessionFiles(getSessionPaths(invocation.session), true);
   }
   writeLine(invocation.json ? JSON.stringify({ success: true, data }, null, 2) : `Session ${invocation.session} stopped.`);
   return 0;
@@ -331,8 +343,7 @@ function listTools(invocation: ParsedInvocation): number {
     writeLine(JSON.stringify({ success: true, data: getToolDefinitions() }, null, 2));
   } else {
     for (const tool of getToolSpecs()) {
-      const alias = tool.cli.aliases.length ? ` (${tool.cli.aliases.join(", ")})` : "";
-      writeLine(`${tool.cli.command}${alias}\t${tool.description}`);
+      writeLine(`${tool.name}\t${tool.description}`);
     }
   }
   return 0;
@@ -361,8 +372,10 @@ async function inspect(invocation: ParsedInvocation): Promise<number> {
   try {
     const browser = await controller.getBrowser();
     await browser.navigate(url);
-    const execute = browser.getToolExecutor();
-    return printToolResult(await execute({ name: "get_state", input }), invocation.json);
+    return printToolResult(
+      await controller.execute("get_state", input),
+      invocation.json
+    );
   } finally {
     await controller.close();
   }

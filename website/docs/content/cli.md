@@ -6,7 +6,7 @@ The TideSurf CLI gives shell agents direct browser tools without an MCP client. 
 
 ```bash
 tidesurf navigate https://example.com
-tidesurf get-state
+tidesurf get_state
 tidesurf click B1
 tidesurf stop
 ```
@@ -37,11 +37,11 @@ No arguments and `--help` show global help. `--version` prints the package versi
 
 ## Direct tool commands
 
-Hyphenated commands are the primary CLI spelling. Underscore aliases match MCP names.
+Direct commands use the exact registry and MCP tool identifiers.
 
 | Command | Main arguments and options |
 |---|---|
-| `get-state` / `get_state` | `--max-tokens N`, `--viewport true\|false`, `--full-page`, `--mode full\|minimal\|interactive`, `--include-hidden` |
+| `get_state` | `--max-tokens N`, `--viewport true\|false`, `--full-page`, `--mode full\|minimal\|interactive`, `--include-hidden` |
 | `navigate <url>` | Open a URL and return page state |
 | `click <id>` | Click an ID and return page state |
 | `type <id> <text>` | `--clear` replaces existing input |
@@ -49,15 +49,15 @@ Hyphenated commands are the primary CLI spelling. Underscore aliases match MCP n
 | `scroll <up\|down>` | `--amount N` sets pixels |
 | `extract <selector>` | Extract matching text |
 | `evaluate <expression>` | Run arbitrary page JavaScript |
-| `list-tabs` / `list_tabs` | List tab IDs, URLs, and titles |
-| `new-tab [url]` / `new_tab` | Open and activate a tab |
-| `switch-tab <tab-id>` / `switch_tab` | Activate a tab and return its state |
-| `close-tab <tab-id>` / `close_tab` | Close a tab and list remaining tabs |
+| `list_tabs` | List tab IDs, URLs, and titles |
+| `new_tab [url]` | Open and activate a tab |
+| `switch_tab <tab-id>` | Activate a tab and return its state |
+| `close_tab <tab-id>` | Close a tab and list remaining tabs |
 | `search <query>` | `--max-results N` limits matches |
 | `screenshot` | `--element-id ID`, `--full-page`, `--output FILE\|-` |
 | `upload <id> <file>` | Set a local file on a file input |
-| `clipboard-read` / `clipboard_read` | Read clipboard text |
-| `clipboard-write <text>` / `clipboard_write` | Write clipboard text |
+| `clipboard_read` | Read clipboard text |
+| `clipboard_write <text>` | Write clipboard text |
 | `download <id>` | `--download-dir DIR`, `--timeout MS` |
 
 Shell quoting still applies. Quote selectors, JavaScript, search text, and typed text that contain spaces or shell characters.
@@ -71,7 +71,7 @@ tidesurf call get_state --input '{"mode":"interactive","maxTokens":500}'
 printf '%s' '{"url":"https://example.com"}' | tidesurf call navigate --input -
 ```
 
-The tool name may use its canonical underscore name or hyphenated CLI alias. Input must be one JSON object.
+Input must be one JSON object.
 
 ## Global options
 
@@ -164,4 +164,4 @@ tidesurf screenshot --output - > page.png
 
 ## MCP mode
 
-`tidesurf mcp` registers the same 18 tools and schemas. MCP also keeps `launch_browser` for compatibility. Screenshots become MCP image blocks, and failures set `isError`.
+`tidesurf mcp` registers the same 18 tools and schemas plus the `launch_browser` lifecycle tool. Screenshots become MCP image blocks, and failures set `isError`.

@@ -1,5 +1,6 @@
 import type { TideSurf } from "../tidesurf.js";
 import type { ToolDefinition, ToolResult } from "../types.js";
+import { ActionCommittedError } from "../errors.js";
 import {
   validateElementId,
   validateExpression,
@@ -33,8 +34,6 @@ interface ToolCliOption {
 }
 
 interface ToolCliSpec {
-  readonly command: string;
-  readonly aliases: readonly string[];
   readonly positionals: readonly ToolCliPositional[];
   readonly options: readonly ToolCliOption[];
 }
@@ -48,7 +47,7 @@ export interface ToolSpec {
   readonly cli: ToolCliSpec;
   readonly validate?: (
     input: Record<string, unknown>,
-    instance?: Pick<TideSurf, "getUrlValidationOptions">
+    instance?: Partial<Pick<TideSurf, "getUrlValidationOptions">>
   ) => void;
   readonly handler: (
     instance: TideSurf,
@@ -62,6 +61,11 @@ interface ToolInput {
 }
 
 export type ToolExecutor = (tool: ToolInput) => Promise<ToolResult>;
+
+type ToolDispatch = (
+  tool: ToolSpec,
+  input: Record<string, unknown>
+) => Promise<ToolResult>;
 
 const property = (
   type: "string" | "number" | "boolean",
@@ -101,18 +105,9 @@ const option = (
 ): ToolCliOption => ({ property: propertyName, flag, kind, description, ...metadata });
 
 const cli = (
-  name: string,
   positionals: readonly ToolCliPositional[] = [],
   options: readonly ToolCliOption[] = []
-): ToolCliSpec => {
-  const command = name.replaceAll("_", "-");
-  return {
-    command,
-    aliases: command === name ? [] : [name],
-    positionals,
-    options,
-  };
-};
+): ToolCliSpec => ({ positionals, options });
 
 function stringInput(input: Record<string, unknown>, name: string): string {
   return input[name] as string;
@@ -141,15 +136,12 @@ function optionalBoolean(
 
 function validateUrlInput(
   input: Record<string, unknown>,
-  instance?: Pick<TideSurf, "getUrlValidationOptions">,
+  instance?: Partial<Pick<TideSurf, "getUrlValidationOptions">>,
   optional = false
 ): void {
   const url = optionalString(input, "url");
   if (url === undefined && optional) return;
-  const options =
-    typeof instance?.getUrlValidationOptions === "function"
-      ? instance.getUrlValidationOptions()
-      : {};
+  const options = instance?.getUrlValidationOptions?.() ?? {};
   validateUrl(url ?? "", options);
 }
 
@@ -157,8 +149,19 @@ function validateId(input: Record<string, unknown>): void {
   validateElementId(stringInput(input, "id"));
 }
 
-function validateExpressionInput(input: Record<string, unknown>): void {
-  validateExpression(stringInput(input, "expression"));
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function pageAfterAction(
+  instance: TideSurf,
+  confirmation: string
+): Promise<string> {
+  try {
+    return `${confirmation} Page state:\n\n${(await instance.readPage()).content}`;
+  } catch (error) {
+    return `${confirmation} The action completed, but the updated page could not be read: ${errorMessage(error)}. Run get_state before the next action.`;
+  }
 }
 
 function deepFreeze<T>(value: T): T {
@@ -197,7 +200,7 @@ export const TOOL_REGISTRY: readonly ToolSpec[] = deepFreeze([
     }),
     readOnlyAllowed: true,
     outputKind: "text",
-    cli: cli("get_state", [], [
+    cli: cli([], [
       option("maxTokens", "--max-tokens", "number", "Token budget"),
       option("viewport", "--viewport", "boolean", "Limit output to the viewport"),
       option("mode", "--mode", "string", "Output mode", {
@@ -219,7 +222,7 @@ export const TOOL_REGISTRY: readonly ToolSpec[] = deepFreeze([
       if (maxTokens !== undefined) validatePositiveInteger(maxTokens, "maxTokens");
     },
     handler: async (instance, input) => {
-      const state = await instance.getState({
+      const state = await instance.readPage({
         maxTokens: optionalNumber(input, "maxTokens"),
         viewport: optionalBoolean(input, "viewport"),
         mode: optionalString(input, "mode") as
@@ -241,11 +244,11 @@ export const TOOL_REGISTRY: readonly ToolSpec[] = deepFreeze([
     ),
     readOnlyAllowed: false,
     outputKind: "text",
-    cli: cli("navigate", [positional("url", "URL to open")]),
+    cli: cli([positional("url", "URL to open")]),
     validate: (input, instance) => validateUrlInput(input, instance),
     handler: async (instance, input) => {
       await instance.navigate(stringInput(input, "url"));
-      return (await instance.getState()).content;
+      return pageAfterAction(instance, "Navigation completed.");
     },
   },
   {
@@ -258,13 +261,12 @@ export const TOOL_REGISTRY: readonly ToolSpec[] = deepFreeze([
     ),
     readOnlyAllowed: false,
     outputKind: "text",
-    cli: cli("click", [positional("id", "Element ID")]),
+    cli: cli([positional("id", "Element ID")]),
     validate: (input) => validateId(input),
     handler: async (instance, input) => {
       const id = stringInput(input, "id");
       await instance.getPage().click(id);
-      const state = await instance.getState();
-      return `Clicked ${id}. Page state:\n\n${state.content}`;
+      return pageAfterAction(instance, `Clicked ${id}.`);
     },
   },
   {
@@ -281,7 +283,6 @@ export const TOOL_REGISTRY: readonly ToolSpec[] = deepFreeze([
     readOnlyAllowed: false,
     outputKind: "text",
     cli: cli(
-      "type",
       [positional("id", "Input ID"), positional("text", "Text to type")],
       [option("clear", "--clear", "boolean", "Clear the field first")]
     ),
@@ -305,7 +306,7 @@ export const TOOL_REGISTRY: readonly ToolSpec[] = deepFreeze([
     ),
     readOnlyAllowed: false,
     outputKind: "text",
-    cli: cli("select", [
+    cli: cli([
       positional("id", "Select ID"),
       positional("value", "Option value"),
     ]),
@@ -329,7 +330,6 @@ export const TOOL_REGISTRY: readonly ToolSpec[] = deepFreeze([
     readOnlyAllowed: false,
     outputKind: "text",
     cli: cli(
-      "scroll",
       [positional("direction", "up or down")],
       [option("amount", "--amount", "number", "Pixels to scroll")]
     ),
@@ -340,8 +340,7 @@ export const TOOL_REGISTRY: readonly ToolSpec[] = deepFreeze([
     handler: async (instance, input) => {
       const direction = stringInput(input, "direction") as "up" | "down";
       await instance.getPage().scroll(direction, optionalNumber(input, "amount"));
-      const state = await instance.getState();
-      return `Scrolled ${direction}. Page state:\n\n${state.content}`;
+      return pageAfterAction(instance, `Scrolled ${direction}.`);
     },
   },
   {
@@ -353,7 +352,7 @@ export const TOOL_REGISTRY: readonly ToolSpec[] = deepFreeze([
     ),
     readOnlyAllowed: true,
     outputKind: "text",
-    cli: cli("extract", [positional("selector", "CSS selector")]),
+    cli: cli([positional("selector", "CSS selector")]),
     validate: (input) => validateSelector(stringInput(input, "selector")),
     handler: (instance, input) =>
       instance.getPage().extract(stringInput(input, "selector")),
@@ -367,8 +366,8 @@ export const TOOL_REGISTRY: readonly ToolSpec[] = deepFreeze([
     ),
     readOnlyAllowed: false,
     outputKind: "json",
-    cli: cli("evaluate", [positional("expression", "JavaScript expression")]),
-    validate: validateExpressionInput,
+    cli: cli([positional("expression", "JavaScript expression")]),
+    validate: (input) => validateExpression(stringInput(input, "expression")),
     handler: (instance, input) =>
       instance.getPage().evaluate(stringInput(input, "expression")),
   },
@@ -378,7 +377,7 @@ export const TOOL_REGISTRY: readonly ToolSpec[] = deepFreeze([
     inputSchema: schema({}),
     readOnlyAllowed: true,
     outputKind: "json",
-    cli: cli("list_tabs"),
+    cli: cli(),
     handler: (instance) => instance.listTabs(),
   },
   {
@@ -387,7 +386,7 @@ export const TOOL_REGISTRY: readonly ToolSpec[] = deepFreeze([
     inputSchema: schema({ url: property("string", "URL to open") }),
     readOnlyAllowed: false,
     outputKind: "json",
-    cli: cli("new_tab", [positional("url", "URL to open", false)]),
+    cli: cli([positional("url", "URL to open", false)]),
     validate: (input, instance) => validateUrlInput(input, instance, true),
     handler: (instance, input) => instance.newTab(optionalString(input, "url")),
   },
@@ -400,12 +399,11 @@ export const TOOL_REGISTRY: readonly ToolSpec[] = deepFreeze([
     ),
     readOnlyAllowed: true,
     outputKind: "text",
-    cli: cli("switch_tab", [positional("tabId", "Tab ID")]),
+    cli: cli([positional("tabId", "Tab ID")]),
     handler: async (instance, input) => {
       const tabId = stringInput(input, "tabId");
       await instance.switchTab(tabId);
-      const state = await instance.getState();
-      return `Switched to tab ${tabId}. Page state:\n\n${state.content}`;
+      return pageAfterAction(instance, `Switched to tab ${tabId}.`);
     },
   },
   {
@@ -417,12 +415,16 @@ export const TOOL_REGISTRY: readonly ToolSpec[] = deepFreeze([
     ),
     readOnlyAllowed: false,
     outputKind: "text",
-    cli: cli("close_tab", [positional("tabId", "Tab ID")]),
+    cli: cli([positional("tabId", "Tab ID")]),
     handler: async (instance, input) => {
       const tabId = stringInput(input, "tabId");
       await instance.closeTab(tabId);
-      const tabs = await instance.listTabs();
-      return `Closed tab ${tabId}. Remaining tabs:\n${JSON.stringify(tabs, null, 2)}`;
+      try {
+        const tabs = await instance.listTabs();
+        return `Closed tab ${tabId}. Remaining tabs:\n${JSON.stringify(tabs, null, 2)}`;
+      } catch (error) {
+        return `Closed tab ${tabId}. The tab list could not be refreshed: ${errorMessage(error)}. Run list_tabs before the next tab action.`;
+      }
     },
   },
   {
@@ -439,7 +441,6 @@ export const TOOL_REGISTRY: readonly ToolSpec[] = deepFreeze([
     readOnlyAllowed: true,
     outputKind: "json",
     cli: cli(
-      "search",
       [positional("query", "Search text")],
       [option("maxResults", "--max-results", "number", "Maximum results")]
     ),
@@ -467,7 +468,7 @@ export const TOOL_REGISTRY: readonly ToolSpec[] = deepFreeze([
     }),
     readOnlyAllowed: true,
     outputKind: "image",
-    cli: cli("screenshot", [], [
+    cli: cli([], [
       option("elementId", "--element-id", "string", "Element ID to capture"),
       option("fullPage", "--full-page", "boolean", "Capture the full page"),
       option("screenshotOutput", "--output", "string", "Write PNG to a file or stdout", {
@@ -500,7 +501,7 @@ export const TOOL_REGISTRY: readonly ToolSpec[] = deepFreeze([
     ),
     readOnlyAllowed: false,
     outputKind: "text",
-    cli: cli("upload", [
+    cli: cli([
       positional("id", "File input ID"),
       positional("filePath", "Local file path", true, true),
     ]),
@@ -520,7 +521,7 @@ export const TOOL_REGISTRY: readonly ToolSpec[] = deepFreeze([
     inputSchema: schema({}),
     readOnlyAllowed: false,
     outputKind: "text",
-    cli: cli("clipboard_read"),
+    cli: cli(),
     handler: (instance) => instance.getPage().clipboardRead(),
   },
   {
@@ -532,7 +533,7 @@ export const TOOL_REGISTRY: readonly ToolSpec[] = deepFreeze([
     ),
     readOnlyAllowed: false,
     outputKind: "text",
-    cli: cli("clipboard_write", [positional("text", "Text to write")]),
+    cli: cli([positional("text", "Text to write")]),
     handler: async (instance, input) => {
       await instance.getPage().clipboardWrite(stringInput(input, "text"));
       return "Clipboard updated.";
@@ -552,7 +553,6 @@ export const TOOL_REGISTRY: readonly ToolSpec[] = deepFreeze([
     readOnlyAllowed: false,
     outputKind: "json",
     cli: cli(
-      "download",
       [positional("id", "Download link or button ID")],
       [
         option(
@@ -578,22 +578,12 @@ export const TOOL_REGISTRY: readonly ToolSpec[] = deepFreeze([
         timeout: optionalNumber(input, "timeout"),
       }),
   },
-]);
+] satisfies ToolSpec[]);
 
 const TOOL_BY_NAME = new Map(TOOL_REGISTRY.map((tool) => [tool.name, tool]));
-const TOOL_BY_COMMAND = new Map<string, ToolSpec>();
-
-for (const tool of TOOL_REGISTRY) {
-  TOOL_BY_COMMAND.set(tool.cli.command, tool);
-  for (const alias of tool.cli.aliases) TOOL_BY_COMMAND.set(alias, tool);
-}
 
 export function getToolSpec(name: string): ToolSpec | undefined {
   return TOOL_BY_NAME.get(name);
-}
-
-export function getToolSpecByCommand(command: string): ToolSpec | undefined {
-  return TOOL_BY_COMMAND.get(command);
 }
 
 export function getToolSpecs(options?: {
@@ -604,15 +594,8 @@ export function getToolSpecs(options?: {
     : TOOL_REGISTRY;
 }
 
-function getToolNames(): string[] {
+export function getToolNames(): string[] {
   return TOOL_REGISTRY.map((tool) => tool.name);
-}
-
-export function getToolCommandNames(): string[] {
-  return TOOL_REGISTRY.flatMap((tool) => [
-    tool.cli.command,
-    ...tool.cli.aliases,
-  ]);
 }
 
 export function unknownToolMessage(name: string): string {
@@ -621,6 +604,12 @@ export function unknownToolMessage(name: string): string {
 
 export function readOnlyToolMessage(tool: Pick<ToolSpec, "name">): string {
   return `Tool "${tool.name}" is disabled in read-only mode`;
+}
+
+export function formatToolData(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value === undefined) return "OK";
+  return JSON.stringify(value, null, 2) ?? String(value);
 }
 
 export function getToolDefinitions(options?: {
@@ -642,7 +631,7 @@ function fieldLabel(name: string): string {
 export function validateToolInput(
   tool: ToolSpec,
   input: Record<string, unknown>,
-  instance?: Pick<TideSurf, "getUrlValidationOptions">
+  instance?: Partial<Pick<TideSurf, "getUrlValidationOptions">>
 ): void {
   const required = tool.inputSchema.required ?? [];
   for (const name of required) {
@@ -691,34 +680,48 @@ function failure(error: unknown): ToolResult {
 
 export function createToolExecutor(instance: TideSurf): ToolExecutor {
   const readOnly = instance.isReadOnly();
-  return async (request): Promise<ToolResult> => {
-    const tool = getToolSpec(request.name);
-    if (!tool) {
-      return {
-        success: false,
-        error: unknownToolMessage(request.name),
-      };
-    }
+  return (request) =>
+    dispatchTool(request, readOnly, (tool, input) =>
+      executeToolSpec(instance, tool, input)
+    );
+}
 
-    if (readOnly && !tool.readOnlyAllowed) {
-      return {
-        success: false,
-        error: readOnlyToolMessage(tool),
-      };
-    }
+export function dispatchTool(
+  request: ToolInput,
+  readOnly: boolean,
+  dispatch: ToolDispatch
+): Promise<ToolResult> {
+  const tool = getToolSpec(request.name);
+  if (!tool) {
+    return Promise.resolve({
+      success: false,
+      error: unknownToolMessage(request.name),
+    });
+  }
+  if (readOnly && !tool.readOnlyAllowed) {
+    return Promise.resolve({
+      success: false,
+      error: readOnlyToolMessage(tool),
+    });
+  }
+  return dispatch(tool, request.input);
+}
 
-    try {
-      if (
-        request.input === null ||
-        typeof request.input !== "object" ||
-        Array.isArray(request.input)
-      ) {
-        throw new Error("Tool input must be an object");
-      }
-      validateToolInput(tool, request.input, instance);
-      return { success: true, data: await tool.handler(instance, request.input) };
-    } catch (error) {
-      return failure(error);
+export async function executeToolSpec(
+  instance: TideSurf,
+  tool: ToolSpec,
+  input: Record<string, unknown>
+): Promise<ToolResult> {
+  try {
+    if (input === null || typeof input !== "object" || Array.isArray(input)) {
+      throw new Error("Tool input must be an object");
     }
-  };
+    validateToolInput(tool, input, instance);
+    return { success: true, data: await tool.handler(instance, input) };
+  } catch (error) {
+    if (error instanceof ActionCommittedError) {
+      return { success: true, data: error.message };
+    }
+    return failure(error);
+  }
 }

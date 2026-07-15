@@ -26,19 +26,23 @@ function safeStorageSet(key: string, value: string): void {
   }
 }
 
+function isTheme(value: string | null | undefined): value is Theme {
+  return value === "light" || value === "dark";
+}
+
 function initTheme(): void {
-  const saved = safeStorageGet("tidesurf-theme") as Theme | null;
-  currentTheme =
-    saved ||
-    (window.matchMedia("(prefers-color-scheme: dark)").matches
+  const saved = safeStorageGet("tidesurf-theme");
+  currentTheme = isTheme(saved)
+    ? saved
+    : window.matchMedia("(prefers-color-scheme: dark)").matches
       ? "dark"
-      : "light");
+      : "light";
   applyTheme();
 
   document.querySelectorAll<HTMLButtonElement>(".theme-btn[data-theme]").forEach((button) => {
     button.addEventListener("click", () => {
-      const theme = button.dataset.theme as Theme | undefined;
-      if (!theme) return;
+      const theme = button.dataset.theme;
+      if (!isTheme(theme)) return;
       currentTheme = theme;
       safeStorageSet("tidesurf-theme", theme);
       applyTheme();
@@ -77,50 +81,19 @@ function initCopyButtons(): void {
   });
 }
 
-function initCookieNotice(): void {
-  const notice = document.getElementById("cookie-notice");
-  const dismiss = document.getElementById("cookie-dismiss");
-  if (!notice || !dismiss) return;
-
-  if (safeStorageGet("tidesurf-cookie-dismissed") === "true") {
-    notice.hidden = true;
-    document.body.classList.remove("cookie-visible");
-    return;
-  }
-
-  notice.hidden = false;
-  document.body.classList.add("cookie-visible");
-  dismiss.addEventListener("click", () => {
-    safeStorageSet("tidesurf-cookie-dismissed", "true");
-    notice.hidden = true;
-    document.body.classList.remove("cookie-visible");
-  });
-}
-
 type RGB = [number, number, number];
 
 function parseHex(hex: string): RGB | null {
-  const h = hex.trim().replace("#", "");
-  if (h.length !== 6) return null;
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  return Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b) ? null : [r, g, b];
-}
-
-function mixColor(a: RGB, b: RGB, m: number): RGB {
-  const t = Math.max(0, Math.min(1, m));
+  const h = hex.trim().replace(/^#/, "");
+  if (!/^[\da-f]{6}$/i.test(h)) return null;
   return [
-    a[0] + (b[0] - a[0]) * t,
-    a[1] + (b[1] - a[1]) * t,
-    a[2] + (b[2] - a[2]) * t,
+    Number.parseInt(h.slice(0, 2), 16),
+    Number.parseInt(h.slice(2, 4), 16),
+    Number.parseInt(h.slice(4, 6), 16),
   ];
 }
 
-/* Ocean mosaic — a field of tiny squares whose colour ripples left→right.
-   Slow drift normally; scrolling spools the wave faster. Static (one frame)
-   under prefers-reduced-motion. Colour is read from the theme variables so it
-   follows light/dark automatically. */
+// Static fallback under reduced-motion, reduced-data, and compact viewports.
 function initWaves(): void {
   const canvas = document.querySelector<HTMLCanvasElement>(".waves-canvas");
   if (!canvas) return;
@@ -130,23 +103,27 @@ function initWaves(): void {
   const reducedData = window.matchMedia("(prefers-reduced-data: reduce)").matches;
   const compact = window.matchMedia("(max-width: 720px)").matches;
   const shouldAnimate = !prefersReducedMotion() && !reducedData && !compact;
-  const SQUARE = 32; // css px per tile
-  const GAP = 0; // flush tiles — squares read via colour diff, no gaps
-  const BASE_SPEED = 0.04; // 0.25x of the original drift
-  const MAX_BOOST = 2.25; // scaled with the slower base
+  const TILE_SIZE = 32;
+  const HORIZONTAL_FREQUENCY = 0.1067;
+  const VERTICAL_FREQUENCY = 0.0433;
+  const BASE_SPEED = 0.04;
+  const MAX_BOOST = 2.25;
+  const PALETTE_STEPS = 64;
 
   let dpr = Math.min(window.devicePixelRatio || 1, 1.5);
   let cols = 0;
   let rows = 0;
-  let fieldWidth = 0;
-  let fieldHeight = 0;
   let phase = 0;
   let boost = 0;
   let scrollProgress = 0;
   let lastScroll = window.scrollY;
   let raf = 0;
   let staticRaf = 0;
+  let resizeRaf = 0;
   let running = false;
+  let cellPhases = new Float32Array();
+  let cellJitters = new Float32Array();
+  const palette = new Array<string>(PALETTE_STEPS);
 
   let paper: RGB = [231, 235, 239];
   let paper3: RGB = [202, 210, 218];
@@ -159,47 +136,79 @@ function initWaves(): void {
     accent = parseHex(cs.getPropertyValue("--accent")) ?? accent;
   }
 
+  function paletteChannel(
+    colorIndex: 0 | 1 | 2,
+    darkChannel: number,
+    paperMix: number,
+    accentMix: number,
+    darkMix: number
+  ): number {
+    const paperChannel = paper[colorIndex] + (paper3[colorIndex] - paper[colorIndex]) * paperMix;
+    const accentChannel = paperChannel + (accent[colorIndex] - paperChannel) * accentMix;
+    return (accentChannel + (darkChannel - accentChannel) * darkMix) | 0;
+  }
+
+  function updatePalette(): void {
+    const darkMix = scrollProgress * (currentTheme === "dark" ? 0.32 : 0.22);
+    for (let index = 0; index < PALETTE_STEPS; index++) {
+      const m = index / (PALETTE_STEPS - 1);
+      const paperMix = m * 0.55 + scrollProgress * 0.32;
+      const accentMix = m * 0.08 + scrollProgress * 0.12;
+      const red = paletteChannel(0, 7, paperMix, accentMix, darkMix);
+      const green = paletteChannel(1, 8, paperMix, accentMix, darkMix);
+      const blue = paletteChannel(2, 6, paperMix, accentMix, darkMix);
+      palette[index] = `rgb(${red},${green},${blue})`;
+    }
+  }
+
+  function syncScrollProgress(force = false): void {
+    const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+    const nextProgress = Math.min(1, Math.max(0, window.scrollY / maxScroll));
+    if (!force && nextProgress === scrollProgress) return;
+    scrollProgress = nextProgress;
+    updatePalette();
+  }
+
   function resize(): void {
     dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     const w = document.documentElement.clientWidth;
     const h = Math.ceil(window.innerHeight);
-    fieldWidth = w;
-    fieldHeight = h;
     canvas.width = Math.ceil(w * dpr);
     canvas.height = Math.ceil(h * dpr);
     canvas.style.width = `${w}px`;
     canvas.style.height = `${h}px`;
-    cols = Math.ceil(w / SQUARE) + 1;
-    rows = Math.ceil(h / SQUARE) + 1;
+    cols = Math.ceil(w / TILE_SIZE) + 1;
+    rows = Math.ceil(h / TILE_SIZE) + 1;
+    const cellCount = cols * rows;
+    cellPhases = new Float32Array(cellCount);
+    cellJitters = new Float32Array(cellCount);
+    for (let row = 0; row < rows; row++) {
+      for (let column = 0; column < cols; column++) {
+        const index = row * cols + column;
+        cellPhases[index] = column * HORIZONTAL_FREQUENCY + row * VERTICAL_FREQUENCY;
+        const noise = Math.sin(column * 12.9898 + row * 78.233) * 43758.5453;
+        cellJitters[index] = (noise - Math.floor(noise)) * 0.14 - 0.07;
+      }
+    }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
-  // Stable per-cell jitter so neighbours differ "a bit to bit" even at rest.
-  function cellJitter(c: number, r: number): number {
-    const n = Math.sin(c * 12.9898 + r * 78.233) * 43758.5453;
-    return n - Math.floor(n);
-  }
-
   function draw(): void {
-    const w = fieldWidth;
-    const h = fieldHeight;
-    ctx.clearRect(0, 0, w, h);
-    const size = SQUARE - GAP;
+    const phaseOffset = phase * HORIZONTAL_FREQUENCY;
+    let activeColor = -1;
     for (let r = 0; r < rows; r++) {
-      const y = r * SQUARE;
+      const y = r * TILE_SIZE;
       for (let c = 0; c < cols; c++) {
-        // Wave travelling left -> right, with a gentle vertical drift.
-        const wave = 0.5 + 0.5 * Math.sin((c - phase) * 0.1067 + r * 0.0433); // 3x more gradual
-        const j = cellJitter(c, r) * 0.14 - 0.07;
-        const m = Math.max(0, Math.min(1, wave + j));
-        // Stay within the paper family. The hero stays light; as the reader
-        // descends, the field darkens (more paper-3) and takes on a touch more
-        // accent so the lower sections read more easily.
-        let col = mixColor(paper, paper3, m * 0.55 + scrollProgress * 0.32);
-        col = mixColor(col, accent, m * 0.08 + scrollProgress * 0.12);
-        col = mixColor(col, [7, 8, 6], scrollProgress * (currentTheme === "dark" ? 0.32 : 0.22));
-        ctx.fillStyle = `rgb(${col[0] | 0},${col[1] | 0},${col[2] | 0})`;
-        ctx.fillRect(c * SQUARE, y, size, size);
+        const index = r * cols + c;
+        const wave = 0.5 + 0.5 * Math.sin(cellPhases[index] - phaseOffset);
+        const intensity = wave + cellJitters[index];
+        const boundedIntensity = intensity < 0 ? 0 : intensity > 1 ? 1 : intensity;
+        const color = Math.round(boundedIntensity * (PALETTE_STEPS - 1));
+        if (color !== activeColor) {
+          ctx.fillStyle = palette[color];
+          activeColor = color;
+        }
+        ctx.fillRect(c * TILE_SIZE, y, TILE_SIZE, TILE_SIZE);
       }
     }
   }
@@ -221,17 +230,15 @@ function initWaves(): void {
   function stop(): void {
     running = false;
     if (raf) cancelAnimationFrame(raf);
+    raf = 0;
   }
 
   function onScroll(): void {
     const dy = window.scrollY - lastScroll;
     lastScroll = window.scrollY;
-    boost += Math.abs(dy) * 0.00625; // 0.25x scroll contribution
+    boost += Math.abs(dy) * 0.00625;
     if (boost > MAX_BOOST) boost = MAX_BOOST;
-    // Scroll position nudges the field's colour: a touch more paper-3 and a
-    // touch more accent as you descend. Subtle, continuous, no flicker.
-    const maxScroll = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
-    scrollProgress = Math.min(1, Math.max(0, window.scrollY / maxScroll));
+    syncScrollProgress();
     if (!shouldAnimate && !staticRaf) {
       staticRaf = requestAnimationFrame(() => {
         staticRaf = 0;
@@ -242,14 +249,19 @@ function initWaves(): void {
 
   resize();
   readColors();
-  onScroll();
+  syncScrollProgress(true);
   draw();
 
   window.addEventListener(
     "resize",
     () => {
-      resize();
-      draw();
+      if (resizeRaf) return;
+      resizeRaf = requestAnimationFrame(() => {
+        resizeRaf = 0;
+        resize();
+        syncScrollProgress();
+        draw();
+      });
     },
     { passive: true }
   );
@@ -264,10 +276,10 @@ function initWaves(): void {
     });
   }
 
-  // Follow theme changes (data-theme on <html>) without re-running init.
   const themeObserver = new MutationObserver(() => {
     readColors();
-    draw();
+    updatePalette();
+    if (!running) draw();
   });
   themeObserver.observe(document.documentElement, {
     attributes: true,
@@ -279,7 +291,6 @@ function init(): void {
   initTheme();
   initScrollTone();
   initCopyButtons();
-  initCookieNotice();
   initWaves();
 }
 

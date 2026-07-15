@@ -1,5 +1,12 @@
 import type { ChildProcess } from "node:child_process";
-import type { TideSurfOptions, TideSurfConnectOptions, ToolResult, GetStateOptions, PageState } from "./types.js";
+import type {
+  TideSurfOptions,
+  TideSurfConnectOptions,
+  ToolResult,
+  ReadPageOptions,
+  GetStateOptions,
+  PageState,
+} from "./types.js";
 import {
   discoverBrowser,
   launchChrome,
@@ -18,9 +25,11 @@ import {
   type UrlValidationOptions,
 } from "./validation.js";
 import {
+  ActionCommittedError,
   CDPConnectionError,
   ChromeLaunchError,
   ReadOnlyError,
+  ValidationError,
 } from "./errors.js";
 
 interface DiscoveredEndpoint {
@@ -35,6 +44,9 @@ const CONNECTION_INFO = new WeakMap<TideSurf, { host: string; port: number }>();
 function validateRuntimeOptions(options: {
   timeout?: number;
   defaultViewport?: { width: number; height: number };
+  chromePath?: string;
+  userDataDir?: string;
+  channel?: TideSurfOptions["channel"];
 }): void {
   if (options.timeout !== undefined) {
     validatePositiveInteger(options.timeout, "timeout");
@@ -43,6 +55,34 @@ function validateRuntimeOptions(options: {
     validatePositiveInteger(options.defaultViewport.width, "defaultViewport.width");
     validatePositiveInteger(options.defaultViewport.height, "defaultViewport.height");
   }
+  for (const [name, value] of [
+    ["chromePath", options.chromePath],
+    ["userDataDir", options.userDataDir],
+  ] as const) {
+    if (value !== undefined && (typeof value !== "string" || value.trim() === "")) {
+      throw new ValidationError(`${name} must be a non-empty string`);
+    }
+  }
+  if (
+    options.channel !== undefined &&
+    !["stable", "beta", "dev", "canary", "chromium"].includes(options.channel)
+  ) {
+    throw new ValidationError("channel must be stable, beta, dev, canary, or chromium");
+  }
+}
+
+function snapshotOptions<
+  T extends TideSurfOptions | TideSurfConnectOptions
+>(options: T): T {
+  return {
+    ...options,
+    defaultViewport: options.defaultViewport
+      ? { ...options.defaultViewport }
+      : undefined,
+    fileAccessRoots: options.fileAccessRoots
+      ? [...options.fileAccessRoots]
+      : options.fileAccessRoots,
+  } as T;
 }
 
 async function rollbackCDP(
@@ -124,6 +164,9 @@ export class TideSurf {
   private activeTabId: string | null;
   private closePromise: Promise<void> | null = null;
   private readonly timeout?: number;
+  private readonly pendingPageWork = new Set<Promise<unknown>>();
+  private readonly pendingTabConnections = new Map<string, Promise<SurfingPage>>();
+  private tabMutationTail: Promise<void> = Promise.resolve();
 
   private constructor(
     chromeProcess: ChildProcess | null,
@@ -173,11 +216,12 @@ export class TideSurf {
    * @throws {CDPConnectionError} if CDP connection fails
    */
   static async launch(options: TideSurfOptions = {}): Promise<TideSurf> {
-    validateRuntimeOptions(options);
-    const fileAccessRoots = resolveFileAccessRoots(options.fileAccessRoots);
+    const config = snapshotOptions(options);
+    validateRuntimeOptions(config);
+    const fileAccessRoots = resolveFileAccessRoots(config.fileAccessRoots);
     const urlValidationOptions: UrlValidationOptions = {
-      allowLocalhost: options.allowLocalhost,
-      allowPrivateHosts: options.allowPrivateHosts,
+      allowLocalhost: config.allowLocalhost,
+      allowPrivateHosts: config.allowPrivateHosts,
     };
     const {
       process: proc,
@@ -187,20 +231,20 @@ export class TideSurf {
       userDataDir,
       ownsTempDir,
     } = await launchChrome({
-      headless: options.headless ?? true,
-      chromePath: options.chromePath,
-      channel: options.channel,
-      port: options.port,
-      userDataDir: options.userDataDir,
-      timeout: options.timeout,
+      headless: config.headless ?? true,
+      chromePath: config.chromePath,
+      channel: config.channel,
+      port: config.port,
+      userDataDir: config.userDataDir,
+      timeout: config.timeout,
     });
 
     let conn: CDPConnection | null = null;
     try {
-      conn = await connect({ port, host, tab: targetId, timeout: options.timeout });
+      conn = await connect({ port, host, tab: targetId, timeout: config.timeout });
       const page = await initializePage(
         conn,
-        options,
+        config,
         fileAccessRoots,
         urlValidationOptions
       );
@@ -212,12 +256,12 @@ export class TideSurf {
         tabManager,
         userDataDir,
         ownsTempDir,
-        options.readOnly ?? false,
+        config.readOnly ?? false,
         targetId,
-        options.defaultViewport,
+        config.defaultViewport,
         fileAccessRoots,
         urlValidationOptions,
-        options.timeout,
+        config.timeout,
         host,
         port
       );
@@ -271,27 +315,28 @@ export class TideSurf {
    * @throws {CDPConnectionError} if no Chrome instance is found
    */
   static async connect(options: TideSurfConnectOptions = {}): Promise<TideSurf> {
-    validateRuntimeOptions(options);
-    const supplied = (options as TideSurfConnectOptions & {
+    const config = snapshotOptions(options);
+    validateRuntimeOptions(config);
+    const supplied = (config as TideSurfConnectOptions & {
       [DISCOVERED_ENDPOINT]?: DiscoveredEndpoint;
     })[DISCOVERED_ENDPOINT];
     const endpoint = supplied ?? await discoverBrowser({
-      port: options.port,
-      host: options.host,
-      timeout: options.timeout,
+      port: config.port,
+      host: config.host,
+      timeout: config.timeout,
     });
-    const fileAccessRoots = resolveFileAccessRoots(options.fileAccessRoots);
+    const fileAccessRoots = resolveFileAccessRoots(config.fileAccessRoots);
     const urlValidationOptions: UrlValidationOptions = {
-      allowLocalhost: options.allowLocalhost,
-      allowPrivateHosts: options.allowPrivateHosts,
+      allowLocalhost: config.allowLocalhost,
+      allowPrivateHosts: config.allowPrivateHosts,
     };
     const { port, host, targetId } = endpoint;
 
-    const conn = await connect({ port, host, tab: targetId, timeout: options.timeout });
+    const conn = await connect({ port, host, tab: targetId, timeout: config.timeout });
     try {
       const page = await initializePage(
         conn,
-        options,
+        config,
         fileAccessRoots,
         urlValidationOptions
       );
@@ -303,12 +348,12 @@ export class TideSurf {
         tabManager,
         "",
         false,
-        options.readOnly ?? false,
+        config.readOnly ?? false,
         targetId,
-        options.defaultViewport,
+        config.defaultViewport,
         fileAccessRoots,
         urlValidationOptions,
-        options.timeout,
+        config.timeout,
         host,
         port
       );
@@ -321,11 +366,6 @@ export class TideSurf {
     }
   }
 
-  /**
-   * Navigate the active page to a URL.
-   * @param url - Target URL
-   * @throws {ReadOnlyError} if this instance is in read-only mode
-   */
   async navigate(url: string): Promise<void> {
     this.assertOpen();
     if (this.readOnly) {
@@ -334,54 +374,37 @@ export class TideSurf {
     await this.activePage.navigate(url);
   }
 
-  /**
-   * Get the compressed page state of the active page.
-   * @param options - Optional settings (maxTokens for token budgeting)
-   */
-  async getState(options?: GetStateOptions): Promise<PageState> {
+  async readPage(options?: ReadPageOptions): Promise<PageState> {
     this.assertOpen();
-    return this.activePage.getState(options);
+    return this.activePage.readPage(options);
   }
 
-  /**
-   * Get the active SurfingPage instance.
-   */
+  /** @deprecated Use `readPage()`. */
+  getState(options?: GetStateOptions): Promise<PageState> {
+    return this.readPage(options);
+  }
+
   getPage(): SurfingPage {
     this.assertOpen();
     return this.activePage;
   }
 
-  /**
-   * Get the tool executor function.
-   */
   getToolExecutor() {
     return this.executor;
   }
 
-  /**
-   * Get tool definitions for LLM function calling.
-   */
   getToolDefinitions() {
     return getToolDefinitions({ readOnly: this.readOnly });
   }
 
-  /**
-   * Whether this instance is in read-only mode.
-   */
   isReadOnly(): boolean {
     return this.readOnly;
   }
 
-  /**
-   * URL navigation policy used by tools layered on top of the SDK.
-   */
   getUrlValidationOptions(): UrlValidationOptions {
     return { ...this.urlValidationOptions };
   }
 
-  /**
-   * List all open tabs.
-   */
   async listTabs(): Promise<TabInfo[]> {
     this.assertOpen();
     const tabs = await this.tabManager.listTabs(this.timeout);
@@ -389,31 +412,58 @@ export class TideSurf {
     return tabs;
   }
 
-  /**
-   * Open a new tab, optionally navigating to a URL.
-   * @param url - Optional URL to navigate to
-   * @returns Info about the new tab
-   */
   async newTab(url?: string): Promise<TabInfo> {
     this.assertOpen();
     if (this.readOnly) throw new ReadOnlyError("newTab");
     if (url !== undefined) {
       validateUrl(url, this.urlValidationOptions);
     }
-    const { tab, page } = await this.createConnectedTab(url);
-    this.pages.set(tab.id, page);
-    this.activePage = page;
-    this.activeTabId = tab.id;
-    return tab;
+    return this.queueTabMutation(async () => {
+      this.assertOpen();
+      return this.openTab(url);
+    });
   }
 
-  private async createConnectedTab(
+  private async openTab(url?: string): Promise<TabInfo> {
+    const { tab, page } = await this.createConnectedTabResources(url);
+    try {
+      this.assertOpen();
+      this.pages.set(tab.id, page);
+      this.activePage = page;
+      this.activeTabId = tab.id;
+      return tab;
+    } catch (error) {
+      return rollbackCDP(
+        error,
+        `Tab ${tab.id} opened while TideSurf was closing and rollback did not complete`,
+        [
+          () => page.close(),
+          () => this.tabManager.closeTab(tab.id, this.timeout),
+        ]
+      );
+    }
+  }
+
+  private async createConnectedTabResources(
     url?: string
   ): Promise<{ tab: TabInfo; page: SurfingPage }> {
     const tab = await this.tabManager.createTab(url, this.timeout);
+    try {
+      return { tab, page: await this.connectPage(tab.id) };
+    } catch (error) {
+      return rollbackCDP(
+        error,
+        `Tab ${tab.id} setup failed and rollback did not complete`,
+        [() => this.tabManager.closeTab(tab.id, this.timeout)]
+      );
+    }
+  }
+
+  private async connectPage(tabId: string): Promise<SurfingPage> {
+    this.assertOpen();
     let conn: CDPConnection | undefined;
     try {
-      conn = await this.tabManager.connectToTab(tab.id, this.timeout);
+      conn = await this.tabManager.connectToTab(tabId, this.timeout);
       if (this.defaultViewport) {
         await applyViewport(conn, this.defaultViewport, this.timeout);
       }
@@ -425,139 +475,153 @@ export class TideSurf {
         this.timeout
       );
       this.assertOpen();
-      return { tab, page };
+      return page;
     } catch (error) {
-      const cleanup: Array<() => Promise<unknown>> = [
-        () => this.tabManager.closeTab(tab.id, this.timeout),
-      ];
+      const cleanup: Array<() => Promise<unknown>> = [];
       if (conn) {
         const connected = conn;
-        cleanup.unshift(() => disconnect(connected));
+        cleanup.push(() => disconnect(connected));
       }
       return rollbackCDP(
         error,
-        `Tab ${tab.id} setup failed and rollback did not complete`,
+        `Tab ${tabId} setup failed and CDP rollback did not complete`,
         cleanup
       );
     }
   }
 
-  /**
-   * Switch the active tab.
-   * @param tabId - Target tab ID
-   */
-  async switchTab(tabId: string): Promise<void> {
-    this.assertOpen();
-    let page = this.pages.get(tabId);
-    if (!page) {
-      let conn: CDPConnection | undefined;
-      try {
-        conn = await this.tabManager.connectToTab(tabId, this.timeout);
-        if (this.defaultViewport) {
-          await applyViewport(conn, this.defaultViewport, this.timeout);
-        }
-        page = new SurfingPage(
-          conn,
-          this.fileAccessRoots,
-          this.urlValidationOptions,
-          this.readOnly,
-          this.timeout
-        );
-        this.assertOpen();
-        this.pages.set(tabId, page);
-      } catch (err) {
-        const cleanup: Array<() => Promise<unknown>> = [];
-        if (conn) {
-          const connected = conn;
-          cleanup.push(() => disconnect(connected));
-        }
-        return rollbackCDP(
-          err,
-          `Tab ${tabId} setup failed and CDP rollback did not complete`,
-          cleanup
-        );
-      }
-    }
-    this.activePage = page;
-    this.activeTabId = tabId;
+  private trackPageWork<T>(work: Promise<T>): Promise<T> {
+    this.pendingPageWork.add(work);
+    const remove = () => {
+      this.pendingPageWork.delete(work);
+    };
+    void work.then(remove, remove);
+    return work;
   }
 
-  /**
-   * Close a tab by ID.
-   * If closing the active tab, switches to the first remaining tab.
-   * @param tabId - Tab to close
-   */
+  private queueTabMutation<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.tabMutationTail.then(operation);
+    this.tabMutationTail = result.then(
+      () => undefined,
+      () => undefined
+    );
+    return this.trackPageWork(result);
+  }
+
+  private connectTabOnce(tabId: string): Promise<SurfingPage> {
+    const cached = this.pages.get(tabId);
+    if (cached) return Promise.resolve(cached);
+    const pending = this.pendingTabConnections.get(tabId);
+    if (pending) return pending;
+
+    const connection = this.trackPageWork(
+      this.connectPage(tabId).then((page) => {
+        this.pages.set(tabId, page);
+        return page;
+      })
+    );
+    this.pendingTabConnections.set(tabId, connection);
+    const remove = () => {
+      if (this.pendingTabConnections.get(tabId) === connection) {
+        this.pendingTabConnections.delete(tabId);
+      }
+    };
+    void connection.then(remove, remove);
+    return connection;
+  }
+
+  async switchTab(tabId: string): Promise<void> {
+    this.assertOpen();
+    return this.queueTabMutation(async () => {
+      this.assertOpen();
+      const page = await this.connectTabOnce(tabId);
+      this.assertOpen();
+      this.activePage = page;
+      this.activeTabId = tabId;
+    });
+  }
+
   async closeTab(tabId: string): Promise<void> {
     this.assertOpen();
     if (this.readOnly) throw new ReadOnlyError("closeTab");
+    return this.queueTabMutation(async () => {
+      this.assertOpen();
+      return this.closeTabResources(tabId);
+    });
+  }
+
+  private async closeTabResources(tabId: string): Promise<void> {
     const page = this.pages.get(tabId);
     const isActiveTab = tabId === this.activeTabId;
 
-    let replacement: { tab: TabInfo; page: SurfingPage } | undefined;
-    if (isActiveTab) {
-      const tabs = await this.tabManager.listTabs(this.timeout);
-      this.assertOpen();
-      if (!tabs.some((tab) => tab.id !== tabId)) {
-        replacement = await this.createConnectedTab("about:blank");
-      }
-    }
-
+    let successor:
+      | { tab: TabInfo; page: SurfingPage; ownsTarget: boolean }
+      | undefined;
+    let successorCommitted = false;
     try {
+      if (isActiveTab) {
+        const tabs = await this.tabManager.listTabs(this.timeout);
+        this.assertOpen();
+        const nextTab = tabs.find((tab) => tab.id !== tabId);
+        if (nextTab) {
+          successor = {
+            tab: nextTab,
+            page: await this.connectTabOnce(nextTab.id),
+            ownsTarget: false,
+          };
+        } else {
+          successor = {
+            ...(await this.createConnectedTabResources("about:blank")),
+            ownsTarget: true,
+          };
+        }
+      }
+
+      this.assertOpen();
       await this.tabManager.closeTab(tabId, this.timeout);
       this.assertOpen();
-    } catch (error) {
-      return rollbackCDP(
-        error,
-        "Tab close failed and replacement rollback did not complete",
-        replacement
-          ? [
-            () => replacement.page.close(),
-            () => this.tabManager.closeTab(replacement.tab.id, this.timeout),
-          ]
-          : []
-      );
-    }
 
-    this.pages.delete(tabId);
-    let pageDisconnectFailed = false;
-    let pageDisconnectError: unknown;
-    if (page) {
-      try {
-        await page.close();
-      } catch (error) {
-        pageDisconnectFailed = true;
-        pageDisconnectError = error;
+      this.pages.delete(tabId);
+      let pageDisconnectError: unknown;
+      if (page) {
+        try {
+          await page.close();
+        } catch (error) {
+          pageDisconnectError = error;
+        }
       }
-    }
 
-    if (isActiveTab) {
-      if (replacement) {
-        this.pages.set(replacement.tab.id, replacement.page);
-        this.activePage = replacement.page;
-        this.activeTabId = replacement.tab.id;
-      } else {
-        const remainingTabs = await this.tabManager.listTabs(this.timeout);
+      if (isActiveTab) {
         this.assertOpen();
-        const nextTab =
-          remainingTabs.find((tab) => this.pages.has(tab.id)) ?? remainingTabs[0];
-        if (!nextTab) {
+        if (!successor) {
           throw new CDPConnectionError(
             "No browser tab remains after closing the active tab"
           );
         }
-        await this.switchTab(nextTab.id);
-      }
-    }
-
-    if (pageDisconnectFailed) {
-      throw new CDPConnectionError(
-        `Tab ${tabId} closed, but its CDP connection did not close cleanly`,
-        {
-          cause:
-            pageDisconnectError instanceof Error
-              ? pageDisconnectError
-              : undefined,
+        if (successor.ownsTarget) {
+          this.pages.set(successor.tab.id, successor.page);
         }
+        this.activePage = successor.page;
+        this.activeTabId = successor.tab.id;
+        successorCommitted = true;
+      }
+
+      if (pageDisconnectError) {
+        throw new ActionCommittedError(
+          `Tab ${tabId} close`,
+          pageDisconnectError
+        );
+      }
+    } catch (error) {
+      if (!successor?.ownsTarget || successorCommitted) throw error;
+      const uncommitted = successor;
+      return rollbackCDP(
+        error,
+        "Tab close failed and successor rollback did not complete",
+        [
+          () => uncommitted.page.close(),
+          () => this.tabManager.closeTab(uncommitted.tab.id, this.timeout),
+        ]
       );
     }
   }
@@ -572,6 +636,10 @@ export class TideSurf {
     if (this.exitHandler) {
       process.removeListener("exit", this.exitHandler);
       this.exitHandler = null;
+    }
+
+    if (this.pendingPageWork.size > 0) {
+      await Promise.allSettled([...this.pendingPageWork]);
     }
 
     const pages = new Set(this.pages.values());

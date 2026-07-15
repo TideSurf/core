@@ -40,6 +40,7 @@ export async function downloadFromAction(
   let completed = false;
   let guid: string | undefined;
   let fileName: string | undefined;
+  let downloadBehaviorMayBeConfigured = false;
 
   const cleanup = async () => {
     const failures: unknown[] = [];
@@ -62,13 +63,15 @@ export async function downloadFromAction(
         )
       );
     }
-    await attempt(() =>
-      withTimeout(
-        conn.Page.setDownloadBehavior({ behavior: "default" }),
-        2_000,
-        "download:restore"
-      )
-    );
+    if (downloadBehaviorMayBeConfigured) {
+      await attempt(() =>
+        withTimeout(
+          conn.Page.setDownloadBehavior({ behavior: "default" }),
+          2_000,
+          "download:restore"
+        )
+      );
+    }
     activeDownloads.delete(conn);
     if (ownsDirectory && !completed) {
       await attempt(() => rmSync(downloadDir, { recursive: true, force: true }));
@@ -79,6 +82,7 @@ export async function downloadFromAction(
   let operationFailed = false;
   try {
     mkdirSync(downloadDir, { recursive: true, mode: 0o700 });
+    downloadBehaviorMayBeConfigured = true;
     await withTimeout(
       conn.Page.setDownloadBehavior({ behavior: "allow", downloadPath: downloadDir }),
       5_000,

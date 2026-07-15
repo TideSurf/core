@@ -14,7 +14,7 @@ Run commands directly. The first tool command starts a private local session and
 
 ```sh
 bunx @tidesurf/core navigate https://example.com
-bunx @tidesurf/core get-state
+bunx @tidesurf/core get_state
 bunx @tidesurf/core click L1
 bunx @tidesurf/core status
 bunx @tidesurf/core stop
@@ -24,30 +24,30 @@ Use a named session for parallel workflows:
 
 ```sh
 bunx @tidesurf/core --session research navigate https://example.com
-bunx @tidesurf/core --session research get-state --mode interactive
+bunx @tidesurf/core --session research get_state --mode interactive
 ```
 
 TideSurf exposes these direct commands:
 
 ```text
-get-state       navigate        click           type
+get_state       navigate        click           type
 select          scroll          extract         evaluate
-list-tabs       new-tab         switch-tab      close-tab
-search          screenshot      upload          clipboard-read
-clipboard-write download
+list_tabs       new_tab         switch_tab      close_tab
+search          screenshot      upload          clipboard_read
+clipboard_write download
 ```
 
-Underscore aliases match MCP names, such as `get_state` and `switch_tab`. `tidesurf tools` prints the registry. `tidesurf help <command>` prints generated command help. `tidesurf call <tool> --input '<json>'` accepts a raw tool call.
+Direct commands use the exact registry and MCP tool identifiers. `tidesurf tools` prints the registry, `tidesurf help <command>` prints command help, and `tidesurf call <tool> --input '<json>'` accepts a raw tool call.
 
 Managed launch is the default. TideSurf finds Chrome stable, Beta, Dev, Canary, or Chromium and uses an ephemeral debugging port. It checks `--chrome-path`, `CHROME_PATH`, `PATH`, then platform install locations. It never downloads a browser. Use `--auto-connect` to attach when possible and launch locally as a fallback, or `--connect-only` to forbid launch.
 
 Read-only policy remains fixed for the session lifetime:
 
 ```sh
-bunx @tidesurf/core --session audit --read-only get-state
+bunx @tidesurf/core --session audit --read-only get_state
 ```
 
-Read-only sessions keep `get-state`, `extract`, `list-tabs`, `switch-tab`, `search`, and `screenshot`. Navigation, page interaction, JavaScript, clipboard, upload/download, and tab creation or closure fail at every SDK and tool boundary.
+Read-only sessions keep `get_state`, `extract`, `list_tabs`, `switch_tab`, `search`, and `screenshot`. Navigation, page interaction, JavaScript, clipboard, upload/download, and tab creation or closure fail at every SDK and tool boundary.
 
 Startup policy is immutable. Later calls may omit startup flags or repeat matching standalone values such as `--read-only`; conflicting values fail.
 
@@ -63,7 +63,7 @@ import { TideSurf } from "@tidesurf/core";
 const browser = await TideSurf.launch();
 await browser.navigate("https://example.com");
 
-const state = await browser.getState();
+const state = await browser.readPage();
 console.log(state.content);
 
 await browser.getPage().click("B1");
@@ -88,7 +88,7 @@ FORM F1
 
 `TideSurf.launch()` always launches and owns Chromium. It uses an isolated temporary profile unless `userDataDir` selects another profile. `TideSurf.connect()` always attaches to an existing endpoint and defaults to port `9222`. Closing an attached instance disconnects without stopping the user browser.
 
-`getState()` supports `full`, `interactive`, and `minimal` modes, viewport filtering, and `maxTokens`. `includeHidden: true` is a full-DOM debugging override: it includes hidden nodes and disables viewport filtering.
+`readPage()` supports `full`, `interactive`, and `minimal` modes, viewport filtering, and `maxTokens`. `includeHidden: true` includes hidden nodes and disables viewport filtering. The deprecated `getState()` alias delegates to `readPage()` for SDK compatibility.
 
 SDK uploads and downloads default to the working directory and OS temporary directory. Pass `fileAccessRoots: []` to disable SDK filesystem operations.
 
@@ -107,7 +107,7 @@ MCP is a thin adapter over the same registry and executor:
 }
 ```
 
-The MCP server exposes the 18 standard tools plus `launch_browser` for compatibility. Screenshot calls return MCP image blocks. Failed calls set `isError`.
+The MCP server exposes the 18 standard tools plus the `launch_browser` lifecycle tool. Screenshot calls return MCP image blocks. Failed calls set `isError`.
 
 Continue with [Getting started](https://tidesurf.org/docs#getting-started), [CLI](https://tidesurf.org/docs#cli), [Security](https://tidesurf.org/docs#security), or the [API reference](https://tidesurf.org/docs#api-reference).
 

@@ -6,20 +6,20 @@
       "label": "E-commerce",
       "sourceHtmlTokens": 5348,
       "renderedDomTokens": 5336,
-      "tideSurfTokens": 446
+      "tideSurfTokens": 469
     },
     {
       "name": "news",
       "label": "News",
       "sourceHtmlTokens": 4807,
       "renderedDomTokens": 4807,
-      "tideSurfTokens": 395
+      "tideSurfTokens": 387
     }
   ],
   "tokenBudget": {
     "fixture": "ecommerce",
     "maxTokens": 300,
-    "fullTokens": 446,
-    "budgetedTokens": 274
+    "fullTokens": 469,
+    "budgetedTokens": 267
   }
 }

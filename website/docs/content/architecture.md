@@ -16,7 +16,7 @@ MCP client ── stdio ── MCP adapter ────────────�
 
 All 18 tools have one `ToolSpec`. Each spec holds its JSON schema, read-only eligibility, CLI argument metadata, output kind, validation, and handler. The registry generates SDK definitions, executor dispatch, CLI help, MCP registration, and unknown-tool messages.
 
-MCP adds only transport behavior: stdio registration, schema conversion, PNG image blocks, `isError`, and the compatibility `launch_browser` tool.
+MCP adds only transport behavior: stdio registration, schema conversion, PNG image blocks, `isError`, and the `launch_browser` lifecycle tool.
 
 ## Stateful CLI sessions
 
@@ -24,7 +24,7 @@ Each session name maps to one background process. The default name is `default`.
 
 ```text
 tidesurf navigate … ─┐
-tidesurf get-state ──┼─ session "default" ─ one TideSurf instance ─ one browser
+tidesurf get_state ──┼─ session "default" ─ one TideSurf instance ─ one browser
 tidesurf click B1 ───┘
 ```
 
@@ -77,22 +77,25 @@ Auto-connect checks an explicit endpoint, a supported Chrome profile `DevToolsAc
 
 ```text
 rendered DOM
-  → marker cleanup and computed state
-  → DOM walk and semantic classification
+  → bounded non-mutating node preflight
+  → one DOMSnapshot capture
+  → snapshot decode and semantic classification
   → viewport/full-DOM selection
   → mode filter
   → token pruning
   → text serialization and ID map
 ```
 
-Visibility and page metadata are calculated before marker attributes mutate the DOM. Normal viewport mode removes offscreen descendants even when a visible structural container spans the page. `includeHidden: true` skips both hidden-node and viewport filtering for full-DOM debugging.
+Page reads do not add marker attributes or call `DOM.getDocument`. A bounded, read-only preflight counts DOM nodes and reads viewport metadata before `DOMSnapshot.captureSnapshot`. The snapshot supplies the flattened document, layout bounds, selected computed styles, and current form state in one response.
 
-Browser inspection caches each ancestor clip region once and skips descendants of hidden subtrees that CSS descendants cannot override. Interactive and minimal filters use post-order traversal. Serialization shares text memoization. Token pruning retains useful children inside oversized containers, clones only changed paths, and keeps source order.
+The decoder builds the page tree and ID map without changing page content. Normal viewport mode removes offscreen descendants even when a visible structural container spans the page. `includeHidden: true` skips hidden-node and viewport filtering for full-DOM debugging. Snapshot geometry cannot prove paint-order hit testing, so page reads omit `obscured` instead of guessing.
+
+Snapshot decoding caches each ancestor clip region once and skips descendants of hidden subtrees that CSS descendants cannot override. Interactive and minimal filters use post-order traversal. Serialization shares text memoization. Token pruning retains useful children inside oversized containers, clones only changed paths, and keeps source order.
 
 ## Agent-to-browser data flow
 
 ```text
-tool call → registry validation → read-only gate → handler
+tool lookup → read-only gate → input validation → handler
           → resolve one current ID → CDP action → release handle
 ```
 

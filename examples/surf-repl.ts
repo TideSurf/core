@@ -24,56 +24,53 @@ const decoder = new TextDecoder();
 const reader = Bun.stdin.stream().getReader();
 let buffer = "";
 
+async function executeLine(line: string): Promise<boolean> {
+  const trimmed = line.trim();
+  if (!trimmed) return true;
+  if (trimmed === "quit" || trimmed === "exit") return false;
+
+  try {
+    const cmd = JSON.parse(trimmed) as {
+      name?: unknown;
+      input?: unknown;
+    };
+    if (typeof cmd.name !== "string") {
+      throw new Error("Command name must be a string");
+    }
+    const result = await executor({
+      name: cmd.name,
+      input: (cmd.input === undefined ? {} : cmd.input) as Record<string, unknown>,
+    });
+    console.log(JSON.stringify(result));
+  } catch (error) {
+    console.log(
+      JSON.stringify({
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    );
+  }
+
+  return true;
+}
+
 try {
-  while (true) {
+  let running = true;
+  while (running) {
     const { done, value } = await reader.read();
     if (done) break;
 
     buffer += decoder.decode(value, { stream: true });
     const lines = buffer.split("\n");
-    buffer = lines.pop()!; // keep incomplete last line in buffer
+    buffer = lines.pop() ?? "";
 
     for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      if (trimmed === "quit" || trimmed === "exit") {
-        await surfing.close();
-        console.error("[tidesurf] Browser closed.");
-        process.exit(0);
-      }
-
-      try {
-        const cmd = JSON.parse(trimmed);
-        const result = await executor({
-          name: cmd.name,
-          input: cmd.input ?? {},
-        });
-
-        console.log(JSON.stringify(result));
-      } catch (err) {
-        console.log(
-          JSON.stringify({
-            success: false,
-            error: err instanceof Error ? err.message : String(err),
-          })
-        );
-      }
+      running = await executeLine(line);
+      if (!running) break;
     }
   }
 
-  // Process any remaining buffer
-  if (buffer.trim() && buffer.trim() !== "quit") {
-    try {
-      const cmd = JSON.parse(buffer.trim());
-      const result = await executor({
-        name: cmd.name,
-        input: cmd.input ?? {},
-      });
-      console.log(JSON.stringify(result));
-    } catch {
-      // ignore trailing incomplete input
-    }
-  }
+  if (running) await executeLine(buffer);
 } finally {
   await surfing.close();
   console.error("[tidesurf] Browser closed.");

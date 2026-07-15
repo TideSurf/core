@@ -19,17 +19,14 @@ describe("CLI parsing", () => {
 
   it("parses version and command help", () => {
     expect(parseInvocation(["--version"]).version).toBe(true);
-    const help = parseInvocation(["get-state", "--help"]);
+    const help = parseInvocation(["get_state", "--help"]);
     expect(help.help).toBe(true);
     expect(help.tool?.name).toBe("get_state");
   });
 
-  it("accepts every hyphen command and MCP underscore alias", () => {
+  it("uses canonical tool identifiers as direct commands", () => {
     for (const spec of TOOL_REGISTRY) {
-      expect(parseInvocation([spec.cli.command]).tool).toBe(spec);
-      for (const alias of spec.cli.aliases) {
-        expect(parseInvocation([alias]).tool).toBe(spec);
-      }
+      expect(parseInvocation([spec.name]).tool).toBe(spec);
     }
   });
 
@@ -37,7 +34,7 @@ describe("CLI parsing", () => {
     const invocation = parseInvocation([
       "--session",
       "research",
-      "get-state",
+      "get_state",
       "--max-tokens",
       "900",
       "--mode",
@@ -56,10 +53,10 @@ describe("CLI parsing", () => {
 
   it("does not apply a disabled boolean transform", () => {
     const explicitFalse = parseInvocation([
-      "get-state",
+      "get_state",
       "--full-page=false",
     ]);
-    const negated = parseInvocation(["get-state", "--no-full-page"]);
+    const negated = parseInvocation(["get_state", "--no-full-page"]);
 
     expect(buildToolInput(explicitFalse)).toEqual({});
     expect(buildToolInput(negated)).toEqual({});
@@ -72,7 +69,7 @@ describe("CLI parsing", () => {
     expect(parseInvocation(["--no-json", "false", "status"]).json).toBe(true);
 
     expect(
-      buildToolInput(parseInvocation(["get-state", "--no-viewport=false"]))
+      buildToolInput(parseInvocation(["get_state", "--no-viewport=false"]))
     ).toEqual({ viewport: true });
   });
 
@@ -90,7 +87,7 @@ describe("CLI parsing", () => {
       "/tmp",
       "--file-access-root",
       ".",
-      "status",
+      "start",
     ]);
     expect(invocation.sessionConfig.browserMode).toBe("auto");
     expect(invocation.sessionConfig.browserUrl).toBe("http://127.0.0.1:9333");
@@ -116,10 +113,25 @@ describe("CLI parsing", () => {
   });
 
   it("parses explicit global boolean values before the command", () => {
-    const invocation = parseInvocation(["--headful", "false", "status"]);
-    expect(invocation.command).toBe("status");
+    const invocation = parseInvocation(["--headful", "false", "start"]);
+    expect(invocation.command).toBe("start");
     expect(invocation.sessionConfig.headless).toBe(true);
     expect(invocation.startupConfig).toEqual({ headless: true });
+  });
+
+  it("rejects global options that have no effect on a command", () => {
+    expect(() => parseInvocation(["status", "--headful"])).toThrow(
+      "--headful is not valid for status"
+    );
+    expect(() => parseInvocation(["tools", "--session", "unused"])).toThrow(
+      "--session is not valid for tools"
+    );
+    expect(() => parseInvocation(["get_state", "--quiet"])).toThrow(
+      "--quiet is only valid for mcp"
+    );
+    expect(() => parseInvocation(["help", "--json"])).toThrow(
+      "--json is not valid for help"
+    );
   });
 
   it("keeps session and download timeouts separate", () => {
@@ -167,7 +179,7 @@ describe("CLI parsing", () => {
     );
     expect(() => parseInvocation(["status", "--wat"])).toThrow(CliUsageError);
     expect(() =>
-      buildToolInput(parseInvocation(["get-state", "--full-page", "--viewport"]))
+      buildToolInput(parseInvocation(["get_state", "--full-page", "--viewport"]))
     ).toThrow("conflicts");
   });
 

@@ -5,7 +5,7 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
         <meta
             http-equiv="Content-Security-Policy"
-            content="default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://tidesurf.org https://api.producthunt.com; connect-src 'self' https://api.github.com https://cloudflareinsights.com; object-src 'none'; base-uri 'self'; form-action 'self'"
+            content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://tidesurf.org; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'"
         />
         <title>TideSurf | Live pages as text for browser agents</title>
         <meta
@@ -94,10 +94,10 @@
 &lt;/form&gt;</code></pre>
                     </div>
 
-                    <div class="specimen-shift" aria-label="Separate e-commerce fixture benchmark: 5,348 source HTML tokens to 446 TideSurf tokens">
+                    <div class="specimen-shift" aria-label="Separate e-commerce fixture benchmark: 5,348 source HTML tokens to 469 TideSurf tokens">
                         <span class="tokens-before">5,348</span>
                         <span class="shift-word">separate fixture benchmark</span>
-                        <strong>446</strong>
+                        <strong>469</strong>
                         <small>e-commerce source HTML → TideSurf text</small>
                     </div>
 
@@ -122,7 +122,7 @@ FORM F1
             <section class="live-loop" aria-labelledby="loop-title">
                 <header class="section-intro compact-intro">
                     <h2 id="loop-title">Read it. Choose a handle. Use the live page.</h2>
-                    <p>This is live state, not an export. A handle routes through CDP to its Chromium session.</p>
+                    <p>The text reflects live browser state, not an export. Each handle routes through CDP to its Chromium session.</p>
                 </header>
 
                 <div class="loop-layout">
@@ -202,11 +202,6 @@ FORM F1
         <div class="theme-selector theme-float" role="group" aria-label="Theme">
             <button type="button" class="theme-btn patch-control compact-control" data-theme="light">light</button>
             <button type="button" class="theme-btn patch-control compact-control" data-theme="dark">dark</button>
-        </div>
-
-        <div id="cookie-notice" class="cookie-notice" role="region" aria-label="Analytics notice" hidden>
-            <p class="cookie-text">Cloudflare Analytics helps us understand traffic.</p>
-            <button id="cookie-dismiss" class="cookie-ok patch-control compact-control" style="--patch-color: var(--c-green)">OK</button>
         </div>
 
         <script type="module" src="/src/main.ts"></script>

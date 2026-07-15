@@ -2,8 +2,10 @@ import { describe, expect, it } from "bun:test";
 import { join } from "node:path";
 import {
   SESSION_PROTOCOL_VERSION,
+  ensureSession,
   getSessionPaths,
   removeSessionFiles,
+  sendSessionRequest,
   writeSessionState,
 } from "../../src/cli/session.js";
 import { TOOL_REGISTRY } from "../../src/tools/registry.js";
@@ -41,7 +43,7 @@ describe("CLI process behavior", () => {
     for (const result of results) {
       expect(result.code).toBe(0);
       expect(result.stdout).toContain("Stateful Chromium automation for agents");
-      expect(result.stdout).toContain("get-state");
+      expect(result.stdout).toContain("get_state");
     }
     expect(new Set(results.map((result) => result.stdout)).size).toBe(1);
   });
@@ -65,16 +67,22 @@ describe("CLI process behavior", () => {
     expect(result.stdout).toContain("--output <file|->");
   });
 
-  it("documents the get-state full-page override", () => {
-    const result = cli("get-state", "--help");
+  it("documents the get_state full-page override", () => {
+    const result = cli("get_state", "--help");
     expect(result.code).toBe(0);
     expect(result.stdout).toContain("--full-page");
   });
 
-  it("lists all canonical tools as JSON", () => {
-    const result = cli("tools", "--json");
-    expect(result.code).toBe(0);
-    const output = JSON.parse(result.stdout) as { success: boolean; data: unknown[] };
+  it("lists exact canonical tool identifiers", () => {
+    const text = cli("tools");
+    expect(text.code).toBe(0);
+    expect(text.stdout.trim().split("\n").map((line) => line.split("\t", 1)[0])).toEqual(
+      TOOL_REGISTRY.map((tool) => tool.name)
+    );
+
+    const json = cli("tools", "--json");
+    expect(json.code).toBe(0);
+    const output = JSON.parse(json.stdout) as { success: boolean; data: unknown[] };
     expect(output.success).toBe(true);
     expect(output.data).toHaveLength(18);
   });
@@ -96,7 +104,7 @@ describe("CLI process behavior", () => {
         "inspect",
         "mcp",
         "help",
-        ...TOOL_REGISTRY.flatMap((tool) => [tool.cli.command, ...tool.cli.aliases]),
+        ...TOOL_REGISTRY.map((tool) => tool.name),
       ]);
     }
   });
@@ -169,7 +177,7 @@ describe("CLI process behavior", () => {
   });
 
   it("rejects conflicting page-state options before browser startup", () => {
-    const result = cli("get-state", "--viewport", "--full-page");
+    const result = cli("get_state", "--viewport", "--full-page");
     expect(result.code).toBe(2);
     expect(result.stderr).toContain("conflicts");
   });
@@ -190,6 +198,39 @@ describe("CLI process behavior", () => {
     };
     expect(output.success).toBe(true);
     expect(output.data.alreadyStopped).toBe(true);
+  });
+
+  it("reports a live pending session as starting", () => {
+    const session = `starting-${crypto.randomUUID()}`;
+    const paths = getSessionPaths(session);
+    writeSessionState(paths, {
+      protocol: SESSION_PROTOCOL_VERSION,
+      version: VERSION,
+      session,
+      secret: "b".repeat(64),
+      socketPath: paths.socketPath,
+      config: {
+        browserMode: "launch",
+        headless: true,
+        readOnly: false,
+        allowLocalhost: false,
+        allowPrivateHosts: false,
+      },
+      pid: process.pid,
+      ready: false,
+      startupId: crypto.randomUUID(),
+    });
+
+    try {
+      const result = cli("--session", session, "status", "--json");
+      expect(result.code).toBe(0);
+      expect(JSON.parse(result.stdout)).toMatchObject({
+        success: true,
+        data: { session, running: true, starting: true, ready: false },
+      });
+    } finally {
+      removeSessionFiles(paths, true);
+    }
   });
 
   it("rejects new read-only mutations without starting a session", () => {
@@ -221,15 +262,11 @@ describe("CLI process behavior", () => {
     });
   });
 
-  it("uses an existing session's immutable read-only policy before startup", () => {
+  it("uses an authenticated session's immutable read-only policy", async () => {
     const session = `readonly-existing-${crypto.randomUUID()}`;
     const paths = getSessionPaths(session);
-    writeSessionState(paths, {
-      protocol: SESSION_PROTOCOL_VERSION,
-      version: VERSION,
+    const ready = await ensureSession({
       session,
-      secret: "a".repeat(64),
-      socketPath: paths.socketPath,
       config: {
         browserMode: "launch",
         headless: true,
@@ -237,14 +274,15 @@ describe("CLI process behavior", () => {
         allowLocalhost: false,
         allowPrivateHosts: false,
       },
-      pid: process.pid,
-      ready: true,
+      entryPath: join(root, "src", "cli.ts"),
     });
     try {
       const result = cli("--session", session, "click", "B1");
       expect(result.code).toBe(4);
       expect(result.stderr).toContain("disabled in read-only mode");
     } finally {
+      await sendSessionRequest(ready, { method: "stop" }, 2_000)
+        .catch(() => undefined);
       removeSessionFiles(paths, true);
     }
   });

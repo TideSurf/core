@@ -1,4 +1,4 @@
-import { getToolSpecByCommand, getToolSpecs, type ToolSpec } from "../tools/registry.js";
+import { getToolSpec, getToolSpecs, type ToolSpec } from "../tools/registry.js";
 import { VERSION } from "../version.js";
 import { GLOBAL_OPTIONS, LIFECYCLE_COMMANDS } from "./metadata.js";
 
@@ -11,7 +11,7 @@ function toolRows(filter: (tool: ToolSpec) => boolean): string {
   return rows(
     getToolSpecs()
       .filter(filter)
-      .map((tool) => [tool.cli.command, tool.description] as const)
+      .map((tool) => [tool.name, tool.description] as const)
   );
 }
 
@@ -57,20 +57,17 @@ Global options:
 ${globalOptionRows()}
 
 The first tool call starts its named session and browser. Session startup policy
-is immutable until stop. Tool commands also accept their MCP underscore names.`;
+is immutable until stop.`;
 }
 
 function usageForTool(tool: ToolSpec): string {
   const positionals = tool.cli.positionals.map((item) =>
     item.required === false ? `[${item.name}]` : `<${item.name}>`
   );
-  return `tidesurf ${tool.cli.command}${positionals.length ? ` ${positionals.join(" ")}` : ""} [options]`;
+  return `tidesurf ${tool.name}${positionals.length ? ` ${positionals.join(" ")}` : ""} [options]`;
 }
 
 function toolHelp(tool: ToolSpec): string {
-  const aliases = tool.cli.aliases.length
-    ? `\nAlias: ${tool.cli.aliases.join(", ")}`
-    : "";
   const positionalLines = tool.cli.positionals.length
     ? `\n\nArguments:\n${rows(tool.cli.positionals.map((item) => [
       item.required === false ? `[${item.name}]` : `<${item.name}>`,
@@ -84,12 +81,12 @@ function toolHelp(tool: ToolSpec): string {
   const optionLines = commandOptions.length
     ? `\n\nOptions:\n${rows(commandOptions)}`
     : "";
-  return `${tool.cli.command}\n\n${tool.description}${aliases}\n\nUsage:\n  ${usageForTool(tool)}${positionalLines}${optionLines}\n\nGlobal session and output options are also accepted.`;
+  return `${tool.name}\n\n${tool.description}\n\nUsage:\n  ${usageForTool(tool)}${positionalLines}${optionLines}\n\nGlobal session and output options are also accepted.`;
 }
 
 export function commandHelp(command?: string): string | undefined {
   if (!command) return generalHelp();
-  const tool = getToolSpecByCommand(command);
+  const tool = getToolSpec(command);
   if (tool) return toolHelp(tool);
   const lifecycle = LIFECYCLE_COMMANDS.find((item) => item.name === command);
   return lifecycle

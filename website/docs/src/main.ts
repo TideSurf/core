@@ -125,6 +125,14 @@ function safeStorageSet(key: string, value: string): void {
   }
 }
 
+function isLanguage(value: string | null | undefined): value is Language {
+  return value === "en" || value === "ja" || value === "ko";
+}
+
+function isTheme(value: string | null | undefined): value is Theme {
+  return value === "light" || value === "dark";
+}
+
 function translate(key: string): string {
   return translations[key]?.[currentLang] ?? translations[key]?.en ?? key;
 }
@@ -429,7 +437,13 @@ function renderLanguageNotice(): void {
 }
 
 function parseLocation(): { page: string; heading: string | null } {
-  const hash = decodeURIComponent(window.location.hash.slice(1) || DEFAULT_PAGE);
+  const rawHash = window.location.hash.slice(1) || DEFAULT_PAGE;
+  let hash = rawHash;
+  try {
+    hash = decodeURIComponent(rawHash);
+  } catch {
+    // Keep malformed hashes navigable instead of aborting page initialization.
+  }
   const separator = hash.indexOf(":");
   return separator < 0
     ? { page: hash, heading: null }
@@ -547,38 +561,22 @@ function applyTheme(): void {
 }
 
 function initTheme(): void {
-  const saved = safeStorageGet("tidesurf-theme") as Theme | null;
-  currentTheme = saved || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  const saved = safeStorageGet("tidesurf-theme");
+  currentTheme = isTheme(saved)
+    ? saved
+    : window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
   applyTheme();
 
   document.querySelectorAll<HTMLButtonElement>(".theme-btn[data-theme]").forEach((button) => {
     button.addEventListener("click", () => {
-      const theme = button.dataset.theme as Theme | undefined;
-      if (!theme) return;
+      const theme = button.dataset.theme;
+      if (!isTheme(theme)) return;
       currentTheme = theme;
       safeStorageSet("tidesurf-theme", theme);
       applyTheme();
     });
-  });
-}
-
-function initCookieNotice(): void {
-  const notice = document.getElementById("cookie-notice");
-  const dismiss = document.getElementById("cookie-dismiss");
-  if (!notice || !dismiss) return;
-
-  if (safeStorageGet("tidesurf-cookie-dismissed") === "true") {
-    notice.hidden = true;
-    document.body.classList.remove("cookie-visible");
-    return;
-  }
-
-  notice.hidden = false;
-  document.body.classList.add("cookie-visible");
-  dismiss.addEventListener("click", () => {
-    safeStorageSet("tidesurf-cookie-dismissed", "true");
-    notice.hidden = true;
-    document.body.classList.remove("cookie-visible");
   });
 }
 
@@ -602,12 +600,13 @@ function applyLanguage(): void {
 }
 
 function initLanguage(): void {
-  currentLang = (safeStorageGet("tidesurf-docs-lang") as Language | null) ?? "en";
+  const saved = safeStorageGet("tidesurf-docs-lang");
+  currentLang = isLanguage(saved) ? saved : "en";
   applyLanguage();
   document.querySelectorAll<HTMLButtonElement>(".lang-btn[data-lang]").forEach((button) => {
     button.addEventListener("click", () => {
-      const language = button.dataset.lang as Language | undefined;
-      if (!language) return;
+      const language = button.dataset.lang;
+      if (!isLanguage(language)) return;
       currentLang = language;
       safeStorageSet("tidesurf-docs-lang", currentLang);
       applyLanguage();
@@ -683,7 +682,6 @@ async function init(): Promise<void> {
   await loadContent();
   initTheme();
   initLanguage();
-  initCookieNotice();
   initSearch();
   initMobileNavigation();
   window.addEventListener("hashchange", navigate);

@@ -1,10 +1,10 @@
 import { describe, expect, it, mock } from "bun:test";
 import {
   clickNode,
+  captureScreenshot,
   clipboardWrite,
   disconnect,
   evaluate,
-  getFullDOM,
   navigate,
   selectOption,
   setFileInput,
@@ -14,7 +14,6 @@ import {
   type CDPConnection,
 } from "../../src/cdp/connection.js";
 import { downloadFromAction } from "../../src/cdp/download-manager.js";
-import { SurfingPage } from "../../src/cdp/page.js";
 import { CDPTimeoutError, NavigationError, ValidationError } from "../../src/errors.js";
 
 function connection(overrides: Partial<CDPConnection> = {}): CDPConnection {
@@ -25,7 +24,7 @@ function connection(overrides: Partial<CDPConnection> = {}): CDPConnection {
     } as unknown as CDPConnection["DOM"],
     Page: {
       navigate: mock(async () => ({})),
-      loadEventFired: mock(() => () => {}),
+      lifecycleEvent: mock(() => () => {}),
       on: mock(() => () => {}),
     } as unknown as CDPConnection["Page"],
     Runtime: {
@@ -40,9 +39,19 @@ function connection(overrides: Partial<CDPConnection> = {}): CDPConnection {
 }
 
 function connectionForPageObject(
-  target: Record<string, unknown>,
-  insertText: (text: string) => void = () => undefined
+  target: Record<string, unknown>
 ): CDPConnection {
+  target.matches ??= () => false;
+  target.closest ??= () => null;
+  target.contains ??= () => false;
+  target.getRootNode ??= () => target.ownerDocument ?? {};
+  const ownerDocument = (target.ownerDocument ?? {}) as Record<string, unknown>;
+  ownerDocument.defaultView ??= {
+    getComputedStyle: () => ({ pointerEvents: "auto" }),
+    HTMLInputElement: { prototype: {} },
+    HTMLTextAreaElement: { prototype: {} },
+  };
+  target.ownerDocument = ownerDocument;
   const callFunctionOn = mock(
     async (params: {
       functionDeclaration: string;
@@ -73,22 +82,7 @@ function connectionForPageObject(
       releaseObject: mock(async () => ({})),
       evaluate: mock(async () => ({ result: { value: undefined } })),
     } as unknown as CDPConnection["Runtime"],
-    Input: {
-      insertText: mock(async ({ text }: { text: string }) => insertText(text)),
-    } as unknown as CDPConnection["Input"],
   });
-}
-
-function emptyDocumentRoot() {
-  return {
-    nodeId: 1,
-    backendNodeId: 1,
-    nodeType: 9,
-    nodeName: "#document",
-    localName: "",
-    nodeValue: "",
-    children: [],
-  };
 }
 
 describe("CDP operations", () => {
@@ -123,200 +117,10 @@ describe("CDP operations", () => {
     );
   });
 
-  it("uses a known composed element count without repeating the preflight", async () => {
-    const runtimeEvaluate = mock(async () => {
-      throw new Error("unexpected preflight");
-    });
-    const getDocument = mock(async () => ({
-      root: {
-        nodeId: 1,
-        backendNodeId: 1,
-        nodeType: 9,
-        nodeName: "#document",
-        localName: "",
-        nodeValue: "",
-        children: [],
-      },
-    }));
-    const conn = connection({
-      Runtime: { evaluate: runtimeEvaluate } as unknown as CDPConnection["Runtime"],
-      DOM: { getDocument } as unknown as CDPConnection["DOM"],
-    });
-
-    await expect(getFullDOM(conn, 100, 0)).resolves.toMatchObject({
-      nodeType: 9,
-    });
-    expect(runtimeEvaluate).not.toHaveBeenCalled();
-    expect(getDocument).toHaveBeenCalledTimes(1);
-  });
-
-  it("bounds shadow DOM before requesting the protocol tree", async () => {
-    const shadowChildren = Array.from({ length: 50_001 }, () => ({
-      nodeType: 1,
-      tagName: "SPAN",
-      children: [],
-      shadowRoot: null,
-    }));
-    const documentElement = {
-      nodeType: 1,
-      tagName: "HTML",
-      children: [],
-      shadowRoot: { nodeType: 11, children: shadowChildren },
-    };
-    const document = { nodeType: 9, documentElement };
-    const runtimeEvaluate = mock(async ({ expression }: { expression: string }) => ({
-      result: {
-        value: new Function(
-          "document",
-          "Node",
-          `return ${expression}`
-        )(document, {
-          DOCUMENT_NODE: 9,
-          DOCUMENT_FRAGMENT_NODE: 11,
-          ELEMENT_NODE: 1,
-        }),
-      },
-    }));
-    const getDocument = mock(async () => ({ root: {} }));
-    const conn = connection({
-      Runtime: { evaluate: runtimeEvaluate } as unknown as CDPConnection["Runtime"],
-      DOM: { getDocument } as unknown as CDPConnection["DOM"],
-    });
-
-    await expect(getFullDOM(conn, 1_000)).rejects.toThrow(
-      "DOM exceeds maximum node count"
-    );
-    expect(getDocument).not.toHaveBeenCalled();
-  });
-
-  it("caps page inspection before allocating or styling an oversized DOM", async () => {
-    const children = Array.from({ length: 50_000 }, () => ({
-      nodeType: 1,
-      children: [],
-    }));
-    const documentElement = {
-      nodeType: 1,
-      tagName: "HTML",
-      attributes: [],
-      children,
-      shadowRoot: null,
-      scrollHeight: 100,
-      removeAttribute: mock(() => {}),
-    };
-    const pageDocument = {
-      nodeType: 9,
-      documentElement,
-      title: "Oversized",
-    };
-    const pageWindow = {
-      scrollY: 0,
-      innerHeight: 100,
-    };
-    const runtimeEvaluate = mock(async ({ expression }: { expression: string }) => ({
-      result: {
-        value: new Function(
-          "location",
-          "document",
-          "window",
-          "Node",
-          `return ${expression}`
-        )(
-          { href: "https://example.com/" },
-          pageDocument,
-          pageWindow,
-          { DOCUMENT_NODE: 9, DOCUMENT_FRAGMENT_NODE: 11, ELEMENT_NODE: 1 }
-        ),
-      },
-    }));
-    const getDocument = mock(async () => ({ root: {} }));
-    const conn = connection({
-      Runtime: { evaluate: runtimeEvaluate } as unknown as CDPConnection["Runtime"],
-      DOM: { getDocument } as unknown as CDPConnection["DOM"],
-    });
-
-    await expect(
-      new SurfingPage(conn).getState({ includeHidden: true })
-    ).rejects.toThrow("DOM exceeds maximum node count");
-    expect(runtimeEvaluate).toHaveBeenCalledTimes(1);
-    expect(getDocument).not.toHaveBeenCalled();
-  });
-
-  it("reports marker cleanup failure after a successful DOM read", async () => {
-    const cleanupError = new Error("marker cleanup failed");
-    const runtimeEvaluate = mock(async ({ expression }: { expression: string }) => {
-      if (expression.includes("const page =")) {
-        return {
-          result: {
-            value: {
-              url: "https://example.com/",
-              title: "Example",
-              scrollY: 0,
-              scrollHeight: 100,
-              viewportHeight: 100,
-              elementCount: 0,
-            },
-          },
-        };
-      }
-      if (expression.includes("const names =")) throw cleanupError;
-      return { result: { value: undefined } };
-    });
-    const conn = connection({
-      DOM: {
-        getDocument: mock(async () => ({ root: emptyDocumentRoot() })),
-      } as unknown as CDPConnection["DOM"],
-      Runtime: {
-        evaluate: runtimeEvaluate,
-      } as unknown as CDPConnection["Runtime"],
-    });
-
-    await expect(
-      new SurfingPage(conn).getState({ includeHidden: true })
-    ).rejects.toBe(cleanupError);
-  });
-
-  it("keeps a DOM read failure primary when marker cleanup also fails", async () => {
-    const readError = new Error("DOM read failed");
-    const runtimeEvaluate = mock(async ({ expression }: { expression: string }) => {
-      if (expression.includes("const page =")) {
-        return {
-          result: {
-            value: {
-              url: "https://example.com/",
-              title: "Example",
-              scrollY: 0,
-              scrollHeight: 100,
-              viewportHeight: 100,
-              elementCount: 0,
-            },
-          },
-        };
-      }
-      throw new Error("marker cleanup failed");
-    });
-    const conn = connection({
-      DOM: {
-        getDocument: mock(async () => {
-          throw readError;
-        }),
-      } as unknown as CDPConnection["DOM"],
-      Runtime: {
-        evaluate: runtimeEvaluate,
-      } as unknown as CDPConnection["Runtime"],
-    });
-
-    await expect(
-      new SurfingPage(conn).getState({ includeHidden: true })
-    ).rejects.toBe(readError);
-  });
-
   it("resolves an action node once and always releases it", async () => {
     const resolveNode = mock(async () => ({ object: { objectId: "remote-7" } }));
     const releaseObject = mock(async () => ({}));
     const callFunctionOn = mock(async () => {
-      if (callFunctionOn.mock.calls.length === 1) {
-        return { result: { value: true } };
-      }
       throw new Error("page rejected click");
     });
     const conn = connection({
@@ -329,11 +133,11 @@ describe("CDP operations", () => {
 
     await expect(clickNode(conn, 7)).rejects.toThrow("page rejected click");
     expect(resolveNode).toHaveBeenCalledTimes(1);
-    expect(callFunctionOn).toHaveBeenCalledTimes(2);
+    expect(callFunctionOn).toHaveBeenCalledTimes(1);
     expect(releaseObject).toHaveBeenCalledWith({ objectId: "remote-7" });
   });
 
-  it("reports a remote-object release failure after a successful action", async () => {
+  it("does not turn cleanup failure into a failed committed action", async () => {
     const releaseError = new Error("release failed");
     const conn = connection({
       Runtime: {
@@ -344,7 +148,7 @@ describe("CDP operations", () => {
       } as unknown as CDPConnection["Runtime"],
     });
 
-    await expect(clickNode(conn, 7)).rejects.toBe(releaseError);
+    await expect(clickNode(conn, 7)).resolves.toBeUndefined();
   });
 
   it("accepts a successful navigating click after its remote context is gone", async () => {
@@ -363,9 +167,6 @@ describe("CDP operations", () => {
   it("keeps an action failure primary when object release also fails", async () => {
     const actionError = new Error("click failed");
     const callFunctionOn = mock(async () => {
-      if (callFunctionOn.mock.calls.length === 1) {
-        return { result: { value: true } };
-      }
       throw actionError;
     });
     const conn = connection({
@@ -381,6 +182,7 @@ describe("CDP operations", () => {
   });
 
   it("clears and types into contenteditable textboxes", async () => {
+    const events: string[] = [];
     const selection = {
       removeAllRanges: mock(() => {}),
       addRange: mock(() => {}),
@@ -391,7 +193,10 @@ describe("CDP operations", () => {
       isContentEditable: true,
       textContent: "old value",
       focus: mock(() => {}),
-      dispatchEvent: mock(() => true),
+      dispatchEvent: (event: Event) => {
+        events.push(event.type);
+        return true;
+      },
       getAttribute: mock(() => null),
       ownerDocument: {
         getSelection: () => selection,
@@ -401,15 +206,62 @@ describe("CDP operations", () => {
         }),
       },
     };
-    const conn = connectionForPageObject(target, (text) => {
-      target.textContent = String(target.textContent ?? "") + text;
-    });
+    const conn = connectionForPageObject(target);
 
     await typeText(conn, 7, "new value", true);
 
     expect(target.textContent).toBe("new value");
-    expect(selection.removeAllRanges).toHaveBeenCalledTimes(1);
-    expect(selection.addRange).toHaveBeenCalledTimes(1);
+    expect(events).toEqual(["input"]);
+    expect(selection.removeAllRanges).not.toHaveBeenCalled();
+    expect(selection.addRange).not.toHaveBeenCalled();
+  });
+
+  it("emits one input event when clearing without replacement text", async () => {
+    const events: string[] = [];
+    const target: Record<string, unknown> = {
+      isConnected: true,
+      tagName: "INPUT",
+      type: "text",
+      value: "old value",
+      focus: mock(() => {}),
+      getAttribute: mock(() => null),
+      dispatchEvent: (event: Event) => {
+        events.push(event.type);
+        return true;
+      },
+    };
+    const conn = connectionForPageObject(target);
+
+    await typeText(conn, 7, "", true);
+
+    expect(target.value).toBe("");
+    expect(events).toEqual(["input"]);
+  });
+
+  it("types into non-selection inputs and enforces maxlength", async () => {
+    const email = {
+      isConnected: true,
+      tagName: "INPUT",
+      type: "email",
+      value: "",
+      selectionStart: null,
+      maxLength: 5,
+      setSelectionRange: mock(() => {
+        throw new Error("unsupported selection");
+      }),
+      getAttribute: mock(() => null),
+      dispatchEvent: mock(() => true),
+    };
+
+    await typeText(connectionForPageObject(email), 7, "abcdef");
+
+    expect(email.value).toBe("abcde");
+    expect(email.setSelectionRange).not.toHaveBeenCalled();
+
+    email.value = "";
+    email.maxLength = 1;
+    await typeText(connectionForPageObject(email), 7, "😀");
+    expect(email.value).toBe("");
   });
 
   it("rejects role textboxes that are not actually editable", async () => {
@@ -435,7 +287,11 @@ describe("CDP operations", () => {
       tagName: "SELECT",
       disabled: false,
       value: "first",
-      options: [{ value: "first" }, { value: "second" }],
+      options: [
+        { value: "first", matches: () => false },
+        { value: "second", matches: () => false },
+        { value: "disabled", matches: () => true },
+      ],
       getAttribute: mock(() => null),
       dispatchEvent: (event: Event) => {
         events.push(event.type);
@@ -450,6 +306,9 @@ describe("CDP operations", () => {
 
     await expect(selectOption(conn, 7, "missing")).rejects.toThrow(
       "Select option does not exist"
+    );
+    await expect(selectOption(conn, 7, "disabled")).rejects.toThrow(
+      "Select option is disabled"
     );
     expect(target.value).toBe("second");
   });
@@ -470,16 +329,12 @@ describe("CDP operations", () => {
 
   it("rejects page-side action exceptions returned by CDP", async () => {
     const releaseObject = mock(async () => ({}));
-    const callFunctionOn = mock(async () =>
-      callFunctionOn.mock.calls.length === 1
-        ? { result: { value: true } }
-        : {
-            exceptionDetails: {
-              text: "Uncaught",
-              exception: { description: "Error: click blocked" },
-            },
-          }
-    );
+    const callFunctionOn = mock(async () => ({
+      exceptionDetails: {
+        text: "Uncaught",
+        exception: { description: "Error: click blocked" },
+      },
+    }));
     const conn = connection({
       Runtime: {
         callFunctionOn,
@@ -508,7 +363,7 @@ describe("CDP operations", () => {
     const order: string[] = [];
     const conn = connection({
       Page: {
-        loadEventFired: mock(() => {
+        lifecycleEvent: mock(() => {
           order.push("listen");
           return () => {};
         }),
@@ -523,17 +378,20 @@ describe("CDP operations", () => {
     expect(order).toEqual(["listen", "navigate"]);
   });
 
-  it("unsubscribes the load listener after navigation", async () => {
+  it("waits for the matching loader and unsubscribes after navigation", async () => {
     const unsubscribe = mock(() => {});
-    let loaded!: () => void;
+    let lifecycle!: (event: { name: string; loaderId: string }) => void;
     const conn = connection({
       Page: {
-        loadEventFired: mock((handler: () => void) => {
-          loaded = handler;
+        lifecycleEvent: mock((handler: typeof lifecycle) => {
+          lifecycle = handler;
           return unsubscribe;
         }),
         navigate: mock(async () => {
-          queueMicrotask(loaded);
+          queueMicrotask(() => {
+            lifecycle({ name: "load", loaderId: "other-loader" });
+            lifecycle({ name: "load", loaderId: "loader-1" });
+          });
           return { loaderId: "loader-1" };
         }),
       } as unknown as CDPConnection["Page"],
@@ -547,6 +405,7 @@ describe("CDP operations", () => {
   it("resolves an upload target once and releases it", async () => {
     const resolveNode = mock(async () => ({ object: { objectId: "upload-1" } }));
     const setFileInputFiles = mock(async () => {});
+    const callFunctionOn = mock(async () => ({}));
     const releaseObject = mock(async () => {});
     const conn = connection({
       DOM: {
@@ -554,11 +413,7 @@ describe("CDP operations", () => {
         setFileInputFiles,
       } as unknown as CDPConnection["DOM"],
       Runtime: {
-        callFunctionOn: mock(async ({ functionDeclaration }: { functionDeclaration: string }) =>
-          functionDeclaration.includes("isConnected")
-            ? { result: { value: true } }
-            : {}
-        ),
+        callFunctionOn,
         releaseObject,
       } as unknown as CDPConnection["Runtime"],
     });
@@ -570,13 +425,14 @@ describe("CDP operations", () => {
       files: ["/tmp/file.txt"],
       objectId: "upload-1",
     });
+    expect(callFunctionOn).not.toHaveBeenCalled();
     expect(releaseObject).toHaveBeenCalledWith({ objectId: "upload-1" });
   });
 
   it("wraps browser navigation errors", async () => {
     const conn = connection({
       Page: {
-        loadEventFired: mock(() => () => {}),
+        lifecycleEvent: mock(() => () => {}),
         navigate: mock(async () => ({ errorText: "blocked" })),
       } as unknown as CDPConnection["Page"],
     });
@@ -624,6 +480,19 @@ describe("CDP operations", () => {
     await expect(evaluate(conn, "1 + 1")).rejects.toThrow("no result");
   });
 
+  it("rejects oversized screenshots before asking Chrome to encode them", async () => {
+    const capture = mock(async () => ({ data: "" }));
+    const conn = connection({
+      Page: { captureScreenshot: capture } as unknown as CDPConnection["Page"],
+    });
+
+    await expect(captureScreenshot(conn, {
+      clip: { x: 0, y: 0, width: 20_000, height: 20_000, scale: 1 },
+      fullPage: true,
+    })).rejects.toBeInstanceOf(ValidationError);
+    expect(capture).not.toHaveBeenCalled();
+  });
+
   it("returns CDP unserializable values without breaking JSON adapters", async () => {
     const conn = connection({
       Runtime: {
@@ -658,6 +527,81 @@ describe("CDP operations", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(send).not.toHaveBeenCalled();
+  });
+
+  it("resets permissions again when a timed-out grant completes late", async () => {
+    let resolveGrant!: () => void;
+    const grant = new Promise<void>((resolve) => { resolveGrant = resolve; });
+    const send = mock(async (method: string) => {
+      if (method === "Browser.grantPermissions") return grant;
+      return {};
+    });
+    const conn = connection({
+      client: { send } as unknown as CDPConnection["client"],
+      Runtime: {
+        evaluate: mock(async () => ({
+          result: { value: "https://example.com" },
+        })),
+      } as unknown as CDPConnection["Runtime"],
+    });
+
+    await expect(clipboardWrite(conn, "text", 5)).rejects.toBeInstanceOf(
+      CDPTimeoutError
+    );
+    expect(send.mock.calls.filter(([method]) =>
+      method === "Browser.resetPermissions"
+    )).toHaveLength(1);
+
+    resolveGrant();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(send.mock.calls.filter(([method]) =>
+      method === "Browser.resetPermissions"
+    )).toHaveLength(2);
+  });
+
+  it("resets temporary clipboard permissions after writing", async () => {
+    const send = mock(async () => ({}));
+    const evaluate = mock(async ({ expression }: { expression: string }) => ({
+      result: {
+        value: expression === "location.origin"
+          ? "https://example.com"
+          : undefined,
+      },
+    }));
+    const conn = connection({
+      client: { send } as unknown as CDPConnection["client"],
+      Runtime: { evaluate } as unknown as CDPConnection["Runtime"],
+    });
+
+    await clipboardWrite(conn, "text");
+
+    expect(send.mock.calls.map(([method]) => method)).toEqual([
+      "Browser.grantPermissions",
+      "Page.bringToFront",
+      "Browser.resetPermissions",
+    ]);
+  });
+
+  it("keeps a clipboard failure primary when permission reset also fails", async () => {
+    const writeError = new Error("clipboard write failed");
+    const send = mock(async (method: string) => {
+      if (method === "Browser.resetPermissions") throw new Error("reset failed");
+      return {};
+    });
+    const conn = connection({
+      client: { send } as unknown as CDPConnection["client"],
+      Runtime: {
+        evaluate: mock(async ({ expression }: { expression: string }) => {
+          if (expression === "location.origin") {
+            return { result: { value: "https://example.com" } };
+          }
+          throw writeError;
+        }),
+      } as unknown as CDPConnection["Runtime"],
+    });
+
+    await expect(clipboardWrite(conn, "text")).rejects.toBe(writeError);
+    expect(send).toHaveBeenLastCalledWith("Browser.resetPermissions");
   });
 
   it("disconnects without extra domain round trips", async () => {
@@ -760,5 +704,15 @@ describe("download listeners", () => {
       )
     ).rejects.toBeInstanceOf(CDPTimeoutError);
     expect(removed).toHaveLength(2);
+  });
+
+  it("does not reset download behavior when directory setup fails", async () => {
+    const { conn } = downloadConnection();
+
+    await expect(
+      downloadFromAction(conn, { downloadDir: "\0" }, async () => {})
+    ).rejects.toThrow();
+
+    expect(conn.Page.setDownloadBehavior).not.toHaveBeenCalled();
   });
 });

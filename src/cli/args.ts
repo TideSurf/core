@@ -1,8 +1,7 @@
 import { resolve } from "node:path";
 import {
-  getToolCommandNames,
+  getToolNames,
   getToolSpec,
-  getToolSpecByCommand,
   type ToolSpec,
 } from "../tools/registry.js";
 import type { ChromeChannel } from "../types.js";
@@ -33,7 +32,7 @@ const LIFECYCLE_COMMAND_NAMES = LIFECYCLE_COMMANDS.map(({ name }) => name);
 const LIFECYCLE_COMMAND_SET = new Set<string>(LIFECYCLE_COMMAND_NAMES);
 
 function availableCommandNames(): string[] {
-  return [...LIFECYCLE_COMMAND_NAMES, ...getToolCommandNames()];
+  return [...LIFECYCLE_COMMAND_NAMES, ...getToolNames()];
 }
 
 export function unknownCommandError(command: string): CliUsageError {
@@ -138,7 +137,7 @@ function toolOptionDefinitions(tool?: ToolSpec): OptionDefinition[] {
 
 export function parseInvocation(argv: string[]): ParsedInvocation {
   const { command, index: commandIndex } = findCommand(argv);
-  const tool = command ? getToolSpecByCommand(command) : undefined;
+  const tool = command ? getToolSpec(command) : undefined;
   if (command && !tool && !LIFECYCLE_COMMAND_SET.has(command)) {
     throw unknownCommandError(command);
   }
@@ -272,6 +271,36 @@ export function parseInvocation(argv: string[]): ParsedInvocation {
   }
   if (values["userDataDir"] === "") {
     throw new CliUsageError("--user-data-dir must be non-empty");
+  }
+
+  const acceptsStartupOptions = tool !== undefined ||
+    command === "start" ||
+    command === "call" ||
+    command === "inspect" ||
+    command === "mcp";
+  if (!acceptsStartupOptions && explicitStartupProperties.size > 0) {
+    const property = explicitStartupProperties.values().next().value as string;
+    const flag = GLOBAL_OPTIONS.find((option) => option.property === property)?.flag;
+    throw new CliUsageError(`${flag ?? property} is not valid for ${command ?? "help"}`);
+  }
+  if (values["quiet"] !== undefined && command !== "mcp") {
+    throw new CliUsageError("--quiet is only valid for mcp");
+  }
+  if (
+    values["session"] !== undefined &&
+    !tool &&
+    command !== "start" &&
+    command !== "status" &&
+    command !== "stop" &&
+    command !== "call"
+  ) {
+    throw new CliUsageError(`--session is not valid for ${command ?? "help"}`);
+  }
+  if (
+    values["json"] !== undefined &&
+    (command === undefined || command === "help" || command === "mcp" || version)
+  ) {
+    throw new CliUsageError(`--json is not valid for ${version ? "--version" : command ?? "help"}`);
   }
 
   const rawSession = String(values["session"] ?? "default");

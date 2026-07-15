@@ -1,6 +1,3 @@
-/**
- * Base error class for all TideSurf errors
- */
 export class TideSurfError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
@@ -8,9 +5,6 @@ export class TideSurfError extends Error {
   }
 }
 
-/**
- * Failed to connect to Chrome via CDP
- */
 export class CDPConnectionError extends TideSurfError {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
@@ -18,9 +12,6 @@ export class CDPConnectionError extends TideSurfError {
   }
 }
 
-/**
- * CDP operation timed out
- */
 export class CDPTimeoutError extends TideSurfError {
   constructor(operation: string, timeoutMs: number, options?: ErrorOptions) {
     super(`${operation} timed out after ${timeoutMs}ms`, options);
@@ -28,9 +19,6 @@ export class CDPTimeoutError extends TideSurfError {
   }
 }
 
-/**
- * Failed to launch Chrome process
- */
 export class ChromeLaunchError extends TideSurfError {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
@@ -38,20 +26,14 @@ export class ChromeLaunchError extends TideSurfError {
   }
 }
 
-/**
- * Element not found in the current node map
- */
 export class ElementNotFoundError extends TideSurfError {
   constructor(id: string, additionalInfo?: string) {
-    const baseMessage = `Element "${id}" not found. Call getState() first to refresh the node map.`;
+    const baseMessage = `Element "${id}" not found. Read the page again to refresh its action IDs.`;
     super(additionalInfo ? `${baseMessage} ${additionalInfo}` : baseMessage);
     this.name = "ElementNotFoundError";
   }
 }
 
-/**
- * Navigation failed
- */
 export class NavigationError extends TideSurfError {
   constructor(url: string, reason?: string, options?: ErrorOptions) {
     super(`Navigation to "${url}" failed${reason ? `: ${reason}` : ""}`, options);
@@ -59,9 +41,6 @@ export class NavigationError extends TideSurfError {
   }
 }
 
-/**
- * Input validation failed
- */
 export class ValidationError extends TideSurfError {
   constructor(message: string) {
     super(message);
@@ -69,9 +48,6 @@ export class ValidationError extends TideSurfError {
   }
 }
 
-/**
- * Operation blocked by read-only mode
- */
 export class ReadOnlyError extends TideSurfError {
   constructor(operation: string) {
     super(
@@ -79,5 +55,17 @@ export class ReadOnlyError extends TideSurfError {
       `Launch or connect without readOnly to enable mutating operations.`
     );
     this.name = "ReadOnlyError";
+  }
+}
+
+export class ActionCommittedError extends TideSurfError {
+  constructor(operation: string, cause: unknown) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    super(
+      `${operation} completed, but the page could not be confirmed afterward: ${detail}. ` +
+      "Read the page again before the next action.",
+      { cause: cause instanceof Error ? cause : undefined }
+    );
+    this.name = "ActionCommittedError";
   }
 }

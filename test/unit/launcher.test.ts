@@ -44,6 +44,31 @@ async function closeServer(server: Server): Promise<void> {
   });
 }
 
+function createDevToolsServer(
+  browserPath: string,
+  targets: readonly Record<string, unknown>[]
+): Server {
+  return createServer((request, response) => {
+    let body: unknown;
+    if (request.url === "/json/version") {
+      body = {
+        webSocketDebuggerUrl: `ws://${request.headers.host ?? "localhost"}${browserPath}`,
+      };
+    } else if (request.url === "/json/list") {
+      body = targets;
+    } else {
+      response.writeHead(404, { connection: "close" });
+      response.end();
+      return;
+    }
+    response.writeHead(200, {
+      "content-type": "application/json",
+      connection: "close",
+    });
+    response.end(JSON.stringify(body));
+  });
+}
+
 describe("buildChromeArgs", () => {
   it("keeps the Chrome sandbox in ordinary CI environments", () => {
     const args = buildChromeArgs(
@@ -221,6 +246,25 @@ describe("Chrome executable resolution", () => {
     ]);
   });
 
+  it("does not treat an ambiguous Windows PATH chrome as a requested channel", () => {
+    expect(
+      getChromeExecutableSearchPaths({
+        channel: "beta",
+        platform: "win32",
+        env: {
+          PATH: "C:\\Tools",
+          LOCALAPPDATA: "C:\\Users\\TideSurf\\AppData\\Local",
+          PROGRAMFILES: "C:\\Program Files",
+          "PROGRAMFILES(X86)": "C:\\Program Files (x86)",
+        },
+      })
+    ).toEqual([
+      "C:\\Users\\TideSurf\\AppData\\Local\\Google\\Chrome Beta\\Application\\chrome.exe",
+      "C:\\Program Files\\Google\\Chrome Beta\\Application\\chrome.exe",
+      "C:\\Program Files (x86)\\Google\\Chrome Beta\\Application\\chrome.exe",
+    ]);
+  });
+
   it("keeps every PATH channel ahead of platform installation fallback", () => {
     const candidates = getChromeExecutableSearchPaths({
       platform: "linux",
@@ -331,13 +375,9 @@ describe("CDP discovery", () => {
   });
 
   it("discovers an active profile through DevToolsActivePort", async () => {
-    const server = createServer((_request, response) => {
-      response.writeHead(200, {
-        "content-type": "application/json",
-        connection: "close",
-      });
-      response.end(JSON.stringify([{ id: "profile-page", type: "page" }]));
-    });
+    const server = createDevToolsServer("/devtools/browser/profile-browser", [
+      { id: "profile-page", type: "page" },
+    ]);
     const port = await listen(server, "localhost");
     const profile = mkdtempSync(join(tmpdir(), "tidesurf-active-profile-"));
     writeFileSync(
@@ -348,6 +388,33 @@ describe("CDP discovery", () => {
       await expect(
         discoverActiveBrowser({ userDataDir: profile, timeout: 500 })
       ).resolves.toEqual({ host: "localhost", port, targetId: "profile-page" });
+    } finally {
+      await closeServer(server);
+      rmSync(profile, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects an active marker that points to a different browser", async () => {
+    const server = createDevToolsServer("/devtools/browser/current-browser", [
+      { id: "other-page", type: "page" },
+    ]);
+    const port = await listen(server, "localhost");
+    const profile = mkdtempSync(join(tmpdir(), "tidesurf-stale-profile-"));
+    writeFileSync(
+      join(profile, "DevToolsActivePort"),
+      `${port}\n/devtools/browser/stale-browser\n`
+    );
+    try {
+      let failure: unknown;
+      try {
+        await discoverActiveBrowser({ userDataDir: profile, timeout: 500 });
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure).toBeInstanceOf(CDPConnectionError);
+      expect((failure as Error & { cause?: Error }).cause?.message).toContain(
+        "does not match"
+      );
     } finally {
       await closeServer(server);
       rmSync(profile, { recursive: true, force: true });
@@ -372,10 +439,7 @@ describe("CDP discovery", () => {
 
 describe("managed launch failures", () => {
   it("keeps an active profile marker when the endpoint has no page target", async () => {
-    const server = createServer((_request, response) => {
-      response.writeHead(200, { "content-type": "application/json" });
-      response.end("[]");
-    });
+    const server = createDevToolsServer("/devtools/browser/active", []);
     const port = await listen(server, "localhost");
     const root = mkdtempSync(join(tmpdir(), "tidesurf-active-empty-profile-"));
     const profile = join(root, "profile");
@@ -443,10 +507,9 @@ describe("managed launch failures", () => {
 
   it("retries a transiently partial marker written by a starting browser", async () => {
     if (process.platform === "win32") return;
-    const server = createServer((_request, response) => {
-      response.writeHead(200, { "content-type": "application/json" });
-      response.end(JSON.stringify([{ id: "started-page", type: "page" }]));
-    });
+    const server = createDevToolsServer("/devtools/browser/started", [
+      { id: "started-page", type: "page" },
+    ]);
     const port = await listen(server, "localhost");
     const root = mkdtempSync(join(tmpdir(), "tidesurf-transient-marker-"));
     const profile = join(root, "profile");
@@ -482,6 +545,53 @@ setInterval(() => {}, 1000);
       expect(launched).toMatchObject({ port, targetId: "started-page" });
     } finally {
       if (launched) await terminateChromeProcess(launched.process, 500);
+      await closeServer(server);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("does not accept a managed launch marker for another browser", async () => {
+    if (process.platform === "win32") return;
+    const server = createDevToolsServer("/devtools/browser/other", [
+      { id: "other-page", type: "page" },
+    ]);
+    const port = await listen(server, "localhost");
+    const root = mkdtempSync(join(tmpdir(), "tidesurf-launch-identity-"));
+    const profile = join(root, "profile");
+    const fakeChrome = join(root, "fake-chrome");
+    writeFileSync(
+      fakeChrome,
+      `#!/usr/bin/env node
+const { mkdirSync, writeFileSync } = require("node:fs");
+const { join } = require("node:path");
+const prefix = "--user-data-dir=";
+const argument = process.argv.find((value) => value.startsWith(prefix));
+if (!argument) process.exit(2);
+const profile = argument.slice(prefix.length);
+mkdirSync(profile, { recursive: true });
+writeFileSync(join(profile, "DevToolsActivePort"), ${JSON.stringify(
+        `${port}\n/devtools/browser/launched\n`
+      )});
+setInterval(() => {}, 1000);
+`,
+      { mode: 0o755 }
+    );
+    chmodSync(fakeChrome, 0o755);
+
+    try {
+      let failure: unknown;
+      try {
+        await launchChrome({
+          chromePath: fakeChrome,
+          userDataDir: profile,
+          timeout: 500,
+        });
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure).toBeInstanceOf(ChromeLaunchError);
+      expect((failure as Error).message).toContain("does not match");
+    } finally {
       await closeServer(server);
       rmSync(root, { recursive: true, force: true });
     }

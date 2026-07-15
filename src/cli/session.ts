@@ -18,7 +18,7 @@ import type { ChromeChannel, ToolResult } from "../types.js";
 import { VERSION } from "../version.js";
 import { isValidSessionName, SESSION_NAME_ERROR } from "./session-name.js";
 
-export const SESSION_PROTOCOL_VERSION = 1;
+export const SESSION_PROTOCOL_VERSION = 2;
 const MAX_RESPONSE_BYTES = 64 * 1024 * 1024;
 const READY_POLL_INTERVAL_MS = 10;
 const SENT_REQUEST_ERRORS = new WeakSet<object>();
@@ -71,6 +71,8 @@ interface WireRequest {
   protocol: number;
   id: string;
   secret: string;
+  deadline: number;
+  executionTimeout: number;
   request: SessionRequest;
 }
 
@@ -271,10 +273,14 @@ export async function sendSessionRequest<T = unknown>(
     );
   }
   const id = randomUUID();
+  const executionTimeout = Math.max(1, timeoutMs);
+  const transportTimeout = executionTimeout * 2;
   const payload: WireRequest = {
     protocol: SESSION_PROTOCOL_VERSION,
     id,
     secret: state.secret,
+    deadline: Date.now() + transportTimeout,
+    executionTimeout,
     request,
   };
 
@@ -299,8 +305,13 @@ export async function sendSessionRequest<T = unknown>(
     };
 
     const timer = setTimeout(() => {
-      finish(new SessionProtocolError(`Session request timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
+      const delivery = requestSent
+        ? " after it was sent; it may still complete, so inspect the session before retrying"
+        : " before it was sent";
+      finish(new SessionProtocolError(
+        `Session request timed out after ${transportTimeout}ms${delivery}`
+      ));
+    }, transportTimeout);
     timer.unref?.();
 
     socket.once("connect", () => {
@@ -649,14 +660,40 @@ export async function sendLiveSessionRequest<T>(
       `Session ${session} uses protocol ${state.protocol}; expected ${SESSION_PROTOCOL_VERSION}`
     );
   }
-  if (!state?.ready || !running) {
-    if (state && !running) removeSessionFiles(paths);
+  if (!state || !running) {
+    if (state) removeSessionFiles(paths);
     return null;
+  }
+  if (!state.ready && request.method === "status") {
+    return {
+      state,
+      data: {
+        session,
+        version: state.version,
+        running: true,
+        starting: true,
+        ready: false,
+        config: state.config,
+      } as T,
+    };
+  }
+
+  let ready = state;
+  if (!ready.ready) {
+    try {
+      ready = await waitForReady(paths, timeoutMs);
+    } catch (error) {
+      throw new SessionStateError(
+        `Session ${session} is still starting and could not accept ${request.method}: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
   }
   try {
     return {
-      state,
-      data: await sendSessionRequest<T>(state, request, timeoutMs),
+      state: ready,
+      data: await sendSessionRequest<T>(ready, request, timeoutMs),
     };
   } catch (error) {
     if (!isStaleEndpointError(error)) throw error;

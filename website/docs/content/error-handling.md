@@ -6,14 +6,15 @@ TideSurf exports typed domain errors for common failures. Unrelated page and CDP
 
 ```typescript
 import {
-  TideSurfError,        // Base class for all TideSurf errors
-  CDPConnectionError,   // Could not establish a CDP connection
-  CDPTimeoutError,      // A CDP operation exceeded its timeout
-  ChromeLaunchError,    // Chrome binary failed to start
-  ElementNotFoundError, // The given element ID is absent from the page map
-  NavigationError,      // Navigation to a URL failed
-  ValidationError,      // Input validation failed (e.g. invalid URL format)
-  ReadOnlyError,        // Session policy forbids this operation
+  TideSurfError,
+  ActionCommittedError,
+  CDPConnectionError,
+  CDPTimeoutError,
+  ChromeLaunchError,
+  ElementNotFoundError,
+  NavigationError,
+  ValidationError,
+  ReadOnlyError,
 } from "@tidesurf/core";
 ```
 
@@ -29,7 +30,7 @@ try {
 } catch (err) {
   if (err instanceof ElementNotFoundError) {
     // The page changed. Read fresh state before retrying.
-    const freshState = await browser.getState();
+    const freshState = await browser.readPage();
     // ... find the right element in freshState.content and try again
   } else if (err instanceof CDPTimeoutError) {
     // The page may be unresponsive or loading a heavy resource.
@@ -47,12 +48,15 @@ try {
 | `CDPConnectionError` | The requested CDP endpoint is unavailable or setup failed | Check attach settings or start a new managed browser |
 | `CDPTimeoutError` | A non-navigation CDP operation exceeded its timeout | Raise the timeout or skip an unresponsive page |
 | `NavigationError` | DNS failure, CDP navigation failure, or load timeout | Check network connectivity or handle the target as a dead link |
-| `ElementNotFoundError` | The element ID from a previous `getState()` no longer matches the current DOM | The page changed since the last state snapshot. Call `getState()` again to get fresh IDs |
+| `ElementNotFoundError` | The element ID from a previous `readPage()` result no longer matches the current DOM | The page changed since the last page read. Call `readPage()` again to get fresh IDs |
+| `ActionCommittedError` | A mutation completed, then page-stability confirmation failed | Do not repeat the mutation. Call `readPage()` to inspect the result |
 | `ValidationError` | Invalid input passed to a TideSurf method, including a malformed or forbidden URL | Fix the input before retrying |
 | `ReadOnlyError` | A method would navigate, mutate, evaluate, access files/clipboard, or mutate tabs | Use an allowed observation method or start a separate writable session |
 
 ## Automatic retry behavior
 
 TideSurf retries only transient browser-readiness failures during managed setup. Missing executables, explicit port collisions, invalid input, policy failures, and fixed attach failures return immediately. Browser setup cleans partial CDP clients, targets, processes, and temporary profiles before returning an error.
+
+Direct SDK mutation methods throw `ActionCommittedError` when the mutation succeeded but its follow-up page check failed. CLI and MCP tool calls convert it to a successful warning so an agent does not repeat the action.
 
 Add an application-level retry loop only when the operation is safe to repeat. Never retry a stale element ID against a guessed replacement; read fresh state first.

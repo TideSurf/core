@@ -74,7 +74,7 @@ Observe a page without exposing mutation tools:
 
 ```typescript
 const browser = await TideSurf.connect({ readOnly: true });
-const state = await browser.getState();
+const state = await browser.readPage();
 console.log(state.content);
 await browser.close();
 ```
@@ -85,7 +85,7 @@ Start Chrome with remote debugging, log in manually, then attach:
 
 ```typescript
 const browser = await TideSurf.connect({ port: 9222 });
-const state = await browser.getState();
+const state = await browser.readPage();
 console.log(state.content);
 ```
 
@@ -96,10 +96,10 @@ Long sessions can request only the context needed next:
 ```typescript
 const page = browser.getPage();
 
-const overview = await browser.getState({ mode: "interactive", maxTokens: 200 });
+const overview = await browser.readPage({ mode: "interactive", maxTokens: 200 });
 
 await page.click("B1");
-const detail = await browser.getState({ maxTokens: 500 });
+const detail = await browser.readPage({ maxTokens: 500 });
 
 const results = await page.search("error message");
 ```
@@ -117,10 +117,10 @@ const tab1 = (await browser.listTabs())[0];
 const tab2 = await browser.newTab("https://docs.example.com/v2/api");
 
 await browser.switchTab(tab1.id);
-const v1 = await browser.getState();
+const v1 = await browser.readPage();
 
 await browser.switchTab(tab2.id);
-const v2 = await browser.getState();
+const v2 = await browser.readPage();
 ```
 
 Send `v1.content` and `v2.content` to the model for comparison.
@@ -132,12 +132,12 @@ Fill a form from fresh interactive state. The state exposes controls such as `I1
 ```typescript
 const page = browser.getPage();
 
-const state = await browser.getState({ mode: "interactive" });
+const state = await browser.readPage({ mode: "interactive" });
 
 await page.type("I1", "Alice", true);
 await page.type("I2", "alice@example.com", true);
 await page.select("S1", "enterprise");
 await page.click("B1");
 
-const result = await browser.getState();
+const result = await browser.readPage();
 ```

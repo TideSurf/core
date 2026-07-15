@@ -116,7 +116,7 @@ async function main(): Promise<void> {
 
         // Use full-page visible state so both sides cover the same rendered page.
         const start = performance.now();
-        const state = await surf.getState({ viewport: false });
+        const state = await surf.readPage({ viewport: false });
         const ms = performance.now() - start;
         const tideSurfTokens = estimateTokens(state.content);
 

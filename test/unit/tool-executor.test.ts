@@ -52,7 +52,7 @@ describe("createToolExecutor", () => {
     const instance = {
       getPage: () => ({}),
       switchTab: jest.fn().mockResolvedValue(undefined),
-      getState: jest.fn().mockResolvedValue({ content: "switched state" }),
+      readPage: jest.fn().mockResolvedValue({ content: "switched state" }),
     };
 
     const executor = createToolExecutor(mockInstance(instance, true) as never);
@@ -154,7 +154,7 @@ describe("createToolExecutor", () => {
       expect(result.success).toBe(false);
       expect(result.errorType).toBe("ElementNotFoundError");
       expect(result.error).toBe(
-        'Element "B1" not found. Call getState() first to refresh the node map.'
+        'Element "B1" not found. Read the page again to refresh its action IDs.'
       );
     });
   });
@@ -184,7 +184,7 @@ describe("createToolExecutor", () => {
       const instance = {
         getPage: () => page,
         navigate: jest.fn().mockRejectedValue(new Error('Invalid URL: "not-a-url". Must be a valid absolute URL')),
-        getState: jest.fn(),
+        readPage: jest.fn(),
       };
 
       const executor = createToolExecutor(mockInstance(instance) as never);
@@ -200,7 +200,7 @@ describe("createToolExecutor", () => {
     it("should validate maxTokens is positive integer", async () => {
       const instance = {
         getPage: () => ({}),
-        getState: jest.fn().mockResolvedValue({ content: "test" }),
+        readPage: jest.fn().mockResolvedValue({ content: "test" }),
       };
 
       const executor = createToolExecutor(mockInstance(instance) as never);

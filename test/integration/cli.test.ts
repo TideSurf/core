@@ -113,7 +113,7 @@ describeCli("stateful CLI integration", () => {
     expect(navigation.code).toBe(0);
     expect(navigation.stdout).toContain("[B1] Action");
 
-    const state = await runCli(session, "get-state", "--full-page");
+    const state = await runCli(session, "get_state", "--full-page");
     expect(state.code).toBe(0);
     expect(state.stdout).toContain("[B1] Action");
 
@@ -156,26 +156,26 @@ describeCli("stateful CLI integration", () => {
   }, 60_000);
 
   it("persists tabs and the active tab", async () => {
-    const created = await runCli(session, "new-tab", "about:blank");
+    const created = await runCli(session, "new_tab", "about:blank");
     expect(created.code).toBe(0);
     const tab = JSON.parse(created.stdout) as { id: string };
 
-    const listed = await runCli(session, "list-tabs");
+    const listed = await runCli(session, "list_tabs");
     expect(listed.code).toBe(0);
     const tabs = JSON.parse(listed.stdout) as Array<{ id: string }>;
     expect(tabs).toHaveLength(2);
     expect(tabs.some((candidate) => candidate.id === tab.id)).toBe(true);
 
-    const state = await runCli(session, "get-state");
+    const state = await runCli(session, "get_state");
     expect(state.stdout).toContain("> blank");
     expect(state.stdout).not.toContain("Interactive Page");
   }, 60_000);
 
   it("keeps a named session alive after closing its final tab", async () => {
-    const initialState = await runCli(finalTabSession, "get-state");
+    const initialState = await runCli(finalTabSession, "get_state");
     expect(initialState.code).toBe(0);
 
-    const initialTabsResult = await runCli(finalTabSession, "list-tabs");
+    const initialTabsResult = await runCli(finalTabSession, "list_tabs");
     expect(initialTabsResult.code).toBe(0);
     const initialTabs = JSON.parse(initialTabsResult.stdout) as Array<{
       id: string;
@@ -184,12 +184,12 @@ describeCli("stateful CLI integration", () => {
 
     const closed = await runCli(
       finalTabSession,
-      "close-tab",
+      "close_tab",
       initialTabs[0].id
     );
     expect(closed.code).toBe(0);
 
-    const replacementTabsResult = await runCli(finalTabSession, "list-tabs");
+    const replacementTabsResult = await runCli(finalTabSession, "list_tabs");
     expect(replacementTabsResult.code).toBe(0);
     const replacementTabs = JSON.parse(replacementTabsResult.stdout) as Array<{
       id: string;
@@ -197,7 +197,7 @@ describeCli("stateful CLI integration", () => {
     expect(replacementTabs).toHaveLength(1);
     expect(replacementTabs[0].id).not.toBe(initialTabs[0].id);
 
-    const replacementState = await runCli(finalTabSession, "get-state");
+    const replacementState = await runCli(finalTabSession, "get_state");
     expect(replacementState.code).toBe(0);
     expect(replacementState.stdout).toContain("> blank");
   }, 60_000);
@@ -207,14 +207,14 @@ describeCli("stateful CLI integration", () => {
       readOnlySession,
       "--read-only",
       "--allow-localhost",
-      "get-state"
+      "get_state"
     );
     expect(started.code).toBe(0);
 
     const repeatedPolicy = await runCli(
       readOnlySession,
       "--read-only",
-      "get-state"
+      "get_state"
     );
     expect(repeatedPolicy.code).toBe(0);
 
@@ -222,7 +222,7 @@ describeCli("stateful CLI integration", () => {
     expect(click.code).toBe(4);
     expect(click.stderr).toContain("read-only mode");
 
-    const conflict = await runCli(readOnlySession, "--headful", "get-state");
+    const conflict = await runCli(readOnlySession, "--headful", "get_state");
     expect(conflict.code).toBe(3);
     expect(conflict.stderr).toContain("different startup options");
   }, 60_000);

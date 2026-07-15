@@ -25,14 +25,14 @@ await browser.closeTab(tab.id);
 
 ## How tab state works
 
-Each tab keeps its own URL, DOM, history, and element IDs. `getState()` reads the active tab. Retrieve `browser.getPage()` after switching; a cached `SurfingPage` stays tied to the tab where it was created.
+Each tab keeps its own URL, DOM, history, and element IDs. `readPage()` reads the active tab. Retrieve `browser.getPage()` after switching; a cached `SurfingPage` stays tied to the tab where it was created.
 
 For example, an agent can read a reference page, switch to a form, enter the referenced value, and close the reference tab.
 
 ```typescript
 // Cross-reference two pages
 await browser.newTab("https://docs.example.com/api");
-const docsState = await browser.getState();
+const docsState = await browser.readPage();
 // Agent reads API details from docsState.content
 
 await browser.switchTab(originalTabId);

@@ -63,10 +63,10 @@ navigate(url: string): Promise<void>
 
 Navigates the active tab and waits for load. URL policy applies before navigation. Read-only instances throw `ReadOnlyError`.
 
-### `getState(options?)`
+### `readPage(options?)`
 
 ```typescript
-getState(options?: GetStateOptions): Promise<PageState>
+readPage(options?: ReadPageOptions): Promise<PageState>
 ```
 
 Returns compact text and the matching in-memory ID map.
@@ -79,6 +79,14 @@ Returns compact text and the matching in-memory ID map.
 | `includeHidden` | `boolean` | `false` | Include hidden nodes and disable viewport filtering |
 
 `includeHidden: true` is a full-DOM debugging override. It wins over `viewport: true`.
+
+### `getState(options?)` (deprecated)
+
+```typescript
+getState(options?: GetStateOptions): Promise<PageState>
+```
+
+Compatibility alias for `readPage()`. The deprecated `GetStateOptions` type is an alias for `ReadPageOptions`.
 
 ### `getPage()`
 
@@ -129,13 +137,15 @@ Each tab keeps its own page connection and ID map. `newTab()` activates the crea
 
 Every mutating method enforces read-only policy before CDP execution.
 
-### `getState(options?)`
+### `readPage(options?)`
 
 ```typescript
-getState(options?: GetStateOptions): Promise<PageState>
+readPage(options?: ReadPageOptions): Promise<PageState>
 ```
 
-Reads this page with the same viewport, mode, hidden-node, and token-target options as `TideSurf.getState()`.
+Reads this page with the same viewport, mode, hidden-node, and token-target options as `TideSurf.readPage()`.
+
+`SurfingPage.getState(options?)` remains as a deprecated compatibility alias for `readPage()`.
 
 ### `click(id)`
 
@@ -160,6 +170,8 @@ select(id: string, value: string): Promise<void>
 ```
 
 Selects an option by value on a native `<select>`. ARIA listboxes can appear in page state but are not action targets for this method.
+
+`navigate`, `click`, `type`, `select`, `scroll`, and `upload` can throw `ActionCommittedError` after completing their mutation when page confirmation fails. Read the page before deciding on another action; do not retry blindly.
 
 ### `scroll(direction, amount?)`
 
@@ -324,28 +336,28 @@ interface ToolResult {
 
 One registry supplies SDK definitions, executor dispatch, CLI parsing/help, MCP registration, read-only gating, and unknown-tool messages.
 
-| Tool | Input | CLI | Read-only |
-|---|---|---|---|
-| `get_state` | `maxTokens?`, `viewport?`, `mode?`, `includeHidden?` | `get-state` | yes |
-| `navigate` | `url` | `navigate` | no |
-| `click` | `id` | `click` | no |
-| `type` | `id`, `text`, `clear?` | `type` | no |
-| `select` | `id`, `value` | `select` | no |
-| `scroll` | `direction`, `amount?` | `scroll` | no |
-| `extract` | `selector` | `extract` | yes |
-| `evaluate` | `expression` | `evaluate` | no |
-| `list_tabs` | none | `list-tabs` | yes |
-| `new_tab` | `url?` | `new-tab` | no |
-| `switch_tab` | `tabId` | `switch-tab` | yes |
-| `close_tab` | `tabId` | `close-tab` | no |
-| `search` | `query`, `maxResults?` | `search` | yes |
-| `screenshot` | `elementId?`, `fullPage?` | `screenshot` | yes |
-| `upload` | `id`, `filePath` | `upload` | no |
-| `clipboard_read` | none | `clipboard-read` | no |
-| `clipboard_write` | `text` | `clipboard-write` | no |
-| `download` | `id`, `downloadDir?`, `timeout?` | `download` | no |
+| Tool and direct command | Input | Read-only |
+|---|---|---|
+| `get_state` | `maxTokens?`, `viewport?`, `mode?`, `includeHidden?` | yes |
+| `navigate` | `url` | no |
+| `click` | `id` | no |
+| `type` | `id`, `text`, `clear?` | no |
+| `select` | `id`, `value` | no |
+| `scroll` | `direction`, `amount?` | no |
+| `extract` | `selector` | yes |
+| `evaluate` | `expression` | no |
+| `list_tabs` | none | yes |
+| `new_tab` | `url?` | no |
+| `switch_tab` | `tabId` | yes |
+| `close_tab` | `tabId` | no |
+| `search` | `query`, `maxResults?` | yes |
+| `screenshot` | `elementId?`, `fullPage?` | yes |
+| `upload` | `id`, `filePath` | no |
+| `clipboard_read` | none | no |
+| `clipboard_write` | `text` | no |
+| `download` | `id`, `downloadDir?`, `timeout?` | no |
 
-CLI underscore aliases match tool names. MCP also registers `launch_browser` as a compatibility lifecycle tool; it is not one of the 18 registry tools.
+The CLI, SDK executor, and MCP use these exact identifiers. MCP registers `launch_browser` as a lifecycle tool outside the 18 registry tools.
 
 The executor returns page text for state actions, raw objects or arrays for structured tools, and a base64 PNG for `screenshot`. The CLI and MCP adapters format those values for their transports.
 
@@ -359,4 +371,4 @@ The package also exports:
 - `estimateTokens(text, charsPerToken?)` and `pruneToFit(nodes, options)` for parser integrations
 - `TabManager` for low-level CDP tab management
 
-These are library helpers, not CLI or MCP tools. `discoverBrowser()` does not launch Chromium.
+Library helpers do not appear in the CLI or MCP. `discoverBrowser()` does not launch Chromium.

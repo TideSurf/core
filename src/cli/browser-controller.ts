@@ -6,9 +6,8 @@ import {
 import { CDPConnectionError } from "../errors.js";
 import { discoverActiveBrowser } from "../cdp/launcher.js";
 import {
-  getToolSpec,
-  readOnlyToolMessage,
-  unknownToolMessage,
+  dispatchTool,
+  executeToolSpec,
 } from "../tools/registry.js";
 import type { ToolResult } from "../types.js";
 import type { SessionConfig } from "./session.js";
@@ -49,6 +48,7 @@ export class BrowserController {
   private browser: TideSurf | null = null;
   private source: "launched" | "attached" | undefined;
   private opening: Promise<TideSurf> | null = null;
+  private operationTail: Promise<void> = Promise.resolve();
   private closing: Promise<void> | null = null;
   private closed = false;
 
@@ -74,8 +74,10 @@ export class BrowserController {
   }
 
   async start(): Promise<BrowserStatus> {
-    await this.getBrowser();
-    return this.status();
+    return this.runSerialized(async () => {
+      await this.getBrowser();
+      return this.status();
+    });
   }
 
   async launchBrowser(options: { headless?: boolean } = {}): Promise<{
@@ -83,22 +85,18 @@ export class BrowserController {
     headless: boolean;
     source: "launched" | "attached";
   }> {
-    const alreadyRunning = this.browser !== null;
-    if (!alreadyRunning && options.headless !== undefined) {
-      this.config.headless = options.headless;
-    }
-    await this.getBrowser();
-    return {
-      alreadyRunning,
-      headless: this.config.headless,
-      source: this.source!,
-    };
-  }
-
-  async executor(): Promise<
-    (tool: { name: string; input: Record<string, unknown> }) => Promise<ToolResult>
-  > {
-    return (await this.getBrowser()).getToolExecutor();
+    return this.runSerialized(async () => {
+      const alreadyRunning = this.browser !== null;
+      if (!alreadyRunning && options.headless !== undefined) {
+        this.config.headless = options.headless;
+      }
+      await this.getBrowser();
+      return {
+        alreadyRunning,
+        headless: this.config.headless,
+        source: this.source!,
+      };
+    });
   }
 
   async getBrowser(): Promise<TideSurf> {
@@ -185,10 +183,7 @@ export class BrowserController {
         connectionError = error;
       }
 
-      if (
-        this.config.browserMode === "connect" ||
-        !isLocalHost(explicitEndpoint.host)
-      ) {
+      if (!isLocalHost(explicitEndpoint.host)) {
         throw connectionError;
       }
     }
@@ -230,19 +225,33 @@ export class BrowserController {
   }
 
   async execute(name: string, input: Record<string, unknown>): Promise<ToolResult> {
-    const tool = getToolSpec(name);
-    if (!tool) return { success: false, error: unknownToolMessage(name) };
-    if (this.config.readOnly && !tool.readOnlyAllowed) {
-      return { success: false, error: readOnlyToolMessage(tool) };
-    }
-    const executor = await this.executor();
-    return executor({ name, input });
+    return dispatchTool({ name, input }, this.config.readOnly, (tool, toolInput) =>
+      this.runSerialized(async () =>
+        executeToolSpec(await this.getBrowser(), tool, toolInput)
+      )
+    );
+  }
+
+  private runSerialized<T>(operation: () => Promise<T>): Promise<T> {
+    const run = () => {
+      if (this.closed) {
+        throw new CDPConnectionError("Browser controller is closed");
+      }
+      return operation();
+    };
+    const result = this.operationTail.then(run);
+    this.operationTail = result.then(
+      () => undefined,
+      () => undefined
+    );
+    return result;
   }
 
   async close(): Promise<void> {
     if (this.closing) return this.closing;
     this.closed = true;
     this.closing = (async () => {
+      await this.operationTail;
       await this.opening?.catch(() => undefined);
       const browser = this.browser;
       this.browser = null;

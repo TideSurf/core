@@ -8,6 +8,7 @@ import { SurfingPage } from "../../src/cdp/page.js";
 import type { TabManager } from "../../src/cdp/tab-manager.js";
 import { TideSurf } from "../../src/tidesurf.js";
 import {
+  ActionCommittedError,
   CDPConnectionError,
   ChromeLaunchError,
   ValidationError,
@@ -125,6 +126,64 @@ describe("TideSurf.switchTab", () => {
     expect(close).not.toHaveBeenCalled();
   });
 
+  it("shares one CDP connection for concurrent switches to the same tab", async () => {
+    let releaseConnection!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseConnection = resolve;
+    });
+    const conn = connection();
+    const connectToTab = mock(async () => {
+      await gate;
+      return conn;
+    });
+    const surf = instance({ connectToTab } as Pick<TabManager, "connectToTab">);
+
+    const first = surf.switchTab("next");
+    const second = surf.switchTab("next");
+    releaseConnection();
+    await Promise.all([first, second]);
+
+    expect(connectToTab).toHaveBeenCalledTimes(1);
+    expect(Reflect.get(surf, "activeTabId")).toBe("next");
+    await surf.close();
+  });
+
+  it("serializes switching to and closing the same uncached tab", async () => {
+    let releaseConnection!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseConnection = resolve;
+    });
+    const nextClose = mock(async () => {});
+    const closeTab = mock(async () => {});
+    const tabManager = {
+      connectToTab: mock(async () => {
+        await gate;
+        return connection({ close: nextClose });
+      }),
+      listTabs: mock(async () => [
+        { id: "initial", url: "about:blank", title: "", type: "page" },
+        { id: "next", url: "about:blank", title: "", type: "page" },
+      ]),
+      closeTab,
+    };
+    const surf = instance(
+      tabManager as unknown as Pick<TabManager, "connectToTab">
+    );
+
+    const switching = surf.switchTab("next");
+    const closing = surf.closeTab("next");
+    expect(closeTab).not.toHaveBeenCalled();
+
+    releaseConnection();
+    await switching;
+    await closing;
+
+    expect(closeTab).toHaveBeenCalledWith("next", undefined);
+    expect(nextClose).toHaveBeenCalledTimes(1);
+    expect(Reflect.get(surf, "activeTabId")).toBe("initial");
+    await surf.close();
+  });
+
   it("preserves connection failures", async () => {
     const surf = instance({
       connectToTab: mock(async () => {
@@ -153,14 +212,15 @@ describe("TideSurf.switchTab", () => {
 
     const switching = surf.switchTab("next");
     while (applyViewport.mock.calls.length === 0) await Promise.resolve();
-    await surf.close();
+    const closing = surf.close();
     releaseViewport();
 
     await expect(switching).rejects.toThrow("TideSurf is closed");
+    await closing;
     expect(close).toHaveBeenCalledTimes(1);
   });
 
-  it("rejects an empty new-tab URL before creating a target", async () => {
+  it("rejects an empty new tab URL before creating a target", async () => {
     const createTab = mock(async () => ({
       id: "new",
       url: "about:blank",
@@ -174,6 +234,39 @@ describe("TideSurf.switchTab", () => {
 
     await expect(surf.newTab("")).rejects.toBeInstanceOf(ValidationError);
     expect(createTab).not.toHaveBeenCalled();
+  });
+
+  it("rolls back a new target when close starts before ownership commits", async () => {
+    const replacementClose = mock(async () => {});
+    const replacementPage = new SurfingPage(
+      connection({ close: replacementClose })
+    );
+    const closeTab = mock(async () => {});
+    const surf = instance({
+      connectToTab: mock(async () => connection()),
+      closeTab,
+    } as unknown as Pick<TabManager, "connectToTab">);
+    let closing!: Promise<void>;
+    Reflect.set(surf, "createConnectedTabResources", mock(async () => {
+      queueMicrotask(() => {
+        closing = surf.close();
+      });
+      return {
+        tab: {
+          id: "new",
+          url: "about:blank",
+          title: "",
+          type: "page",
+        },
+        page: replacementPage,
+      };
+    }));
+
+    await expect(surf.newTab()).rejects.toThrow("TideSurf is closed");
+    await closing;
+
+    expect(replacementClose).toHaveBeenCalledTimes(1);
+    expect(closeTab).toHaveBeenCalledWith("new", undefined);
   });
 
   it("does not expose mutable URL policy state", async () => {
@@ -204,6 +297,31 @@ describe("TideSurf.switchTab", () => {
 });
 
 describe("TideSurf.closeTab", () => {
+  it("keeps the active target open when successor setup fails", async () => {
+    const closeTab = mock(async (_id: string) => {});
+    const tabManager = {
+      listTabs: mock(async () => [
+        { id: "initial", url: "about:blank", title: "", type: "page" },
+        { id: "next", url: "about:blank", title: "", type: "page" },
+      ]),
+      connectToTab: mock(async () => {
+        throw new Error("successor setup failed");
+      }),
+      closeTab,
+    };
+    const surf = instance(
+      tabManager as unknown as Pick<TabManager, "connectToTab">
+    );
+
+    await expect(surf.closeTab("initial")).rejects.toThrow(
+      "successor setup failed"
+    );
+
+    expect(closeTab).not.toHaveBeenCalled();
+    expect(Reflect.get(surf, "activeTabId")).toBe("initial");
+    expect(surf.getPage()).toBeInstanceOf(SurfingPage);
+  });
+
   it("connects a replacement before closing the final target", async () => {
     const calls: string[] = [];
     const replacementConnection = connection();
@@ -269,6 +387,46 @@ describe("TideSurf.closeTab", () => {
     expect(surf.getPage()).toBeInstanceOf(SurfingPage);
   });
 
+  it("rolls back an uncommitted replacement when close wins the race", async () => {
+    const replacementClose = mock(async () => {});
+    const replacementPage = new SurfingPage(
+      connection({ close: replacementClose })
+    );
+    const closeTab = mock(async () => {});
+    const tabManager = {
+      listTabs: mock(async () => [
+        { id: "initial", url: "about:blank", title: "", type: "page" },
+      ]),
+      connectToTab: mock(async () => connection()),
+      closeTab,
+    };
+    const surf = instance(
+      tabManager as unknown as Pick<TabManager, "connectToTab">
+    );
+    let closing!: Promise<void>;
+    Reflect.set(surf, "createConnectedTabResources", mock(async () => {
+      queueMicrotask(() => {
+        closing = surf.close();
+      });
+      return {
+        tab: {
+          id: "replacement",
+          url: "about:blank",
+          title: "",
+          type: "page",
+        },
+        page: replacementPage,
+      };
+    }));
+
+    await expect(surf.closeTab("initial")).rejects.toThrow("TideSurf is closed");
+    await closing;
+
+    expect(replacementClose).toHaveBeenCalledTimes(1);
+    expect(closeTab).toHaveBeenCalledTimes(1);
+    expect(closeTab).toHaveBeenCalledWith("replacement", undefined);
+  });
+
   it("reports a page disconnect failure after removing the closed tab", async () => {
     const closeTab = mock(async () => {});
     const surf = instance({
@@ -287,8 +445,8 @@ describe("TideSurf.closeTab", () => {
       )
     );
 
-    await expect(surf.closeTab("second")).rejects.toThrow(
-      "CDP connection did not close cleanly"
+    await expect(surf.closeTab("second")).rejects.toBeInstanceOf(
+      ActionCommittedError
     );
 
     expect(closeTab).toHaveBeenCalledWith("second", undefined);
@@ -349,7 +507,7 @@ describe("TideSurf.close", () => {
     await expect(surf.navigate("https://example.com")).rejects.toBeInstanceOf(
       CDPConnectionError
     );
-    await expect(surf.getState()).rejects.toBeInstanceOf(CDPConnectionError);
+    await expect(surf.readPage()).rejects.toBeInstanceOf(CDPConnectionError);
     expect(() => surf.getPage()).toThrow(CDPConnectionError);
     await expect(surf.listTabs()).rejects.toBeInstanceOf(CDPConnectionError);
     await expect(surf.closeTab("second")).rejects.toBeInstanceOf(

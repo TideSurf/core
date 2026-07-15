@@ -14,6 +14,7 @@ export {
   NavigationError,
   ValidationError,
   ReadOnlyError,
+  ActionCommittedError,
 } from "./errors.js";
 
 export {
@@ -34,6 +35,7 @@ export type {
   PageState,
   TideSurfOptions,
   TideSurfConnectOptions,
+  ReadPageOptions,
   GetStateOptions,
   ToolDefinition,
   ToolResult,

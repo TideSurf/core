@@ -1,5 +1,5 @@
 /**
- * CDP DOM.Node subset — what we get from DOM.getDocument({depth: -1})
+ * CDP DOM node shape reconstructed from `DOMSnapshot.captureSnapshot`.
  */
 export interface CDPNode {
   nodeId: number;
@@ -16,9 +16,6 @@ export interface CDPNode {
   frameId?: string;
 }
 
-/**
- * Classification action for a DOM element
- */
 export type ClassifyAction = "KEEP" | "COLLAPSE" | "DISCARD";
 
 export interface ClassifyResult {
@@ -26,9 +23,6 @@ export interface ClassifyResult {
   mappedTag?: string;
 }
 
-/**
- * Compressed DOM node produced by the parser
- */
 export interface OSNode {
   tag: string;
   id?: string;
@@ -36,18 +30,12 @@ export interface OSNode {
   children: OSNode[];
   text?: string;
   visible?: boolean;
-  /** Computed interaction state flags (disabled, obscured, inert) */
   state?: string[];
 }
 
-/**
- * Maps assigned IDs back to CDP backendNodeIds for interaction
- */
 export type NodeMap = Map<string, number>;
 
-/**
- * Full page state returned by getState()
- */
+/** Current page text and the action IDs represented by that text. */
 export interface PageState {
   url: string;
   title: string;
@@ -57,10 +45,8 @@ export interface PageState {
   nodeMap: NodeMap;
 }
 
-/**
- * Options for getState()
- */
-export interface GetStateOptions {
+/** Controls page capture, filtering, and token pruning. */
+export interface ReadPageOptions {
   maxTokens?: number;
   /** Only include elements visible in the current viewport. Defaults to true. Set false for full page. */
   viewport?: boolean;
@@ -70,6 +56,9 @@ export interface GetStateOptions {
   includeHidden?: boolean;
 }
 
+/** @deprecated Use `ReadPageOptions`. */
+export type GetStateOptions = ReadPageOptions;
+
 /** Chromium release channel used for executable and profile discovery. */
 export type ChromeChannel =
   | "stable"
@@ -78,53 +67,33 @@ export type ChromeChannel =
   | "canary"
   | "chromium";
 
-/**
- * Options for launching TideSurf
- */
-export interface TideSurfOptions {
+interface TideSurfSessionOptions {
+  defaultViewport?: { width: number; height: number };
+  timeout?: number;
+  /** Reject navigation, interaction, evaluation, clipboard, filesystem, and tab mutation. */
+  readOnly?: boolean;
+  /** Allowed host filesystem roots. Omit for cwd + tmpdir; pass [] to disable file access. */
+  fileAccessRoots?: string[];
+  /** Allow navigation to localhost/loopback URLs. Intended for trusted local development. */
+  allowLocalhost?: boolean;
+  /** Allow navigation to private/link-local network URLs. Also allows localhost. */
+  allowPrivateHosts?: boolean;
+}
+
+export interface TideSurfOptions extends TideSurfSessionOptions {
   headless?: boolean;
   chromePath?: string;
   /** Browser channel to auto-detect when chromePath is not provided. */
   channel?: ChromeChannel;
   port?: number;
   userDataDir?: string;
-  defaultViewport?: { width: number; height: number };
-  timeout?: number;
-  /** Reject navigation, interaction, evaluation, clipboard, filesystem, and tab mutation. */
-  readOnly?: boolean;
-  /** Allowed host filesystem roots. Omit for cwd + tmpdir; pass [] to disable file access. */
-  fileAccessRoots?: string[];
-  /** Allow navigation to localhost/loopback URLs. Intended for trusted local development. */
-  allowLocalhost?: boolean;
-  /** Allow navigation to private/link-local network URLs. Also allows localhost. */
-  allowPrivateHosts?: boolean;
 }
 
-/**
- * Options for connecting to an already-running Chrome instance
- */
-export interface TideSurfConnectOptions {
-  /** CDP port to connect to (default: 9222) */
+export interface TideSurfConnectOptions extends TideSurfSessionOptions {
   port?: number;
-  /** CDP host to connect to (default: localhost) */
   host?: string;
-  /** Viewport size to apply to the connected tab */
-  defaultViewport?: { width: number; height: number };
-  /** Connect timeout in ms */
-  timeout?: number;
-  /** Reject navigation, interaction, evaluation, clipboard, filesystem, and tab mutation. */
-  readOnly?: boolean;
-  /** Allowed host filesystem roots. Omit for cwd + tmpdir; pass [] to disable file access. */
-  fileAccessRoots?: string[];
-  /** Allow navigation to localhost/loopback URLs. Intended for trusted local development. */
-  allowLocalhost?: boolean;
-  /** Allow navigation to private/link-local network URLs. Also allows localhost. */
-  allowPrivateHosts?: boolean;
 }
 
-/**
- * Provider-neutral tool definition used by TideSurf adapters.
- */
 export interface ToolDefinition {
   name: string;
   description: string;
@@ -135,65 +104,36 @@ export interface ToolDefinition {
   };
 }
 
-/**
- * Result from executing a tool
- */
 export interface ToolResult {
   success: boolean;
   data?: unknown;
   error?: string;
-  /** Error type/class name for programmatic handling */
   errorType?: string;
-  /** Stack trace in development mode */
   stack?: string;
 }
 
-/**
- * Result from searching the page
- */
 export interface SearchResult {
-  /** Surrounding text context */
   text: string;
-  /** HTML tag name */
   tag: string;
-  /** Match index (1-based) */
   index: number;
-  /** Closest interactive TideSurf ID, when one exists */
   elementId?: string;
 }
 
-/**
- * Options for screenshot
- */
 export interface ScreenshotOptions {
-  /** Capture a specific element by its TideSurf ID */
   elementId?: string;
-  /** Capture the full scrollable page (default: viewport only) */
   fullPage?: boolean;
 }
 
-/**
- * Result from a download operation
- */
 export interface DownloadResult {
-  /** Path to the downloaded file */
   filePath: string;
-  /** Original file name */
   fileName: string;
-  /** File size in bytes */
   totalBytes: number;
 }
 
-/**
- * Scroll position metadata for viewport mode
- */
 export interface ScrollPosition {
   scrollY: number;
   scrollHeight: number;
   viewportHeight: number;
 }
 
-/**
- * Prefix map for ID assignment
- */
 export type IDPrefixMap = Record<string, string>;

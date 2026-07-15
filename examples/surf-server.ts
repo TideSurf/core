@@ -18,7 +18,7 @@ import { validatePort } from "../src/validation.js";
 
 const headful = process.argv.includes("--headful");
 const portIdx = process.argv.indexOf("--port");
-const port = portIdx !== -1 ? Number.parseInt(process.argv[portIdx + 1] ?? "", 10) : 7370;
+const port = portIdx === -1 ? 7370 : Number(process.argv[portIdx + 1]);
 validatePort(port);
 
 console.error(`[tidesurf] Launching browser (${headful ? "headful" : "headless"})...`);

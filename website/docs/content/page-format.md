@@ -1,6 +1,6 @@
 # Page format
 
-`getState()` walks the live DOM and returns compact text containing usable controls, semantic structure, and visible copy.
+`readPage()` returns compact text containing usable controls, semantic structure, and visible copy from the live page.
 
 ## Before and after
 
@@ -48,7 +48,7 @@ Supported controls and selected structural containers receive short IDs. Control
 |---|---|---|
 | `L` | Links (`<a>` tags) | `L1`, `L2`, `L14` |
 | `B` | Buttons | `B1`, `B2` |
-| `I` | Text inputs, textareas | `I1`, `I3` |
+| `I` | Inputs and textareas | `I1`, `I3` |
 | `S` | Select dropdowns | `S1` |
 | `F` | Forms | `F1` |
 | `T` | Tables | `T1` |
@@ -90,7 +90,6 @@ Element state appears inline through familiar text conventions.
 |---|---|
 | `[B1] Submit` | Normal, clickable button |
 | `~~[B1] Submit~~` | Disabled or inert: do not interact |
-| `[B1] Submit obscured` | Behind an overlay: dismiss blocker first |
 | `[B1] Menu open` | Toggle is expanded |
 | `[B1] Menu closed` | Toggle is collapsed |
 | `[L1](/url →) text` | Link opens in new tab |
@@ -108,7 +107,7 @@ Unavailable elements use `~~strikethrough~~`. Do not pass their IDs to `click`, 
 ~~[B2] Save~~                # inert (pointer-events:none or HTML inert)
 ```
 
-The marker covers `disabled`, `aria-disabled="true"`, `<fieldset disabled>`, `pointer-events: none`, and `inert`. `~~` means the control is not actionable.
+This formatting covers `disabled`, `aria-disabled="true"`, `<fieldset disabled>`, `pointer-events: none`, and `inert`. `~~` means the control is not actionable.
 
 **Toggle state: `open` / `closed`**
 
@@ -120,13 +119,7 @@ Expandable controls show their toggle state:
 ~~[B3] Options closed~~       # disabled AND collapsed
 ```
 
-**Obscured controls: `obscured`**
-
-Controls behind an overlay remain in the output as blocked. Dismiss the overlay first:
-
-```
-[B1] Submit obscured          # behind an overlay
-```
+Page reads omit paint-order obscuration. DOMSnapshot geometry does not prove which painted element receives a hit, so TideSurf does not guess. Use a screenshot when overlay state matters.
 
 **Links with a target**
 
@@ -179,4 +172,4 @@ TideSurf checks computed styles before serialization:
 
 This keeps CSS-hidden elements, honeypots, and off-screen traps out of the agent surface.
 
-`getState({ includeHidden: true })` is a full-DOM debugging override. It includes CSS-hidden, `hidden`, `aria-hidden`, and offscreen nodes, and disables viewport filtering even when `viewport: true` is also supplied.
+`readPage({ includeHidden: true })` is a full-DOM debugging override. It includes CSS-hidden, `hidden`, `aria-hidden`, and offscreen nodes, and disables viewport filtering even when `viewport: true` is also supplied.

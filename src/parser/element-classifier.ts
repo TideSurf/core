@@ -59,9 +59,6 @@ const ROLE_TAG_MAP: Record<string, string> = {
   cell: "cell",
 };
 
-/**
- * Parse a flat attribute array ["key","value","key","value"] into a Record
- */
 export function parseAttributes(attrs?: string[]): Record<string, string> {
   const result: Record<string, string> = {};
   if (!attrs) return result;
@@ -71,9 +68,6 @@ export function parseAttributes(attrs?: string[]): Record<string, string> {
   return result;
 }
 
-/**
- * Classify a DOM element into KEEP, COLLAPSE, or DISCARD
- */
 export function classify(
   nodeName: string,
   attributes?: Record<string, string>,
@@ -84,7 +78,7 @@ export function classify(
 
   if (!options?.includeHidden) {
     if (
-      attributes?.["aria-hidden"] === "true" ||
+      attributes?.["aria-hidden"]?.toLowerCase() === "true" ||
       attributes?.["hidden"] !== undefined ||
       attributes?.["data-os-hidden"] === "subtree" ||
       attributes?.["data-os-hidden"] === "1"

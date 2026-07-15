@@ -773,36 +773,11 @@ select:focus-visible {
   gap: 0.36rem;
 }
 
-.cookie-notice {
-  position: fixed;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  z-index: 40;
-  padding: 0.65rem clamp(1rem, 4vw, 2.5rem);
-  padding-left: calc(clamp(1rem, 4vw, 2.5rem) + 7rem);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.8rem;
-  color: var(--ink-2);
-  background: var(--canvas-2);
-  font-size: 0.84rem;
-}
-
-.cookie-ok {
-  flex: 0 0 auto;
-}
-
 .floating-theme {
   position: fixed;
   bottom: 1rem;
   left: clamp(1rem, 4vw, 2.5rem);
   z-index: 50;
-}
-
-body.cookie-visible .floating-theme {
-  bottom: 0.65rem;
 }
 
 @media (max-width: 1120px) {
@@ -1073,9 +1048,6 @@ body.cookie-visible .floating-theme {
     flex-direction: column;
   }
 
-  .cookie-notice {
-    align-items: center;
-  }
 }
 
 @media (max-width: 360px) {

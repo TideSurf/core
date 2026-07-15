@@ -92,6 +92,8 @@ Normal state filters CSS-hidden, `hidden`, `aria-hidden`, and offscreen content.
 
 Full-DOM output can reveal text and controls not intended for the visible interface and can increase token use sharply. Keep the override out of routine autonomous loops.
 
+Page reads run a bounded, non-mutating node preflight followed by `DOMSnapshot.captureSnapshot`. They do not add marker attributes or mutate page content. Snapshot geometry does not establish paint-order hit testing, so TideSurf omits `obscured` state instead of inferring it.
+
 ## Clipboard and downloads
 
 Clipboard tools access the system clipboard visible to Chromium. Downloads write to the host filesystem. Both stay unavailable in read-only sessions.

@@ -1,6 +1,6 @@
 import CDP, { type Client } from "chrome-remote-interface";
-import type { CDPNode } from "../types.js";
 import {
+  ActionCommittedError,
   CDPConnectionError,
   ElementNotFoundError,
   NavigationError,
@@ -9,15 +9,8 @@ import {
 } from "../errors.js";
 import { withTimeout } from "./timeout.js";
 
-/** Clipboard reads share one cooldown across connections. */
 let lastClipboardReadTime = 0;
 const CLIPBOARD_READ_COOLDOWN_MS = 5_000;
-const REMOTE_OBJECT_GONE_MESSAGES = [
-  "Cannot find context with specified id",
-  "Could not find object with given id",
-  "Invalid remote object id",
-  "Execution context was destroyed",
-] as const;
 
 interface RuntimeResponse {
   result?: {
@@ -83,10 +76,12 @@ function remainingTimeout(deadline: number): number {
   return Math.max(1, deadline - Date.now());
 }
 
-async function grantClipboardPermissions(
+async function withClipboardPermissions<T>(
   conn: CDPConnection,
-  deadline: number
-): Promise<void> {
+  timeout: number,
+  operation: (deadline: number) => Promise<T>
+): Promise<T> {
+  const deadline = Date.now() + timeout;
   const originResult = await runtimeEvaluate(
     conn,
     {
@@ -108,16 +103,39 @@ async function grantClipboardPermissions(
     params.origin = origin;
   }
 
-  await withTimeout(
-    conn.client.send("Browser.grantPermissions", params),
-    remainingTimeout(deadline),
-    "clipboard:grantPermissions"
+  const grant = conn.client.send("Browser.grantPermissions", params);
+  let grantCompleted = false;
+  let operationFailed = true;
+  const reset = () => withTimeout(
+    conn.client.send("Browser.resetPermissions"),
+    1_000,
+    "clipboard:resetPermissions"
   );
-  await withTimeout(
-    conn.client.send("Page.bringToFront"),
-    remainingTimeout(deadline),
-    "clipboard:bringToFront"
-  );
+  try {
+    await withTimeout(
+      grant,
+      remainingTimeout(deadline),
+      "clipboard:grantPermissions"
+    );
+    grantCompleted = true;
+    await withTimeout(
+      conn.client.send("Page.bringToFront"),
+      remainingTimeout(deadline),
+      "clipboard:bringToFront"
+    );
+    const result = await operation(deadline);
+    operationFailed = false;
+    return result;
+  } finally {
+    try {
+      await reset();
+    } catch (error) {
+      if (!operationFailed) throw error;
+    }
+    if (!grantCompleted) {
+      void grant.then(() => reset()).catch(() => undefined);
+    }
+  }
 }
 
 export interface CDPConnection {
@@ -129,9 +147,7 @@ export interface CDPConnection {
   Emulation: Client["Emulation"];
 }
 
-/**
- * Connect to Chrome via CDP and enable required domains
- */
+/** Connect to Chrome and enable the required CDP domains. */
 export async function connect(options: {
   port?: number;
   host?: string;
@@ -139,6 +155,7 @@ export async function connect(options: {
   timeout?: number;
 }): Promise<CDPConnection> {
   const timeout = options.timeout ?? 10_000;
+  const deadline = Date.now() + timeout;
   let client: Client | undefined;
   let abandoned = false;
   const pendingClient = CDP({
@@ -157,7 +174,7 @@ export async function connect(options: {
   try {
     client = await withTimeout(
       pendingClient,
-      timeout,
+      remainingTimeout(deadline),
       "CDP connect"
     );
 
@@ -165,8 +182,13 @@ export async function connect(options: {
 
     await withTimeout(
       Promise.all([DOM.enable(), Page.enable(), Runtime.enable()]),
-      timeout,
+      remainingTimeout(deadline),
       "CDP domain enable"
+    );
+    await withTimeout(
+      Page.setLifecycleEventsEnabled({ enabled: true }),
+      remainingTimeout(deadline),
+      "CDP lifecycle enable"
     );
 
     return { client, DOM, Page, Runtime, Input, Emulation };
@@ -201,134 +223,41 @@ export async function connect(options: {
 
 export const MAX_DOM_NODES = 50_000;
 
-/** Count composed CDP nodes without growing the JavaScript call stack. */
-function countNodes(root: CDPNode): number {
-  let count = 0;
-  const stack = [root];
-  while (stack.length > 0) {
-    const node = stack.pop()!;
-    count++;
-    if (count > MAX_DOM_NODES) return count;
-    for (const child of node.children ?? []) stack.push(child);
-    for (const shadowRoot of node.shadowRoots ?? []) stack.push(shadowRoot);
-    if (node.contentDocument) stack.push(node.contentDocument);
-  }
-  return count;
-}
-
-/**
- * Get the full DOM tree while bounding protocol response size. The composed
- * element pre-check runs before chrome-remote-interface parses the full tree.
- */
-export async function getFullDOM(
-  conn: CDPConnection,
-  timeout?: number,
-  knownElementCount?: number
-): Promise<CDPNode> {
-  let elementCount = knownElementCount;
-  if (
-    elementCount === undefined ||
-    !Number.isInteger(elementCount) ||
-    elementCount < 0
-  ) {
-    const preCheck = await runtimeEvaluate(
-      conn,
-      {
-        expression: `(() => {
-  const limit = ${MAX_DOM_NODES};
-  let count = 0;
-  let queuedElements = 0;
-  const stack = [document];
-  const enqueueElement = el => {
-    if (!el) return true;
-    queuedElements++;
-    if (count + queuedElements > limit) return false;
-    stack.push(el);
-    return true;
-  };
-  while (stack.length > 0) {
-    const current = stack.pop();
-    if (current.nodeType === Node.DOCUMENT_NODE) {
-      if (!enqueueElement(current.documentElement)) return limit + 1;
-      continue;
-    }
-    if (current.nodeType === Node.DOCUMENT_FRAGMENT_NODE) {
-      for (const child of current.children) {
-        if (!enqueueElement(child)) return limit + 1;
-      }
-      continue;
-    }
-    if (current.nodeType !== Node.ELEMENT_NODE) continue;
-
-    queuedElements--;
-    count++;
-    if (current.shadowRoot) stack.push(current.shadowRoot);
-    if (current.tagName === 'IFRAME') {
-      try { if (current.contentDocument) stack.push(current.contentDocument); } catch {}
-    }
-    for (const child of current.children) {
-      if (!enqueueElement(child)) return limit + 1;
-    }
-  }
-  return count;
-})()`,
-        returnByValue: true,
-      },
-      timeout ?? 5_000,
-      "getFullDOM:preCount"
-    );
-    elementCount = Number(preCheck.result?.value ?? 0);
-  }
-  if (Number.isFinite(elementCount) && elementCount > MAX_DOM_NODES) {
-    throw new Error(
-      `DOM exceeds maximum node count of ${MAX_DOM_NODES.toLocaleString()} (found ${elementCount.toLocaleString()} elements). ` +
-      `Use viewport mode or navigate to a simpler page.`
-    );
-  }
-
-  const { root } = await withTimeout(
-    conn.DOM.getDocument({ depth: -1, pierce: true }),
-    timeout ?? 15_000,
-    "getFullDOM"
-  );
-
-  // Include text, shadow, and frame nodes omitted by the element pre-check.
-  const nodeCount = countNodes(root as unknown as CDPNode);
-  if (nodeCount > MAX_DOM_NODES) {
-    throw new Error(
-      `DOM exceeds maximum node count of ${MAX_DOM_NODES.toLocaleString()} (found ${nodeCount.toLocaleString()}). ` +
-      `Use viewport mode or navigate to a simpler page.`
-    );
-  }
-
-  return root as unknown as CDPNode;
-}
-
-/**
- * Navigate to a URL and wait for load
- */
 export async function navigate(
   conn: CDPConnection,
   url: string,
   timeout?: number
 ): Promise<void> {
   const operationTimeout = timeout ?? 30_000;
+  const deadline = Date.now() + operationTimeout;
+  const loadedLoaders = new Set<string>();
+  let expectedLoader: string | undefined;
   let resolveLoaded!: () => void;
   const loaded = new Promise<void>((resolveLoad) => {
     resolveLoaded = resolveLoad;
   });
-  const unsubscribe = conn.Page.loadEventFired(() => resolveLoaded());
+  const unsubscribe = conn.Page.lifecycleEvent((event) => {
+    if (event.name !== "load") return;
+    if (expectedLoader === undefined) loadedLoaders.add(event.loaderId);
+    else if (event.loaderId === expectedLoader) resolveLoaded();
+  });
+  let committed = false;
   try {
     const result = await withTimeout(
       conn.Page.navigate({ url }),
-      operationTimeout,
+      remainingTimeout(deadline),
       "navigate:request"
     );
     if (result.errorText) throw new Error(result.errorText);
     if (result.loaderId) {
-      await withTimeout(loaded, operationTimeout, "navigate:load");
+      committed = true;
+      expectedLoader = result.loaderId;
+      if (loadedLoaders.has(expectedLoader)) resolveLoaded();
+      loadedLoaders.clear();
+      await withTimeout(loaded, remainingTimeout(deadline), "navigate:load");
     }
   } catch (err) {
+    if (committed) throw new ActionCommittedError("Navigation", err);
     throw new NavigationError(
       url,
       err instanceof Error ? err.message : String(err),
@@ -344,54 +273,27 @@ async function withResolvedNode<T>(
   backendNodeId: number,
   timeout: number,
   operation: string,
-  use: (objectId: string) => Promise<T>
+  use: (objectId: string, remaining: () => number) => Promise<T>
 ): Promise<T> {
+  const deadline = Date.now() + timeout;
+  const remaining = () => remainingTimeout(deadline);
   const { object } = await withTimeout(
     conn.DOM.resolveNode({ backendNodeId }),
-    timeout,
+    remaining(),
     `${operation}:resolve`
   );
   const objectId = object.objectId;
   if (!objectId) throw new ElementNotFoundError(`backendNodeId:${backendNodeId}`);
 
-  let operationFailed = false;
   try {
-    const connected = await callFunction(
-      conn,
-      {
-        objectId,
-        functionDeclaration: "function() { return this.isConnected === true; }",
-        returnByValue: true,
-      },
-      timeout,
-      `${operation}:connected`
-    );
-    if (connected.result?.value === false) {
-      throw new ElementNotFoundError(`backendNodeId:${backendNodeId}`, "The mapped node is detached.");
-    }
-    return await use(objectId);
-  } catch (error) {
-    operationFailed = true;
-    throw error;
+    return await use(objectId, remaining);
   } finally {
-    try {
-      await withTimeout(
-        conn.Runtime.releaseObject({ objectId }),
-        timeout,
-        `${operation}:release`
-      );
-    } catch (error) {
-      if (!operationFailed && !isRemoteObjectGone(error)) throw error;
-    }
+    await withTimeout(
+      conn.Runtime.releaseObject({ objectId }),
+      Math.min(1_000, remaining()),
+      `${operation}:release`
+    ).catch(() => undefined);
   }
-}
-
-function isRemoteObjectGone(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  for (const message of REMOTE_OBJECT_GONE_MESSAGES) {
-    if (error.message.includes(message)) return true;
-  }
-  return false;
 }
 
 export async function clickNode(
@@ -400,23 +302,38 @@ export async function clickNode(
   timeout?: number
 ): Promise<void> {
   const operationTimeout = timeout ?? 5_000;
-  await withResolvedNode(conn, backendNodeId, operationTimeout, "clickNode", (objectId) =>
+  await withResolvedNode(conn, backendNodeId, operationTimeout, "clickNode", (objectId, remaining) =>
     callFunction(
       conn,
       {
         objectId,
-        functionDeclaration: "function() { this.click(); }",
+        functionDeclaration: `function() {
+          if (this.isConnected !== true) return false;
+          const ariaDisabled = this.closest('[aria-disabled="true" i]') !== null;
+          const inert = this.closest('[inert]') !== null;
+          const pointerBlocked = this.ownerDocument.defaultView
+            .getComputedStyle(this).pointerEvents === 'none';
+          if (this.matches(':disabled') || ariaDisabled || inert || pointerBlocked) {
+            throw new Error('Target is disabled or inert');
+          }
+          this.click();
+          return true;
+        }`,
         returnByValue: true,
       },
-      operationTimeout,
+      remaining(),
       "clickNode:click"
-    ).then(() => undefined)
+    ).then((result) => {
+      if (result.result?.value === false) {
+        throw new ElementNotFoundError(
+          `backendNodeId:${backendNodeId}`,
+          "The mapped node is detached."
+        );
+      }
+    })
   );
 }
 
-/**
- * Type text into a node
- */
 export async function typeText(
   conn: CDPConnection,
   backendNodeId: number,
@@ -430,12 +347,13 @@ export async function typeText(
     backendNodeId,
     operationTimeout,
     "typeText",
-    async (objectId) => {
-      await callFunction(
+    (objectId, remaining) =>
+      callFunction(
         conn,
         {
           objectId,
-          functionDeclaration: `function() {
+          functionDeclaration: `function(text, clear) {
+            if (this.isConnected !== true) return false;
             const tag = this.tagName;
             const type = tag === 'INPUT'
               ? String(this.type || 'text').toLowerCase()
@@ -450,67 +368,90 @@ export async function typeText(
             if (!editable) {
               throw new Error('Target is not a text-editable input, textarea, or contenteditable element');
             }
-            if (this.disabled || this.readOnly || this.getAttribute('aria-disabled') === 'true') {
+            const ariaDisabled = this.closest('[aria-disabled="true" i]') !== null;
+            const inert = this.closest('[inert]') !== null;
+            const pointerBlocked = this.ownerDocument.defaultView
+              .getComputedStyle(this).pointerEvents === 'none';
+            if (this.matches(':disabled') || this.readOnly || ariaDisabled || inert || pointerBlocked) {
               throw new Error('Target is disabled or read-only');
             }
-            this.focus();
-          }`,
-          returnByValue: true,
-        },
-        operationTimeout,
-        "typeText:focus"
-      );
-
-      if (clear) {
-        await callFunction(
-          conn,
-          {
-            objectId,
-            functionDeclaration: `function() {
-              if (this.isContentEditable === true) {
-                this.textContent = '';
+            let changed = false;
+            if (this.isContentEditable === true) {
+              const before = this.textContent || '';
+              if (clear) this.textContent = '';
+              if (text) {
                 const selection = this.ownerDocument.getSelection();
-                if (selection) {
-                  const range = this.ownerDocument.createRange();
-                  range.selectNodeContents(this);
-                  range.collapse(false);
+                const range = !clear && selection?.rangeCount && this.contains(selection.anchorNode)
+                  ? selection.getRangeAt(0)
+                  : undefined;
+                if (range) {
+                  range.deleteContents();
+                  const node = this.ownerDocument.createTextNode(text);
+                  range.insertNode(node);
+                  range.setStartAfter(node);
+                  range.collapse(true);
                   selection.removeAllRanges();
                   selection.addRange(range);
+                } else if (typeof this.append === 'function') {
+                  this.append(text);
+                } else {
+                  this.textContent = (this.textContent || '') + text;
                 }
-              } else {
-                this.value = '';
               }
-            }`,
-            returnByValue: true,
-          },
-          operationTimeout,
-          "typeText:clear"
-        );
-      }
-
-      await withTimeout(
-        conn.Input.insertText({ text }),
-        operationTimeout,
-        "typeText:insert"
-      );
-      await callFunction(
-        conn,
-        {
-          objectId,
-          functionDeclaration:
-            "function() { this.dispatchEvent(new Event('input', {bubbles: true})); this.dispatchEvent(new Event('change', {bubbles: true})); }",
+              changed = (this.textContent || '') !== before;
+            } else {
+              const before = String(this.value || '');
+              const start = clear ? 0 : (this.selectionStart ?? before.length);
+              const end = clear ? before.length : (this.selectionEnd ?? start);
+              const retainedLength = before.length - (end - start);
+              const maxLength = Number.isInteger(this.maxLength) && this.maxLength >= 0
+                ? this.maxLength
+                : Infinity;
+              const available = Math.max(0, maxLength - retainedLength);
+              let inserted = text.slice(0, available);
+              if (
+                inserted.length < text.length &&
+                /[\uD800-\uDBFF]$/.test(inserted) &&
+                /^[\uDC00-\uDFFF]/.test(text.slice(inserted.length))
+              ) {
+                inserted = inserted.slice(0, -1);
+              }
+              const next = before.slice(0, start) + inserted + before.slice(end);
+              const view = this.ownerDocument.defaultView;
+              const prototype = tag === 'INPUT'
+                ? view.HTMLInputElement.prototype
+                : view.HTMLTextAreaElement.prototype;
+              const setter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
+              if (setter) setter.call(this, next);
+              else this.value = next;
+              const caret = start + inserted.length;
+              if (
+                typeof this.selectionStart === 'number' &&
+                typeof this.setSelectionRange === 'function'
+              ) {
+                this.setSelectionRange(caret, caret);
+              }
+              changed = next !== before;
+            }
+            if (changed) this.dispatchEvent(new Event('input', { bubbles: true }));
+            return true;
+          }`,
+          arguments: [{ value: text }, { value: clear }],
           returnByValue: true,
         },
-        operationTimeout,
-        "typeText:events"
-      );
-    }
+        remaining(),
+        "typeText:type"
+      ).then((result) => {
+        if (result.result?.value === false) {
+          throw new ElementNotFoundError(
+            `backendNodeId:${backendNodeId}`,
+            "The mapped node is detached."
+          );
+        }
+      })
   );
 }
 
-/**
- * Select an option in a <select> element
- */
 export async function selectOption(
   conn: CDPConnection,
   backendNodeId: number,
@@ -523,37 +464,51 @@ export async function selectOption(
     backendNodeId,
     operationTimeout,
     "selectOption",
-    (objectId) =>
+    (objectId, remaining) =>
       callFunction(
         conn,
         {
           objectId,
           functionDeclaration: `function(value) {
+            if (this.isConnected !== true) return false;
             if (this.tagName !== 'SELECT') {
               throw new Error('Target is not a native select element');
             }
-            if (this.disabled || this.getAttribute('aria-disabled') === 'true') {
-              throw new Error('Target is disabled');
+            const ariaDisabled = this.closest('[aria-disabled="true" i]') !== null;
+            const inert = this.closest('[inert]') !== null;
+            const pointerBlocked = this.ownerDocument.defaultView
+              .getComputedStyle(this).pointerEvents === 'none';
+            if (this.matches(':disabled') || ariaDisabled || inert || pointerBlocked) {
+              throw new Error('Target is disabled or inert');
             }
-            if (!Array.from(this.options).some(option => option.value === value)) {
+            const option = Array.from(this.options).find(option => option.value === value);
+            if (!option) {
               throw new Error('Select option does not exist: ' + value);
+            }
+            if (option.matches(':disabled')) {
+              throw new Error('Select option is disabled: ' + value);
             }
             this.value = value;
             this.dispatchEvent(new Event('input', {bubbles: true}));
             this.dispatchEvent(new Event('change', {bubbles: true}));
+            return true;
           }`,
           arguments: [{ value }],
           returnByValue: true,
         },
-        operationTimeout,
+        remaining(),
         "selectOption:select"
-      ).then(() => undefined)
+      ).then((result) => {
+        if (result.result?.value === false) {
+          throw new ElementNotFoundError(
+            `backendNodeId:${backendNodeId}`,
+            "The mapped node is detached."
+          );
+        }
+      })
   );
 }
 
-/**
- * Scroll the page
- */
 export async function scroll(
   conn: CDPConnection,
   direction: "up" | "down",
@@ -564,14 +519,13 @@ export async function scroll(
   await runtimeEvaluate(
     conn,
     {
-      expression: `window.scrollBy(0, ${delta})`,
+      expression: `window.scrollBy({ top: ${delta}, left: 0, behavior: 'instant' })`,
     },
     timeout ?? 5_000,
     "scroll"
   );
 }
 
-/** Execute JavaScript in the page context. */
 export async function evaluate(
   conn: CDPConnection,
   expression: string,
@@ -636,10 +590,9 @@ export async function waitForStable(
   );
 }
 
-/**
- * Capture a screenshot of the page.
- * @returns Base64-encoded PNG string
- */
+const MAX_SCREENSHOT_DIMENSION = 16_384;
+const MAX_SCREENSHOT_PIXELS = 12_000_000;
+
 export async function captureScreenshot(
   conn: CDPConnection,
   options?: {
@@ -655,6 +608,22 @@ export async function captureScreenshot(
   } = { format: "png" };
 
   if (options?.clip) {
+    const { width, height, scale } = options.clip;
+    const scaledWidth = width * scale;
+    const scaledHeight = height * scale;
+    if (
+      !Number.isFinite(scaledWidth) ||
+      !Number.isFinite(scaledHeight) ||
+      scaledWidth <= 0 ||
+      scaledHeight <= 0 ||
+      scaledWidth > MAX_SCREENSHOT_DIMENSION ||
+      scaledHeight > MAX_SCREENSHOT_DIMENSION ||
+      scaledWidth * scaledHeight > MAX_SCREENSHOT_PIXELS
+    ) {
+      throw new ValidationError(
+        `Screenshot exceeds ${MAX_SCREENSHOT_DIMENSION}px per side or ${MAX_SCREENSHOT_PIXELS.toLocaleString()} total pixels`
+      );
+    }
     params.clip = options.clip;
   }
 
@@ -670,7 +639,6 @@ export async function captureScreenshot(
   return data;
 }
 
-/** Set files on a file input and dispatch its change event. */
 export async function setFileInput(
   conn: CDPConnection,
   backendNodeId: number,
@@ -683,33 +651,19 @@ export async function setFileInput(
     backendNodeId,
     operationTimeout,
     "setFileInput",
-    async (objectId) => {
-      await withTimeout(
+    (objectId, remaining) =>
+      withTimeout(
         conn.DOM.setFileInputFiles({ files: filePaths, objectId }),
-        operationTimeout,
+        remaining(),
         "setFileInput:files"
-      );
-      await callFunction(
-        conn,
-        {
-          objectId,
-          functionDeclaration:
-            "function() { this.dispatchEvent(new Event('change', { bubbles: true })); }",
-          returnByValue: true,
-        },
-        operationTimeout,
-        "setFileInput:change"
-      );
-    }
+      )
   );
 }
 
-/** Read text from the clipboard with a global cooldown. */
 export async function clipboardRead(
   conn: CDPConnection,
   timeout?: number
 ): Promise<string> {
-  // Reserve before awaiting so concurrent callers cannot share one slot.
   const now = Date.now();
   const timeSinceLastRead = now - lastClipboardReadTime;
 
@@ -721,53 +675,47 @@ export async function clipboardRead(
   }
   lastClipboardReadTime = now;
 
-  const deadline = Date.now() + (timeout ?? 5_000);
-  await grantClipboardPermissions(conn, deadline);
+  return withClipboardPermissions(conn, timeout ?? 5_000, async (deadline) => {
+    const result = await runtimeEvaluate(
+      conn,
+      {
+        expression: "navigator.clipboard.readText()",
+        awaitPromise: true,
+        userGesture: true,
+        returnByValue: true,
+      },
+      remainingTimeout(deadline),
+      "clipboard:read"
+    );
 
-  const result = await runtimeEvaluate(
-    conn,
-    {
-      expression: "navigator.clipboard.readText()",
-      awaitPromise: true,
-      userGesture: true,
-      returnByValue: true,
-    },
-    remainingTimeout(deadline),
-    "clipboard:read"
-  );
-
-  const value = result.result?.value;
-  if (typeof value !== "string") {
-    throw new Error("Clipboard read returned no text result");
-  }
-  return value;
+    const value = result.result?.value;
+    if (typeof value !== "string") {
+      throw new Error("Clipboard read returned no text result");
+    }
+    return value;
+  });
 }
 
-/**
- * Write text to the clipboard.
- */
 export async function clipboardWrite(
   conn: CDPConnection,
   text: string,
   timeout?: number
 ): Promise<void> {
-  const deadline = Date.now() + (timeout ?? 5_000);
-  await grantClipboardPermissions(conn, deadline);
-
-  await runtimeEvaluate(
-    conn,
-    {
-      expression: `navigator.clipboard.writeText(${JSON.stringify(text)})`,
-      awaitPromise: true,
-      userGesture: true,
-      returnByValue: true,
-    },
-    remainingTimeout(deadline),
-    "clipboard:write"
+  await withClipboardPermissions(conn, timeout ?? 5_000, (deadline) =>
+    runtimeEvaluate(
+      conn,
+      {
+        expression: `navigator.clipboard.writeText(${JSON.stringify(text)})`,
+        awaitPromise: true,
+        userGesture: true,
+        returnByValue: true,
+      },
+      remainingTimeout(deadline),
+      "clipboard:write"
+    ).then(() => undefined)
   );
 }
 
-/** Close the transport. Chrome drops enabled domains with the session. */
 export async function disconnect(
   conn: CDPConnection,
   timeout = 2_000

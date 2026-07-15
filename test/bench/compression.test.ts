@@ -10,7 +10,7 @@ import { readFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { TideSurf } from "../../src/index.js";
 import { estimateTokens } from "../../src/parser/token-budget.js";
-import { canLaunchBrowser } from "../support/browser.js";
+import { canResolveBrowser } from "../support/browser.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixturesDir = join(__dirname, "..", "fixtures");
@@ -65,7 +65,7 @@ function countInteractiveIds(content: string): number {
   return matches ? matches.length : 0;
 }
 
-const browserAvailable = await canLaunchBrowser();
+const browserAvailable = canResolveBrowser();
 const describeBench = browserAvailable ? describe : describe.skip;
 
 if (!browserAvailable) {
@@ -116,7 +116,7 @@ describeBench("Compression benchmarks", () => {
       pageFiles.map((name) => [name, `http://127.0.0.1:${address.port}/${name}`] as const)
     );
 
-    surfing = await TideSurf.launch({ headless: true, port: 9555, allowLocalhost: true });
+    surfing = await TideSurf.launch({ headless: true, allowLocalhost: true });
   }, 30000);
 
   afterAll(async () => {
@@ -208,7 +208,7 @@ describeBench("Compression benchmarks", () => {
       const renderedDomTokens = estimateTokens(renderedDom);
 
       // Get TideSurf compressed state
-      const state = await surfing.getState();
+      const state = await surfing.readPage();
       const osTokens = estimateTokens(state.content);
       const interactiveElements = countInteractiveIds(state.content);
 
@@ -253,8 +253,8 @@ describeBench("Compression benchmarks", () => {
     if (!fixture) throw new Error(`Missing benchmark fixture: ${expected.fixture}`);
     await surfing.navigate(fixtureUrls[fixture.file]);
 
-    const full = await surfing.getState();
-    const budgeted = await surfing.getState({ maxTokens: expected.maxTokens });
+    const full = await surfing.readPage();
+    const budgeted = await surfing.readPage({ maxTokens: expected.maxTokens });
 
     const fullTokens = estimateTokens(full.content);
     const budgetedTokens = estimateTokens(budgeted.content);
@@ -272,18 +272,18 @@ describeBench("Compression benchmarks", () => {
     expect(budgeted.content).toContain("truncated");
   }, 15000);
 
-  it("speed: realistic getState stays below 100ms average", async () => {
+  it("speed: realistic readPage stays below 100ms average", async () => {
     await surfing.navigate(fixtureUrls["bench-ecommerce.html"]);
 
     // Warm up
-    await surfing.getState();
+    await surfing.readPage();
 
     const runs = 10;
     const times: number[] = [];
 
     for (let i = 0; i < runs; i++) {
       const start = performance.now();
-      await surfing.getState();
+      await surfing.readPage();
       times.push(performance.now() - start);
     }
 
@@ -292,13 +292,13 @@ describeBench("Compression benchmarks", () => {
     const p99 = [...times].sort((a, b) => a - b)[Math.floor(runs * 0.99)];
 
     console.log(
-      `\n  getState (${runs} runs): avg=${avg.toFixed(1)}ms, p50=${p50.toFixed(1)}ms, p99=${p99.toFixed(1)}ms`
+      `\n  readPage (${runs} runs): avg=${avg.toFixed(1)}ms, p50=${p50.toFixed(1)}ms, p99=${p99.toFixed(1)}ms`
     );
 
     expect(avg).toBeLessThan(100);
   }, 15000);
 
-  it("speed: 10,000-element getState stays below 200ms p50", async () => {
+  it("speed: 10,000-element readPage stays below 200ms p50", async () => {
     await surfing.navigate(fixtureUrls["basic.html"]);
     await surfing.getPage().evaluate(`(() => {
       document.body.textContent = '';
@@ -317,18 +317,18 @@ describeBench("Compression benchmarks", () => {
       document.body.append(fragment);
     })()`);
 
-    await surfing.getState();
+    await surfing.readPage();
     const times: number[] = [];
     for (let index = 0; index < 5; index++) {
       const start = performance.now();
-      await surfing.getState();
+      await surfing.readPage();
       times.push(performance.now() - start);
     }
     times.sort((a, b) => a - b);
     const p50 = times[Math.floor(times.length / 2)];
 
     console.log(
-      `\n  getState (10,000 elements): p50=${p50.toFixed(1)}ms, range=${times[0].toFixed(1)}–${times.at(-1)!.toFixed(1)}ms`
+      `\n  readPage (10,000 elements): p50=${p50.toFixed(1)}ms, range=${times[0].toFixed(1)}–${times.at(-1)!.toFixed(1)}ms`
     );
     expect(p50).toBeLessThan(200);
   }, 15000);

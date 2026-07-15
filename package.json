@@ -29,10 +29,11 @@
     "test:bench": "bun test test/bench",
     "test:all": "bun test",
     "check:docs": "bun scripts/check-doc-sync.ts",
+    "check:release": "bun scripts/check-release.ts",
     "smoke:pack": "node scripts/smoke-packed.mjs",
     "build:web:landing": "bun run --cwd website/landing build",
     "build:web:docs": "bun run --cwd website/docs build",
-    "verify:release": "bun run build && bun run typecheck:examples && bun run check:docs && bun run test && bun run test:integration && bun run test:bench && bun run build:web:landing && bun run build:web:docs && npm_config_cache=.tmp-npm-cache npm pack --dry-run && bun run smoke:pack"
+    "verify:release": "bun run check:docs && bun run build && bun run typecheck:examples && bun run test && bun run test:integration && bun run test:bench && bun run build:web:landing && bun run build:web:docs && bun run smoke:pack"
   },
   "repository": {
     "type": "git",

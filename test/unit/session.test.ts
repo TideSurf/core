@@ -1,8 +1,8 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
-import { statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { connect as connectSocket, createServer } from "node:net";
 import { join } from "node:path";
 import {
@@ -14,6 +14,7 @@ import {
   isProcessRunning,
   readSessionState,
   removeSessionFiles,
+  sendLiveSessionRequest,
   sendSessionRequest,
   validateSessionName,
   writeSessionState,
@@ -96,8 +97,12 @@ describe("named session daemon", () => {
 
   it("reports a stopped browser before the first tool", async () => {
     const result = await sendSessionRequest<{
+      running: boolean;
+      starting: boolean;
+      ready: boolean;
       browser: { running: boolean };
     }>(state, { method: "status" });
+    expect(result).toMatchObject({ running: true, starting: false, ready: true });
     expect(result.browser.running).toBe(false);
   });
 
@@ -122,6 +127,8 @@ describe("named session daemon", () => {
       protocol: SESSION_PROTOCOL_VERSION,
       id: "malformed-tool",
       secret: state.secret,
+      deadline: Date.now() + 1_000,
+      executionTimeout: 500,
       request: { method: "tool", name: "get_state" },
     });
     expect(response).toMatchObject({
@@ -329,6 +336,62 @@ describe("session recovery", () => {
     }
   });
 
+  it("reports a live pending session as starting and makes stop explicit", async () => {
+    const name = `starting-${randomUUID()}`;
+    const paths = getSessionPaths(name);
+    writeSessionState(paths, {
+      protocol: SESSION_PROTOCOL_VERSION,
+      version: VERSION,
+      session: name,
+      secret: "d".repeat(64),
+      socketPath: paths.socketPath,
+      config,
+      pid: process.pid,
+      ready: false,
+      startupId: randomUUID(),
+    });
+
+    try {
+      await expect(
+        sendLiveSessionRequest(name, { method: "status" }, 25)
+      ).resolves.toMatchObject({
+        state: { ready: false },
+        data: { session: name, running: true, starting: true, ready: false },
+      });
+      await expect(
+        sendLiveSessionRequest(name, { method: "stop" }, 25)
+      ).rejects.toThrow(`Session ${name} is still starting`);
+    } finally {
+      removeSessionFiles(paths, true);
+    }
+  });
+
+  it("marks a transport timeout as an unknown outcome", async () => {
+    const name = `timeout-${randomUUID()}`;
+    const paths = getSessionPaths(name);
+    const server = createServer((socket) => socket.resume());
+    server.listen(paths.socketPath);
+    await once(server, "listening");
+
+    try {
+      await expect(
+        sendSessionRequest({
+          protocol: SESSION_PROTOCOL_VERSION,
+          version: VERSION,
+          session: name,
+          secret: "e".repeat(64),
+          socketPath: paths.socketPath,
+          config,
+          pid: process.pid,
+          ready: true,
+        }, { method: "tool", name: "click", input: { id: "B1" } }, 25)
+      ).rejects.toThrow("it may still complete, so inspect the session before retrying");
+    } finally {
+      await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+      removeSessionFiles(paths, true);
+    }
+  });
+
   it("starts exactly one daemon from a cold concurrent race", async () => {
     const name = `race-${randomUUID()}`;
     let candidates: SessionState[] = [];
@@ -410,6 +473,154 @@ describe("session recovery", () => {
     }
   });
 
+  it("acknowledges stop only after browser and session cleanup", async () => {
+    const name = `stop-cleanup-${randomUUID()}`;
+    const paths = getSessionPaths(name);
+    writeSessionState(paths, {
+      protocol: SESSION_PROTOCOL_VERSION,
+      version: VERSION,
+      session: name,
+      secret: "f".repeat(64),
+      socketPath: paths.socketPath,
+      config,
+      pid: process.pid,
+      ready: false,
+      startupId: randomUUID(),
+    });
+
+    let releaseClose!: () => void;
+    let markCloseStarted!: () => void;
+    const closeGate = new Promise<void>((resolveClose) => {
+      releaseClose = resolveClose;
+    });
+    const closeStarted = new Promise<void>((resolveStarted) => {
+      markCloseStarted = resolveStarted;
+    });
+    const controller: DaemonController = {
+      status: () => ({ running: false }),
+      start: async () => ({ running: false }),
+      execute: async () => ({ success: true }),
+      close: async () => {
+        markCloseStarted();
+        await closeGate;
+      },
+    };
+
+    await runDaemon(paths.stateFile, {
+      controllerFactory: () => controller,
+      installProcessHandlers: false,
+    });
+    const ready = readSessionState(paths)!;
+    const request = sendSessionRequest<{ stopped: boolean }>(
+      ready,
+      { method: "stop" },
+      2_000
+    );
+    let settled = false;
+    void request.then(
+      () => { settled = true; },
+      () => { settled = true; }
+    );
+
+    try {
+      await closeStarted;
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 20));
+      expect(settled).toBe(false);
+      expect(readSessionState(paths)).not.toBeNull();
+      releaseClose();
+      await expect(request).resolves.toMatchObject({ stopped: true });
+      expect(readSessionState(paths)).toBeNull();
+    } finally {
+      releaseClose();
+      await request.catch(() => undefined);
+      removeSessionFiles(paths, true);
+    }
+  });
+
+  it("acknowledges concurrent stop requests without dropping either socket", async () => {
+    const name = `stop-concurrent-${randomUUID()}`;
+    const paths = getSessionPaths(name);
+    writeSessionState(paths, {
+      protocol: SESSION_PROTOCOL_VERSION,
+      version: VERSION,
+      session: name,
+      secret: "e".repeat(64),
+      socketPath: paths.socketPath,
+      config,
+      pid: process.pid,
+      ready: false,
+      startupId: randomUUID(),
+    });
+    let closeCalls = 0;
+    const controller: DaemonController = {
+      status: () => ({ running: false }),
+      start: async () => ({ running: false }),
+      execute: async () => ({ success: true }),
+      close: async () => { closeCalls++; },
+    };
+
+    await runDaemon(paths.stateFile, {
+      controllerFactory: () => controller,
+      installProcessHandlers: false,
+    });
+    const ready = readSessionState(paths)!;
+    try {
+      const [first, second] = await Promise.all([
+        sendSessionRequest<{ stopped: boolean }>(ready, { method: "stop" }, 2_000),
+        sendSessionRequest<{ stopped: boolean }>(ready, { method: "stop" }, 2_000),
+      ]);
+      expect(first.stopped).toBe(true);
+      expect(second.stopped).toBe(true);
+      expect(closeCalls).toBe(1);
+    } finally {
+      removeSessionFiles(paths, true);
+    }
+  });
+
+  it("reports cleanup failure and preserves the daemon log", async () => {
+    const name = `stop-failure-${randomUUID()}`;
+    const paths = getSessionPaths(name);
+    writeFileSync(paths.logFile, "shutdown diagnostics\n", { mode: 0o600 });
+    writeSessionState(paths, {
+      protocol: SESSION_PROTOCOL_VERSION,
+      version: VERSION,
+      session: name,
+      secret: "0".repeat(64),
+      socketPath: paths.socketPath,
+      config,
+      pid: process.pid,
+      ready: false,
+      startupId: randomUUID(),
+    });
+    const controller: DaemonController = {
+      status: () => ({ running: false }),
+      start: async () => ({ running: false }),
+      execute: async () => ({ success: true }),
+      close: async () => { throw new Error("close failed"); },
+    };
+    const previousExitCode = process.exitCode;
+    const errorLog = spyOn(console, "error").mockImplementation(() => {});
+
+    await runDaemon(paths.stateFile, {
+      controllerFactory: () => controller,
+      installProcessHandlers: false,
+    });
+    const ready = readSessionState(paths)!;
+    try {
+      await expect(
+        sendSessionRequest(ready, { method: "stop" }, 2_000)
+      ).rejects.toThrow("Session shutdown failed (browser shutdown: close failed)");
+      expect(readSessionState(paths)).not.toBeNull();
+      expect(existsSync(paths.logFile)).toBe(true);
+      expect(readFileSync(paths.logFile, "utf8")).toContain("shutdown diagnostics");
+    } finally {
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 20));
+      errorLog.mockRestore();
+      process.exitCode = previousExitCode;
+      removeSessionFiles(paths, true);
+    }
+  });
+
   it("serializes tool work while health checks remain responsive", async () => {
     const name = `queue-${randomUUID()}`;
     const paths = getSessionPaths(name);
@@ -456,7 +667,7 @@ describe("session recovery", () => {
       const first = sendSessionRequest(ready, {
         method: "tool",
         name: "test",
-        input: { label: "a", delay: 100 },
+        input: { label: "a", delay: 40 },
       });
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 10));
       const pingStarted = Date.now();
@@ -467,6 +678,12 @@ describe("session recovery", () => {
         name: "test",
         input: { label: "b", delay: 0 },
       });
+      const cancelled = sendSessionRequest(ready, {
+        method: "tool",
+        name: "test",
+        input: { label: "c", delay: 0 },
+      }, 25);
+      await expect(cancelled).rejects.toThrow("cancelled before execution");
       await Promise.all([first, second]);
       expect(maxActive).toBe(1);
       expect(events).toEqual(["start:a", "end:a", "start:b", "end:b"]);

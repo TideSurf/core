@@ -12,16 +12,16 @@ Run a tool command through the package binary:
 
 ```bash
 bunx @tidesurf/core navigate https://example.com
-bunx @tidesurf/core get-state
+bunx @tidesurf/core get_state
 ```
 
 The first command starts a private local session and a managed headless browser. The second command connects to that session. The latest snapshot ID map, open tabs, and active tab stay in memory between shell calls. Read fresh state after the page changes.
 
-Act with an ID from `get-state`:
+Act with an ID from `get_state`:
 
 ```bash
 bunx @tidesurf/core click L1
-bunx @tidesurf/core get-state --mode interactive --max-tokens 500
+bunx @tidesurf/core get_state --mode interactive --max-tokens 500
 bunx @tidesurf/core stop
 ```
 
@@ -29,7 +29,7 @@ The default session is named `default`. Use a name to isolate work:
 
 ```bash
 bunx @tidesurf/core --session checkout navigate https://example.com/shop
-bunx @tidesurf/core --session checkout get-state
+bunx @tidesurf/core --session checkout get_state
 ```
 
 `stop` is idempotent. Sessions do not stop while idle. [CLI](#cli) covers every command, startup policy, output mode, and exit code.
@@ -68,7 +68,7 @@ import { TideSurf } from "@tidesurf/core";
 const browser = await TideSurf.launch();
 await browser.navigate("https://example.com");
 
-const state = await browser.getState();
+const state = await browser.readPage();
 console.log(state.content);
 
 await browser.getPage().click("B1");
@@ -106,11 +106,11 @@ The CLI uses managed launch by default. `--auto-connect` tries an endpoint or di
 Startup and security options become immutable when a named session starts. A later command may omit them or repeat matching standalone values such as `--read-only`, but it cannot change an explicit value. Stop the session or choose a new name for another policy.
 
 ```bash
-bunx @tidesurf/core --session audit --read-only get-state
+bunx @tidesurf/core --session audit --read-only get_state
 bunx @tidesurf/core --session audit status
 ```
 
-Read-only sessions allow `get-state`, `extract`, `list-tabs`, `switch-tab`, `search`, and `screenshot`. Navigation, page interaction, JavaScript, clipboard, upload/download, and tab creation or closure fail in the CLI, registry, SDK, and `getPage()` surface.
+Read-only sessions allow `get_state`, `extract`, `list_tabs`, `switch_tab`, `search`, and `screenshot`. Navigation, page interaction, JavaScript, clipboard, upload/download, and tab creation or closure fail in the CLI, registry, SDK, and `getPage()` surface.
 
 ## Use tool schemas
 
@@ -144,7 +144,7 @@ Add the packaged adapter to an MCP client:
 }
 ```
 
-The adapter uses the shared registry and executor. It adds `launch_browser` for MCP compatibility, converts screenshots to image blocks, and marks failed calls with `isError`.
+The adapter uses the shared registry and executor. It adds the `launch_browser` lifecycle tool, converts screenshots to image blocks, and marks failed calls with `isError`.
 
 ## Next
 

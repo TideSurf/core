@@ -1,7 +1,7 @@
 import type { ToolDefinition, ToolResult } from "../types.js";
 import {
+  formatToolData,
   getToolSpecs,
-  type ToolExecutor,
   type ToolSpec,
 } from "../tools/registry.js";
 
@@ -40,7 +40,7 @@ interface LaunchBrowserResult {
  * independent of the optional MCP SDK and of the CLI session implementation.
  */
 interface McpBrowserCoordinator {
-  executor(): Promise<ToolExecutor>;
+  execute(name: string, input: Record<string, unknown>): Promise<ToolResult>;
   launchBrowser(options: { headless?: boolean }): Promise<LaunchBrowserResult>;
 }
 
@@ -72,13 +72,6 @@ function text(value: string, isError = false): McpCallResult {
   };
 }
 
-function printable(value: unknown): string {
-  if (typeof value === "string") return value;
-  if (value === undefined) return "OK";
-  const serialized = JSON.stringify(value, null, 2);
-  return serialized ?? String(value);
-}
-
 function toolResult(spec: ToolSpec, result: ToolResult): McpCallResult {
   if (!result.success) {
     return text(result.error ?? "Tool failed", true);
@@ -95,7 +88,7 @@ function toolResult(spec: ToolSpec, result: ToolResult): McpCallResult {
     };
   }
 
-  return text(printable(result.data));
+  return text(formatToolData(result.data));
 }
 
 function caught(error: unknown): McpCallResult {
@@ -142,10 +135,9 @@ export function registerMcpTools({
       },
       async (input) => {
         try {
-          const execute = await coordinator.executor();
           return toolResult(
             spec,
-            await execute({ name: spec.name, input })
+            await coordinator.execute(spec.name, input)
           );
         } catch (error) {
           return caught(error);

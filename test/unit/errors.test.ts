@@ -41,7 +41,7 @@ describe("Error classes", () => {
     expect(err).toBeInstanceOf(TideSurfError);
     expect(err.name).toBe("ElementNotFoundError");
     expect(err.message).toContain("B5");
-    expect(err.message).toContain("getState()");
+    expect(err.message).toContain("Read the page again");
   });
 
   it("NavigationError includes URL and optional reason", () => {

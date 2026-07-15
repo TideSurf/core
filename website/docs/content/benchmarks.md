@@ -8,10 +8,10 @@ TideSurf compresses the live DOM into model-readable text. Deep nesting, SVGs, a
 
 | Fixture | Source HTML | Rendered DOM | TideSurf | Source reduction | Ratio |
 |---|---:|---:|---:|---:|---:|
-| E-commerce | 5,348 tokens | 5,336 tokens | 446 tokens | 92% | 12.0x |
-| News | 4,807 tokens | 4,807 tokens | 395 tokens | 92% | 12.2x |
+| E-commerce | 5,348 tokens | 5,336 tokens | 469 tokens | 91% | 11.4x |
+| News | 4,807 tokens | 4,807 tokens | 387 tokens | 92% | 12.4x |
 
-The token-budget regression also reduces the 446-token e-commerce state to 274 tokens with a 300-token target while retaining actionable IDs and visible omission markers.
+The token-budget regression also reduces the 469-token e-commerce state to 267 tokens with a 300-token target while retaining actionable IDs and visible omission markers.
 
 ## Understanding the numbers
 
@@ -20,7 +20,7 @@ Compression follows page structure:
 - Deep trees, inline SVG, generated classes, wrappers, and embedded scripts or styles produce larger reductions.
 - Text-heavy, shallow pages retain more source content and produce smaller reductions.
 
-The DOM walker removes scripts, styles, CSS classes, layout wrappers, decorative SVG, hidden elements, comments, and processing instructions. It keeps controls with short IDs, visible copy, semantic containers, tables, and enough hierarchy to understand the page.
+One bounded, non-mutating node preflight precedes each `DOMSnapshot.captureSnapshot` request. Snapshot decoding removes scripts, styles, CSS classes, layout wrappers, decorative SVG, hidden elements, comments, and processing instructions. It keeps controls with short IDs, visible copy, semantic containers, tables, and enough hierarchy to understand the page. Paint-order obscuration is omitted instead of inferred from incomplete geometry.
 
 ## Cost impact
 
@@ -52,8 +52,10 @@ The live diagnostic covers eight sites by default. It uses `viewport: false` so 
 
 - **Browser:** Headless Chrome via CDP (same as production usage)
 - **Token estimation:** Four-character heuristic (≈4 characters per token); no model tokenizer runs
-- **Raw HTML:** `document.documentElement.outerHTML` after full page load
-- **TideSurf output:** `getState({ viewport: false }).content` with no token budget limit for the live full-page visible-state comparison; local acceptance tests exercise the production viewport default separately
-- **Parse time:** Wall-clock time for `getState()` call only (excludes navigation)
+- **Source HTML:** Fixed fixture source text for reproducible local results
+- **Rendered DOM:** `document.documentElement.outerHTML` after full page load
+- **TideSurf output:** `readPage({ viewport: false }).content` with no token budget limit for the live full-page visible-state comparison; local acceptance tests exercise the production viewport default separately
+- **Parse time:** Wall-clock time for `readPage()` only (excludes navigation)
+- **Capture path:** Bounded non-mutating node preflight, one `DOMSnapshot.captureSnapshot`, then local decode/filter/prune/serialize passes
 
 Fixture results are deterministic for a given parser revision. Live results vary with content, geography, authentication, experiments, and anti-automation pages.
