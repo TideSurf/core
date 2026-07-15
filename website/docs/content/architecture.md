@@ -56,7 +56,7 @@ The CLI defaults to managed launch. `--auto-connect` adds ordered discovery befo
 
 Managed launch uses an isolated profile by default and `--remote-debugging-port=0` unless a port is explicit. Chrome writes the selected port and browser WebSocket path to `DevToolsActivePort`. TideSurf connects to that endpoint instead of fabricating a WebSocket URL.
 
-Browser setup is transactional. A failed stage closes any partial CDP client or target, terminates an owned process, drains its pipes, and removes an owned temporary profile. Startup retries only transient readiness failures.
+Browser setup is transactional. Profile preparation and every later stage roll back through the same typed failure path. A failed stage closes any partial CDP client or target, terminates an owned process, drains its pipes, and removes an owned temporary profile. Startup errors include a bounded tail of Chrome stderr. Startup retries only transient readiness failures.
 
 Shutdown is idempotent. It disconnects unique pages in parallel, waits for an owned process to exit, escalates termination when required, then removes the profile.
 
@@ -101,7 +101,15 @@ tool lookup → read-only gate → input validation → handler
 
 Element actions resolve once through a timed resolve/use/release boundary. Missing current IDs become `ElementNotFoundError`; unrelated CDP failures keep their original type.
 
+After resolution, mutating requests share one uncertainty boundary. A timeout or disconnect after dispatch returns `ActionCommittedError` instead of a retryable failure for interaction, scrolling, evaluation, clipboard write, file selection, and tab mutation. Deterministic validation, resolution, and page-side errors remain failures.
+
 Stability waits use independent page observers with quiet and hard deadlines. Concurrent waits do not share page-global timer state.
+
+Navigation and download waits observe the same disconnect boundary. They stop promptly when the browser or target closes. `switch_tab` reconnects a deliberately disconnected page client and evicts a stale cache entry when the target no longer accepts a connection.
+
+Element screenshots resolve the current ID once and capture its border box with beyond-viewport capture enabled. All screenshot paths share the same dimension and pixel-area limits.
+
+Clipboard permission changes serialize per browser endpoint within one TideSurf process, so its page connections cannot race while independent browsers remain independent. A timed-out permission reset keeps that process-local endpoint queue reserved until Chrome settles the raw command. One download may own a `SurfingPage` connection at a time; separate clients attached to the same target do not share this lock. Timed-out setup and restore commands keep the connection reserved until their raw replies settle. Cleanup failures after a completed transfer and uncertain trigger failures use the committed-action path to prevent unsafe retries.
 
 ## Read-only boundary
 

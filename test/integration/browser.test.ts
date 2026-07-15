@@ -580,6 +580,67 @@ describeBrowser("Browser integration", () => {
     expect(pngSignature).toBe("89504e470d0a1a0a");
   }, 15000);
 
+  it("captures the full border box of an offscreen element", async () => {
+    await surfing.navigate(fixtureUrls["interactive.html"]);
+    const page = surfing.getPage();
+    await page.evaluate(`(() => {
+      document.body.textContent = '';
+      const spacer = document.createElement('div');
+      spacer.style.height = '3000px';
+      const button = document.createElement('button');
+      button.setAttribute('aria-label', 'OFFSCREEN CAPTURE');
+      button.style.cssText = [
+        'display:block',
+        'box-sizing:border-box',
+        'width:120px',
+        'height:60px',
+        'border:8px solid rgb(0, 128, 0)',
+        'background:rgb(255, 0, 0)',
+      ].join(';');
+      document.body.append(spacer, button);
+    })()`);
+    const state = await page.readPage({ viewport: false });
+    const id = /\[(B\d+)\] OFFSCREEN CAPTURE/.exec(state.content)?.[1];
+    expect(id).toBeDefined();
+
+    const offscreen = Buffer.from(
+      await page.screenshot({ elementId: id! }),
+      "base64"
+    );
+    const dataUrl = `data:image/png;base64,${offscreen.toString("base64")}`;
+    const pixel = await page.evaluate(`(async () => {
+      const response = await fetch(${JSON.stringify(dataUrl)});
+      const bitmap = await createImageBitmap(await response.blob());
+      const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+      const context = canvas.getContext('2d');
+      context.drawImage(bitmap, 0, 0);
+      return Array.from(context.getImageData(20, 20, 1, 1).data);
+    })()`) as number[];
+
+    expect({
+      width: offscreen.readUInt32BE(16),
+      height: offscreen.readUInt32BE(20),
+    }).toEqual({ width: 120, height: 60 });
+    expect(pixel).toEqual([255, 0, 0, 255]);
+  }, 15000);
+
+  it("preflights snapshots when a page replaces the Node global", async () => {
+    await surfing.navigate(fixtureUrls["basic.html"]);
+    const page = surfing.getPage();
+    await page.evaluate(
+      "window.__tidesurfSavedNode = window.Node; window.Node = undefined"
+    );
+
+    try {
+      const state = await page.readPage();
+      expect(state.content).toContain("Test Page");
+    } finally {
+      await page.evaluate(
+        "window.Node = window.__tidesurfSavedNode; delete window.__tidesurfSavedNode"
+      );
+    }
+  }, 15000);
+
   it("uploads files to file inputs", async () => {
     await surfing.navigate(fixtureUrls["advanced-tools.html"]);
     await surfing.readPage();

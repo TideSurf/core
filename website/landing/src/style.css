@@ -72,7 +72,8 @@ pre {
   position: fixed;
   inset: 0;
   width: 100%;
-  height: 100dvh;
+  height: 100vh;
+  height: 100lvh;
   z-index: 0;
   pointer-events: none;
   opacity: 0.58;
@@ -99,6 +100,17 @@ pre {
 .skip-link:focus-visible {
   left: 1rem;
   z-index: 50;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
 }
 
 .compact-control {
@@ -538,13 +550,10 @@ pre {
     gap: 5rem;
   }
 
-  .compact-control {
-    min-height: 2.75rem;
-  }
-
   .hero {
     min-height: calc(100svh - 3.65rem);
-    padding: 5rem 0 4rem;
+    padding: clamp(3.75rem, 10svh, 5rem) 0 4rem;
+    justify-content: flex-start;
   }
 
   .specimen {
@@ -566,6 +575,13 @@ pre {
   }
 }
 
+@media (max-width: 768px) {
+  .compact-control,
+  .topnav-brand {
+    min-height: 2.75rem;
+  }
+}
+
 @media (max-width: 560px) {
   :root {
     --page: min(100% - 2rem, 100%);
@@ -584,7 +600,7 @@ pre {
   }
 
   .hero {
-    padding-top: 4.5rem;
+    padding-top: clamp(3.25rem, 9svh, 4.5rem);
   }
 
   .hero h1 {

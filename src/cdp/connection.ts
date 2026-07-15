@@ -2,6 +2,7 @@ import CDP, { type Client } from "chrome-remote-interface";
 import {
   ActionCommittedError,
   CDPConnectionError,
+  CDPTimeoutError,
   ElementNotFoundError,
   NavigationError,
   TideSurfError,
@@ -13,17 +14,92 @@ import {
 } from "../validation.js";
 import { withTimeout } from "./timeout.js";
 
-let lastClipboardReadTime = 0;
-let clipboardTail: Promise<void> = Promise.resolve();
 const CLIPBOARD_READ_COOLDOWN_MS = 5_000;
 
-function serializeClipboard<T>(operation: () => Promise<T>): Promise<T> {
-  const result = clipboardTail.then(operation);
-  clipboardTail = result.then(
+interface ClipboardCoordinator {
+  references: number;
+  lastReadTime: number;
+  tail: Promise<void>;
+}
+
+const endpointClipboardCoordinators = new Map<string, ClipboardCoordinator>();
+const connectionClipboardCoordinators = new WeakMap<
+  CDPConnection,
+  ClipboardCoordinator
+>();
+const clipboardCoordinatorReleases = new WeakMap<CDPConnection, () => void>();
+
+function clipboardCoordinator(conn: CDPConnection): ClipboardCoordinator {
+  const existing = connectionClipboardCoordinators.get(conn);
+  if (existing) return existing;
+  const coordinator: ClipboardCoordinator = {
+    references: 1,
+    lastReadTime: 0,
+    tail: Promise.resolve(),
+  };
+  connectionClipboardCoordinators.set(conn, coordinator);
+  return coordinator;
+}
+
+function registerClipboardCoordinator(
+  conn: CDPConnection,
+  endpoint: string
+): void {
+  let coordinator = endpointClipboardCoordinators.get(endpoint);
+  if (coordinator) {
+    coordinator.references++;
+  } else {
+    coordinator = {
+      references: 1,
+      lastReadTime: 0,
+      tail: Promise.resolve(),
+    };
+    endpointClipboardCoordinators.set(endpoint, coordinator);
+  }
+  connectionClipboardCoordinators.set(conn, coordinator);
+
+  let released = false;
+  const release = () => {
+    if (released) return;
+    released = true;
+    conn.client.removeListener("disconnect", release);
+    clipboardCoordinatorReleases.delete(conn);
+    connectionClipboardCoordinators.delete(conn);
+    coordinator.references--;
+    if (
+      coordinator.references === 0 &&
+      endpointClipboardCoordinators.get(endpoint) === coordinator
+    ) {
+      endpointClipboardCoordinators.delete(endpoint);
+    }
+  };
+  clipboardCoordinatorReleases.set(conn, release);
+  conn.client.once("disconnect", release);
+}
+
+function serializeClipboard<T>(
+  conn: CDPConnection,
+  operation: () => Promise<T>
+): Promise<T> {
+  const coordinator = clipboardCoordinator(conn);
+  const result = coordinator.tail.then(operation);
+  coordinator.tail = result.then(
     () => undefined,
     () => undefined
   );
   return result;
+}
+
+function reserveClipboardUntil(
+  conn: CDPConnection,
+  pending: Promise<unknown>
+): void {
+  const coordinator = clipboardCoordinator(conn);
+  const settled = () => pending.then(
+    () => undefined,
+    () => undefined
+  );
+  coordinator.tail = coordinator.tail.then(settled, settled);
 }
 
 interface RuntimeResponse {
@@ -90,10 +166,48 @@ function remainingTimeout(deadline: number): number {
   return Math.max(1, deadline - Date.now());
 }
 
+async function runMutation<T>(
+  conn: CDPConnection,
+  operation: string,
+  request: () => Promise<T>
+): Promise<T> {
+  if (conn.disconnected) {
+    throw new CDPConnectionError("Chrome is disconnected");
+  }
+  let disconnected = false;
+  let rejectDisconnect!: (error: Error) => void;
+  const disconnectSignal = new Promise<never>((_resolve, reject) => {
+    rejectDisconnect = reject;
+  });
+  void disconnectSignal.catch(() => undefined);
+  const onDisconnect = () => {
+    disconnected = true;
+    rejectDisconnect(
+      new CDPConnectionError(`Chrome disconnected during ${operation}`)
+    );
+  };
+  conn.client.once("disconnect", onDisconnect);
+  try {
+    return await Promise.race([request(), disconnectSignal]);
+  } catch (error) {
+    if (
+      disconnected ||
+      error instanceof CDPConnectionError ||
+      error instanceof CDPTimeoutError
+    ) {
+      throw new ActionCommittedError(operation, error, "uncertain");
+    }
+    throw error;
+  } finally {
+    conn.client.removeListener("disconnect", onDisconnect);
+  }
+}
+
 async function withClipboardPermissionsUnlocked<T>(
   conn: CDPConnection,
   timeout: number,
-  operation: (deadline: number) => Promise<T>
+  operation: (deadline: number) => Promise<T>,
+  committedOperation?: string
 ): Promise<T> {
   const deadline = Date.now() + timeout;
   const originResult = await runtimeEvaluate(
@@ -120,11 +234,19 @@ async function withClipboardPermissionsUnlocked<T>(
   const grant = conn.client.send("Browser.grantPermissions", params);
   let grantCompleted = false;
   let operationFailed = true;
-  const reset = () => withTimeout(
-    conn.client.send("Browser.resetPermissions"),
-    1_000,
-    "clipboard:resetPermissions"
-  );
+  const reset = async () => {
+    const pending = conn.client.send("Browser.resetPermissions");
+    try {
+      await withTimeout(
+        pending,
+        Math.min(remainingTimeout(deadline), 1_000),
+        "clipboard:resetPermissions"
+      );
+    } catch (error) {
+      reserveClipboardUntil(conn, pending);
+      throw error;
+    }
+  };
   try {
     await withTimeout(
       grant,
@@ -144,11 +266,15 @@ async function withClipboardPermissionsUnlocked<T>(
     try {
       await reset();
     } catch (error) {
-      if (!operationFailed) throw error;
+      if (!operationFailed) {
+        throw committedOperation
+          ? new ActionCommittedError(committedOperation, error)
+          : error;
+      }
     }
     if (!grantCompleted) {
       void grant
-        .then(() => serializeClipboard(reset))
+        .then(() => serializeClipboard(conn, reset))
         .catch(() => undefined);
     }
   }
@@ -157,10 +283,16 @@ async function withClipboardPermissionsUnlocked<T>(
 function withClipboardPermissions<T>(
   conn: CDPConnection,
   timeout: number,
-  operation: (deadline: number) => Promise<T>
+  operation: (deadline: number) => Promise<T>,
+  committedOperation?: string
 ): Promise<T> {
-  return serializeClipboard(() =>
-    withClipboardPermissionsUnlocked(conn, timeout, operation)
+  return serializeClipboard(conn, () =>
+    withClipboardPermissionsUnlocked(
+      conn,
+      timeout,
+      operation,
+      committedOperation
+    )
   );
 }
 
@@ -170,6 +302,7 @@ export interface CDPConnection {
   Page: Client["Page"];
   Runtime: Client["Runtime"];
   Emulation: Client["Emulation"];
+  disconnected: boolean;
 }
 
 /** Connect to Chrome and enable the required CDP domains. */
@@ -181,11 +314,13 @@ export async function connect(options: {
 }): Promise<CDPConnection> {
   const timeout = options.timeout ?? 10_000;
   const deadline = Date.now() + timeout;
+  const port = options.port ?? 9222;
+  const host = options.host ?? "localhost";
   let client: Client | undefined;
   let abandoned = false;
   const pendingClient = CDP({
-    port: options.port ?? 9222,
-    host: options.host ?? "localhost",
+    port,
+    host,
     target: options.tab,
     useHostName: true,
   });
@@ -216,7 +351,12 @@ export async function connect(options: {
       "CDP lifecycle enable"
     );
 
-    return { client, DOM, Page, Runtime, Emulation };
+    const conn = { client, DOM, Page, Runtime, Emulation, disconnected: false };
+    client.once("disconnect", () => {
+      conn.disconnected = true;
+    });
+    registerClipboardCoordinator(conn, `${host}:${port}`);
+    return conn;
   } catch (err) {
     abandoned = true;
     if (client) {
@@ -261,6 +401,19 @@ export async function navigate(
   const loaded = new Promise<void>((resolveLoad) => {
     resolveLoaded = resolveLoad;
   });
+  let rejectDisconnect!: (error: Error) => void;
+  const disconnectSignal = new Promise<never>((_resolve, reject) => {
+    rejectDisconnect = reject;
+  });
+  void disconnectSignal.catch(() => undefined);
+  let disconnected = false;
+  const onDisconnect = () => {
+    disconnected = true;
+    rejectDisconnect(
+      new CDPConnectionError("Chrome disconnected during navigation")
+    );
+  };
+  conn.client.once("disconnect", onDisconnect);
   const unsubscribe = conn.Page.lifecycleEvent((event) => {
     if (event.name !== "load") return;
     if (expectedLoader === undefined) loadedLoaders.add(event.loaderId);
@@ -269,7 +422,7 @@ export async function navigate(
   let committed = false;
   try {
     const result = await withTimeout(
-      conn.Page.navigate({ url }),
+      Promise.race([conn.Page.navigate({ url }), disconnectSignal]),
       remainingTimeout(deadline),
       "navigate:request"
     );
@@ -279,10 +432,17 @@ export async function navigate(
       expectedLoader = result.loaderId;
       if (loadedLoaders.has(expectedLoader)) resolveLoaded();
       loadedLoaders.clear();
-      await withTimeout(loaded, remainingTimeout(deadline), "navigate:load");
+      await withTimeout(
+        Promise.race([loaded, disconnectSignal]),
+        remainingTimeout(deadline),
+        "navigate:load"
+      );
     }
   } catch (err) {
     if (committed) throw new ActionCommittedError("Navigation", err);
+    if (disconnected || err instanceof CDPTimeoutError) {
+      throw new ActionCommittedError("Navigation", err, "uncertain");
+    }
     throw new NavigationError(
       url,
       err instanceof Error ? err.message : String(err),
@@ -290,6 +450,7 @@ export async function navigate(
     );
   } finally {
     unsubscribe();
+    conn.client.removeListener("disconnect", onDisconnect);
   }
 }
 
@@ -327,12 +488,18 @@ export async function clickNode(
   timeout?: number
 ): Promise<void> {
   const operationTimeout = timeout ?? 5_000;
-  await withResolvedNode(conn, backendNodeId, operationTimeout, "clickNode", (objectId, remaining) =>
-    callFunction(
-      conn,
-      {
-        objectId,
-        functionDeclaration: `function() {
+  await withResolvedNode(
+    conn,
+    backendNodeId,
+    operationTimeout,
+    "clickNode",
+    (objectId, remaining) =>
+      runMutation(conn, "Click", () =>
+        callFunction(
+          conn,
+          {
+            objectId,
+            functionDeclaration: `function() {
           if (this.isConnected !== true) return false;
           const ariaDisabled = this.closest('[aria-disabled="true" i]') !== null;
           const inert = this.closest('[inert]') !== null;
@@ -344,18 +511,19 @@ export async function clickNode(
           this.click();
           return true;
         }`,
-        returnByValue: true,
-      },
-      remaining(),
-      "clickNode:click"
-    ).then((result) => {
-      if (result.result?.value === false) {
-        throw new ElementNotFoundError(
-          `backendNodeId:${backendNodeId}`,
-          "The mapped node is detached."
-        );
-      }
-    })
+            returnByValue: true,
+          },
+          remaining(),
+          "clickNode:click"
+        ).then((result) => {
+          if (result.result?.value === false) {
+            throw new ElementNotFoundError(
+              `backendNodeId:${backendNodeId}`,
+              "The mapped node is detached."
+            );
+          }
+        })
+      )
   );
 }
 
@@ -373,11 +541,12 @@ export async function typeText(
     operationTimeout,
     "typeText",
     (objectId, remaining) =>
-      callFunction(
-        conn,
-        {
-          objectId,
-          functionDeclaration: `function(text, clear) {
+      runMutation(conn, "Typing", () =>
+        callFunction(
+          conn,
+          {
+            objectId,
+            functionDeclaration: `function(text, clear) {
             if (this.isConnected !== true) return false;
             const tag = this.tagName;
             const type = tag === 'INPUT'
@@ -472,19 +641,20 @@ export async function typeText(
             if (changed) this.dispatchEvent(new Event('input', { bubbles: true }));
             return true;
           }`,
-          arguments: [{ value: text }, { value: clear }],
-          returnByValue: true,
-        },
-        remaining(),
-        "typeText:type"
-      ).then((result) => {
-        if (result.result?.value === false) {
-          throw new ElementNotFoundError(
-            `backendNodeId:${backendNodeId}`,
-            "The mapped node is detached."
-          );
-        }
-      })
+            arguments: [{ value: text }, { value: clear }],
+            returnByValue: true,
+          },
+          remaining(),
+          "typeText:type"
+        ).then((result) => {
+          if (result.result?.value === false) {
+            throw new ElementNotFoundError(
+              `backendNodeId:${backendNodeId}`,
+              "The mapped node is detached."
+            );
+          }
+        })
+      )
   );
 }
 
@@ -501,11 +671,12 @@ export async function selectOption(
     operationTimeout,
     "selectOption",
     (objectId, remaining) =>
-      callFunction(
-        conn,
-        {
-          objectId,
-          functionDeclaration: `function(value) {
+      runMutation(conn, "Selection", () =>
+        callFunction(
+          conn,
+          {
+            objectId,
+            functionDeclaration: `function(value) {
             if (this.isConnected !== true) return false;
             if (this.tagName !== 'SELECT') {
               throw new Error('Target is not a native select element');
@@ -536,19 +707,20 @@ export async function selectOption(
             this.dispatchEvent(new Event('change', {bubbles: true}));
             return true;
           }`,
-          arguments: [{ value }],
-          returnByValue: true,
-        },
-        remaining(),
-        "selectOption:select"
-      ).then((result) => {
-        if (result.result?.value === false) {
-          throw new ElementNotFoundError(
-            `backendNodeId:${backendNodeId}`,
-            "The mapped node is detached."
-          );
-        }
-      })
+            arguments: [{ value }],
+            returnByValue: true,
+          },
+          remaining(),
+          "selectOption:select"
+        ).then((result) => {
+          if (result.result?.value === false) {
+            throw new ElementNotFoundError(
+              `backendNodeId:${backendNodeId}`,
+              "The mapped node is detached."
+            );
+          }
+        })
+      )
   );
 }
 
@@ -559,31 +731,37 @@ export async function scroll(
   timeout?: number
 ): Promise<void> {
   const delta = direction === "down" ? amount : -amount;
-  await runtimeEvaluate(
-    conn,
-    {
-      expression: `window.scrollBy({ top: ${delta}, left: 0, behavior: 'instant' })`,
-    },
-    timeout ?? 5_000,
-    "scroll"
+  await runMutation(conn, "Scroll", () =>
+    runtimeEvaluate(
+      conn,
+      {
+        expression: `window.scrollBy({ top: ${delta}, left: 0, behavior: 'instant' })`,
+      },
+      timeout ?? 5_000,
+      "scroll"
+    )
   );
 }
 
 export async function evaluate(
   conn: CDPConnection,
   expression: string,
-  timeout?: number
+  timeout?: number,
+  committedOperation?: string
 ): Promise<unknown> {
+  const request = () => withTimeout(
+    conn.Runtime.evaluate({
+      expression,
+      returnByValue: true,
+      awaitPromise: true,
+    }),
+    timeout ?? 10_000,
+    "evaluate"
+  );
   const result = assertRuntimeSuccess(
-    await withTimeout(
-      conn.Runtime.evaluate({
-        expression,
-        returnByValue: true,
-        awaitPromise: true,
-      }),
-      timeout ?? 10_000,
-      "evaluate"
-    ),
+    committedOperation
+      ? await runMutation(conn, committedOperation, request)
+      : await request(),
     "Evaluation"
   );
   if (!result.result) {
@@ -659,6 +837,7 @@ export async function captureScreenshot(
     const { width, height, scale } = options.clip;
     validateScreenshotDimensions(width, height, scale);
     params.clip = options.clip;
+    params.captureBeyondViewport = true;
   }
 
   if (options?.fullPage) {
@@ -686,10 +865,12 @@ export async function setFileInput(
     operationTimeout,
     "setFileInput",
     (objectId, remaining) =>
-      withTimeout(
-        conn.DOM.setFileInputFiles({ files: filePaths, objectId }),
-        remaining(),
-        "setFileInput:files"
+      runMutation(conn, "Upload", () =>
+        withTimeout(
+          conn.DOM.setFileInputFiles({ files: filePaths, objectId }),
+          remaining(),
+          "setFileInput:files"
+        )
       )
   );
 }
@@ -698,8 +879,9 @@ export async function clipboardRead(
   conn: CDPConnection,
   timeout?: number
 ): Promise<string> {
+  const coordinator = clipboardCoordinator(conn);
   const now = Date.now();
-  const timeSinceLastRead = now - lastClipboardReadTime;
+  const timeSinceLastRead = now - coordinator.lastReadTime;
 
   if (timeSinceLastRead < CLIPBOARD_READ_COOLDOWN_MS) {
     const remaining = Math.ceil((CLIPBOARD_READ_COOLDOWN_MS - timeSinceLastRead) / 1000);
@@ -707,7 +889,7 @@ export async function clipboardRead(
       `Clipboard read rate limit exceeded. Please wait ${remaining} second(s) before reading again.`
     );
   }
-  lastClipboardReadTime = now;
+  coordinator.lastReadTime = now;
 
   return withClipboardPermissions(conn, timeout ?? 5_000, async (deadline) => {
     const result = await runtimeEvaluate(
@@ -736,17 +918,20 @@ export async function clipboardWrite(
   timeout?: number
 ): Promise<void> {
   await withClipboardPermissions(conn, timeout ?? 5_000, (deadline) =>
-    runtimeEvaluate(
-      conn,
-      {
-        expression: `navigator.clipboard.writeText(${JSON.stringify(text)})`,
-        awaitPromise: true,
-        userGesture: true,
-        returnByValue: true,
-      },
-      remainingTimeout(deadline),
-      "clipboard:write"
-    ).then(() => undefined)
+    runMutation(conn, "Clipboard write", () =>
+      runtimeEvaluate(
+        conn,
+        {
+          expression: `navigator.clipboard.writeText(${JSON.stringify(text)})`,
+          awaitPromise: true,
+          userGesture: true,
+          returnByValue: true,
+        },
+        remainingTimeout(deadline),
+        "clipboard:write"
+      ).then(() => undefined)
+    ),
+    "Clipboard write"
   );
 }
 
@@ -754,5 +939,14 @@ export async function disconnect(
   conn: CDPConnection,
   timeout = 2_000
 ): Promise<void> {
-  await withTimeout(conn.client.close(), timeout, "CDP disconnect");
+  if (conn.disconnected) {
+    clipboardCoordinatorReleases.get(conn)?.();
+    return;
+  }
+  try {
+    await withTimeout(conn.client.close(), timeout, "CDP disconnect");
+  } finally {
+    conn.disconnected = true;
+    clipboardCoordinatorReleases.get(conn)?.();
+  }
 }

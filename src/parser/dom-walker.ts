@@ -48,7 +48,6 @@ interface MarkerAttributes {
 
 interface MarkerContext {
   markers: MarkerAttributes | undefined;
-  ignoreLegacyMarkers: boolean;
   viewportMarked: boolean;
   classifyOptions: { includeHidden: boolean; computedVisibility: boolean };
 }
@@ -58,7 +57,7 @@ function walkAttributes(
   markerContext: MarkerContext
 ): Record<string, string> {
   const markers = markerContext.markers;
-  if (!markers && !markerContext.ignoreLegacyMarkers) {
+  if (!markers) {
     return parseAttributes(attributes);
   }
 
@@ -71,23 +70,21 @@ function walkAttributes(
   for (let index = 0; index < length; index += 2) {
     const key = attributes![index];
     const value = attributes![index + 1];
-    if (markers) {
-      if (key === markers.visible) {
-        visible = value;
-        continue;
-      }
-      if (key === markers.hidden) {
-        hidden = value;
-        continue;
-      }
-      if (key === markers.state) {
-        state = value;
-        continue;
-      }
-      if (key === markers.text) {
-        text = value;
-        continue;
-      }
+    if (key === markers.visible) {
+      visible = value;
+      continue;
+    }
+    if (key === markers.hidden) {
+      hidden = value;
+      continue;
+    }
+    if (key === markers.state) {
+      state = value;
+      continue;
+    }
+    if (key === markers.text) {
+      text = value;
+      continue;
     }
     if (
       key === "data-os-visible" ||
@@ -177,7 +174,6 @@ export function walkDOM(
     truncate?: boolean;
     includeHidden?: boolean;
     markerAttributes?: MarkerAttributes;
-    ignoreLegacyMarkers?: boolean;
     viewportMarked?: boolean;
   }
 ): WalkResult {
@@ -187,7 +183,6 @@ export function walkDOM(
   const includeHidden = options?.includeHidden === true;
   const markerContext: MarkerContext = {
     markers: options?.markerAttributes,
-    ignoreLegacyMarkers: options?.ignoreLegacyMarkers === true,
     viewportMarked: options?.viewportMarked === true,
     classifyOptions: {
       includeHidden,

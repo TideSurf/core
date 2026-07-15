@@ -1,15 +1,25 @@
 import { describe, expect, it, mock } from "bun:test";
+import { EventEmitter } from "node:events";
 import { downloadFromAction } from "../../src/cdp/download-manager.js";
 import type { CDPConnection } from "../../src/cdp/connection.js";
+import { ActionCommittedError, CDPTimeoutError } from "../../src/errors.js";
 
-function harness(restoreError?: Error) {
+function harness(
+  restoreError?: Error,
+  allow?: Promise<void>,
+  restore?: Promise<void>
+) {
   const handlers = new Map<string, (params: never) => void>();
   const events: string[] = [];
   const conn = {
-    client: { send: mock(async () => ({})) },
+    client: Object.assign(new EventEmitter(), {
+      send: mock(async () => ({})),
+    }),
     Page: {
       setDownloadBehavior: mock(async ({ behavior }: { behavior: string }) => {
+        if (behavior === "allow" && allow) return allow;
         if (behavior === "default" && restoreError) throw restoreError;
+        if (behavior === "default" && restore) return restore;
       }),
       on: mock((event: string, handler: (params: never) => void) => {
         events.push(`subscribe:${event}`);
@@ -130,7 +140,100 @@ describe("download event races", () => {
       }
     );
 
-    await expect(download).rejects.toBe(restoreError);
+    await expect(download).rejects.toBeInstanceOf(ActionCommittedError);
+    await expect(download).rejects.toHaveProperty("cause", restoreError);
+  });
+
+  it("restores behavior after a timed-out configure resolves late", async () => {
+    let resolveAllow!: () => void;
+    const allow = new Promise<void>((resolve) => {
+      resolveAllow = resolve;
+    });
+    const { conn, handlers } = harness(undefined, allow);
+
+    await expect(
+      downloadFromAction(
+        conn,
+        { downloadDir: "/tmp/downloads", timeout: 5 },
+        async () => {}
+      )
+    ).rejects.toBeInstanceOf(CDPTimeoutError);
+    await expect(
+      downloadFromAction(
+        conn,
+        { downloadDir: "/tmp/downloads", timeout: 100 },
+        async () => {}
+      )
+    ).rejects.toThrow("already active");
+
+    resolveAllow();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const retry = downloadFromAction(
+      conn,
+      { downloadDir: "/tmp/downloads", timeout: 100 },
+      async () => {
+        handlers.get("downloadWillBegin")?.({
+          guid: "retry",
+          suggestedFilename: "retry.txt",
+        } as never);
+        handlers.get("downloadProgress")?.({
+          guid: "retry",
+          state: "completed",
+        } as never);
+      }
+    );
+
+    await expect(retry).resolves.toMatchObject({ fileName: "retry.txt" });
+  });
+
+  it("keeps the page reserved until a timed-out restore settles", async () => {
+    let resolveRestore!: () => void;
+    const restore = new Promise<void>((resolve) => {
+      resolveRestore = resolve;
+    });
+    const { conn, handlers } = harness(undefined, undefined, restore);
+    const first = downloadFromAction(
+      conn,
+      { downloadDir: "/tmp/downloads", timeout: 5 },
+      async () => {
+        handlers.get("downloadWillBegin")?.({
+          guid: "first",
+          suggestedFilename: "first.txt",
+        } as never);
+        handlers.get("downloadProgress")?.({
+          guid: "first",
+          state: "completed",
+        } as never);
+      }
+    );
+
+    await expect(first).rejects.toBeInstanceOf(ActionCommittedError);
+    await expect(
+      downloadFromAction(
+        conn,
+        { downloadDir: "/tmp/downloads", timeout: 100 },
+        async () => {}
+      )
+    ).rejects.toThrow("already active");
+
+    resolveRestore();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const retry = downloadFromAction(
+      conn,
+      { downloadDir: "/tmp/downloads", timeout: 100 },
+      async () => {
+        handlers.get("downloadWillBegin")?.({
+          guid: "retry",
+          suggestedFilename: "retry.txt",
+        } as never);
+        handlers.get("downloadProgress")?.({
+          guid: "retry",
+          state: "completed",
+        } as never);
+      }
+    );
+
+    await expect(retry).resolves.toMatchObject({ fileName: "retry.txt" });
   });
 
   it("keeps a trigger failure primary when policy restore also fails", async () => {

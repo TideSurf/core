@@ -8,10 +8,11 @@ import { discoverActiveBrowser } from "../cdp/launcher.js";
 import {
   dispatchTool,
   executeValidatedToolSpec,
+  type ToolExecutionContext,
   type ToolDispatchOptions,
   type ToolSpec,
 } from "../tools/registry.js";
-import type { ToolResult } from "../types.js";
+import type { ReadPageOptions, ToolResult } from "../types.js";
 import type { SessionConfig } from "./session.js";
 
 interface BrowserStatus {
@@ -57,10 +58,7 @@ export class BrowserController {
   private readonly executeValidated = (
     tool: ToolSpec,
     input: Record<string, unknown>
-  ): Promise<ToolResult> =>
-    this.runSerialized(async () =>
-      executeValidatedToolSpec(await this.getBrowser(), tool, input)
-    );
+  ): Promise<ToolResult> => this.executeTool(tool, input);
 
   constructor(config: SessionConfig) {
     this.config = {
@@ -246,6 +244,27 @@ export class BrowserController {
       { name, input },
       this.dispatchOptions,
       this.executeValidated
+    );
+  }
+
+  async inspect(url: string, options: ReadPageOptions): Promise<ToolResult> {
+    const context: ToolExecutionContext = {
+      pageRead: { options, contentOnly: true },
+    };
+    return dispatchTool(
+      { name: "navigate", input: { url } },
+      this.dispatchOptions,
+      (tool, input) => this.executeTool(tool, input, context)
+    );
+  }
+
+  private executeTool(
+    tool: ToolSpec,
+    input: Record<string, unknown>,
+    context?: ToolExecutionContext
+  ): Promise<ToolResult> {
+    return this.runSerialized(async () =>
+      executeValidatedToolSpec(await this.getBrowser(), tool, input, context)
     );
   }
 

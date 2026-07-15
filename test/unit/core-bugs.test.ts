@@ -1,4 +1,5 @@
 import { describe, it, expect, jest } from "bun:test";
+import { EventEmitter } from "node:events";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -84,10 +85,10 @@ function preflightResult() {
 
 function createMockCDPConnection(overrides: Partial<CDPConnection> = {}): CDPConnection {
   return {
-    client: {
+    client: Object.assign(new EventEmitter(), {
       close: jest.fn(),
       send: jest.fn().mockResolvedValue(snapshotData()),
-    } as unknown as CDPConnection["client"],
+    }) as unknown as CDPConnection["client"],
     DOM: {
       enable: jest.fn(),
       getDocument: jest.fn().mockResolvedValue({ root: { nodeId: 1 } }),
@@ -483,5 +484,31 @@ describe("SurfingPage runtime validation", () => {
     ).rejects.toBeInstanceOf(ValidationError);
     expect(conn.DOM.getBoxModel).not.toHaveBeenCalled();
     expect(conn.DOM.resolveNode).not.toHaveBeenCalled();
+  });
+
+  it("captures an element's full border box", async () => {
+    const captureScreenshot = jest.fn().mockResolvedValue({ data: "base64png" });
+    const conn = createMockCDPConnection({
+      DOM: {
+        getBoxModel: jest.fn().mockResolvedValue({
+          model: {
+            content: [8, 3, 112, 3, 112, 57, 8, 57],
+            border: [0, 0, 120, 0, 120, 60, 0, 60],
+          },
+        }),
+      } as unknown as CDPConnection["DOM"],
+      Page: { captureScreenshot } as unknown as CDPConnection["Page"],
+    });
+    const page = new SurfingPage(conn);
+    setNodeMap(page, [["B1", 100]]);
+
+    await expect(page.screenshot({ elementId: "B1" })).resolves.toBe(
+      "base64png"
+    );
+    expect(captureScreenshot).toHaveBeenCalledWith({
+      format: "png",
+      clip: { x: 0, y: 0, width: 120, height: 60, scale: 1 },
+      captureBeyondViewport: true,
+    });
   });
 });

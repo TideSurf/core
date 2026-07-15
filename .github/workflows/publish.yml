@@ -25,10 +25,11 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
-      - uses: browser-actions/setup-chrome@c785b87e244131f27c9f19c1a33e2ead956ab7ce # v1
+      - uses: browser-actions/setup-chrome@2e1d749697dd1612b833dba4a722266286fbefcd # v2
         id: setup-chrome
         with:
           chrome-version: stable
+          install-dependencies: true
       - run: bun install --frozen-lockfile
       - run: bun install --frozen-lockfile
         working-directory: website/landing

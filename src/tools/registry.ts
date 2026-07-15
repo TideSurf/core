@@ -1,5 +1,5 @@
 import type { TideSurf } from "../tidesurf.js";
-import type { ToolDefinition, ToolResult } from "../types.js";
+import type { ReadPageOptions, ToolDefinition, ToolResult } from "../types.js";
 import { ActionCommittedError } from "../errors.js";
 import {
   validateElementId,
@@ -53,8 +53,16 @@ export interface ToolSpec {
   ) => void;
   readonly handler: (
     instance: TideSurf,
-    input: Record<string, unknown>
+    input: Record<string, unknown>,
+    context?: ToolExecutionContext
   ) => Promise<unknown>;
+}
+
+export interface ToolExecutionContext {
+  readonly pageRead?: {
+    readonly options?: ReadPageOptions;
+    readonly contentOnly?: boolean;
+  };
 }
 
 interface ToolInput {
@@ -156,11 +164,16 @@ function errorMessage(error: unknown): string {
 
 async function pageAfterAction(
   instance: TideSurf,
-  confirmation: string
+  confirmation: string,
+  pageRead?: ToolExecutionContext["pageRead"]
 ): Promise<string> {
   try {
-    return `${confirmation} Page state:\n\n${(await instance.readPage()).content}`;
+    const content = (await instance.readPage(pageRead?.options)).content;
+    return pageRead?.contentOnly
+      ? content
+      : `${confirmation} Page state:\n\n${content}`;
   } catch (error) {
+    if (pageRead?.contentOnly) throw error;
     return `${confirmation} The action completed, but the updated page could not be read: ${errorMessage(error)}. Run get_state before the next action.`;
   }
 }
@@ -247,9 +260,31 @@ export const TOOL_REGISTRY: readonly ToolSpec[] = deepFreeze([
     outputKind: "text",
     cli: cli([positional("url", "URL to open")]),
     validate: (input, urlOptions) => validateUrlInput(input, urlOptions),
-    handler: async (instance, input) => {
-      await instance.navigate(stringInput(input, "url"));
-      return pageAfterAction(instance, "Navigation completed.");
+    handler: async (instance, input, context) => {
+      try {
+        await instance.navigate(stringInput(input, "url"));
+      } catch (error) {
+        if (
+          !(error instanceof ActionCommittedError) ||
+          context?.pageRead?.contentOnly !== true
+        ) {
+          throw error;
+        }
+        try {
+          const content = await pageAfterAction(
+            instance,
+            "Navigation completed.",
+            context.pageRead
+          );
+          return `${error.message}\n\nCurrent page state:\n\n${content}`;
+        } catch (readError) {
+          throw new Error(
+            `${error.message} The requested page state also failed: ${errorMessage(readError)}`,
+            { cause: new AggregateError([error, readError]) }
+          );
+        }
+      }
+      return pageAfterAction(instance, "Navigation completed.", context?.pageRead);
     },
   },
   {
@@ -687,7 +722,7 @@ function failure(error: unknown): ToolResult {
 export function createToolExecutor(instance: TideSurf): ToolExecutor {
   const options: ToolDispatchOptions = {
     readOnly: instance.isReadOnly(),
-    urlOptions: instance.getUrlValidationOptions?.() ?? {},
+    urlOptions: instance.getUrlValidationOptions(),
   };
   const execute: ToolDispatch = (tool, input) =>
     executeValidatedToolSpec(instance, tool, input);
@@ -736,10 +771,11 @@ export function dispatchTool(
 export async function executeValidatedToolSpec(
   instance: TideSurf,
   tool: ToolSpec,
-  input: Record<string, unknown>
+  input: Record<string, unknown>,
+  context?: ToolExecutionContext
 ): Promise<ToolResult> {
   try {
-    return { success: true, data: await tool.handler(instance, input) };
+    return { success: true, data: await tool.handler(instance, input, context) };
   } catch (error) {
     if (error instanceof ActionCommittedError) {
       return { success: true, data: error.message };

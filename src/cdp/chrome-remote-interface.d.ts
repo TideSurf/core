@@ -112,6 +112,8 @@ declare module "chrome-remote-interface" {
         mobile: boolean;
       }): Promise<void>;
     };
+    once(event: "disconnect", callback: () => void): Client;
+    removeListener(event: "disconnect", callback: () => void): Client;
     send(method: string, params?: Record<string, unknown>): Promise<unknown>;
     close(): Promise<void>;
   }

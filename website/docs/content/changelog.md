@@ -2,30 +2,44 @@
 
 ## Unreleased
 
+## 0.6.0 (2026-07-16)
+
 ### Added
 
 - The stateful CLI exposes all 18 tools as direct commands with named sessions, automatic browser startup, registry-generated help, raw JSON calls, structured output, screenshot files or streams, and stable exit codes.
 - Browser discovery resolves Chrome stable, Beta, Dev, Canary, and Chromium from explicit paths, the environment, `PATH`, and platform installs. Managed launches use dynamic ports; attach-only and ordered auto-connect modes keep launch policy explicit.
-- Named sessions run in authenticated Unix-socket or Windows named-pipe daemons. Policy stays immutable, calls serialize, startup races recover safely, and tab and ID state persists exactly.
+- Named sessions run in authenticated Unix-socket or Windows named-pipe daemons. Policy stays immutable, calls serialize, startup races recover safely, overlong Unix runtime paths use a short private namespace, and tab and ID state persists exactly.
 
 ### Changed
 
 - `readPage()` is now the preferred SDK method. The deprecated `getState()` method and `GetStateOptions` type remain compatibility aliases.
 - One canonical registry now drives SDK definitions, dispatch, CLI metadata and help, MCP registration, read-only policy, and unknown-tool errors.
 - MCP is a thin packaged adapter over the shared executor. It retains `launch_browser`, emits screenshot image blocks, and marks failures with `isError`.
-- Browser setup and shutdown clean up partial resources transactionally. Read-only policy covers direct `SurfingPage` calls, while `switch_tab` remains readable.
-- Committed actions return a distinct result when post-action confirmation fails, preventing unsafe agent retries. Page-side CDP exceptions still preserve their original failure.
+- Browser setup and shutdown release partial resources transactionally. Read-only policy covers direct `SurfingPage` calls, while `switch_tab` remains readable.
+- Committed actions report post-action confirmation failures without inviting unsafe retries. Page-side CDP exceptions keep their original failure.
 - Page processing now handles viewport clipping and hidden nodes consistently. `includeHidden` reads the full DOM, bounded pruning keeps useful descendants, and oversized page or form state fails before capture.
 - Runtime paths defer optional modules, remove redundant CDP round trips and parser allocations, serialize SDK tab mutations, and preserve primary cleanup errors. Executable 65,536-branch and 10,000-element gates enforce near-linear behavior.
 - Snapshot capture now requests only the computed styles needed by active filters. Parser, registry, argument parsing, and help paths reuse derived data, while temporary profile and failed-download cleanup use asynchronous filesystem operations.
 - SDK and tool timeouts are capped at 2,147,483,647 ms; CLI aggregate request budgets are capped at 1,073,741,823 ms. Element and full-page screenshot clips and configured viewports are capped at 16,384 px per side or 12,000,000 total pixels.
-- Download setup rejects concurrent calls on one page and revalidates its allowed destination after directory creation. Clipboard permission changes run serially across page connections.
+- Download setup rejects concurrent calls on one `SurfingPage` connection and revalidates its allowed destination after directory creation. Clipboard permission changes run serially for each browser endpoint within one TideSurf process.
 - `evaluate` validates only input shape and size. It runs arbitrary unsandboxed page JavaScript and returns CDP unserializable values in a JSON-safe form.
 - CLI, API, architecture, security, troubleshooting, benchmark, and website content now share drift checks. Release verification exercises the packaged MCP and CLI under Node and Bun.
 
+### Fixed
+
+- Element screenshots use the element border box, capture offscreen elements, and enforce the shared image-size limit.
+- Navigation and downloads stop promptly when their CDP connection closes. Unanswered navigation requests use the non-retry action path. Tab switching reconnects closed page clients and evicts cached targets that no longer accept a connection.
+- Mutating response timeouts and disconnects use one uncertain committed-action boundary after safe element resolution, covering interaction, scrolling, evaluation, clipboard write, file selection, and tab mutation without masking deterministic page errors.
+- Browser launch reports a bounded Chrome stderr tail and rolls back profile setup failures. Snapshot preflight no longer depends on mutable page globals, and legacy CSS clip edges use their correct `auto` defaults.
+- Download cleanup preserves committed results and holds the page reservation until late policy commands settle. Uncertain trigger failures use the non-retry action path.
+- Timed-out clipboard resets keep the browser endpoint reserved until the raw permission command settles.
+- The landing canvas keeps stable Safari viewport bounds and backing buffers. Mobile controls, copy status, hero text, and social previews now use the same content.
+- CI installs Chrome system dependencies and tests Windows executable resolution without ambiguous channel names.
+
 ### Removed
 
-- Removed the TideTravel server and prompt after their web assets were retired.
+- The unpublished standalone MCP implementation. The packaged adapter remains supported.
+- The retired TideTravel server and prompt.
 
 ## 0.5.4 (2026-04-26)
 

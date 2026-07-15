@@ -2,7 +2,13 @@ import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
-import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { connect as connectSocket, createServer } from "node:net";
 import { join } from "node:path";
 import {
@@ -204,6 +210,30 @@ describe("named session daemon", () => {
 });
 
 describe("session recovery", () => {
+  it("starts through a short private path when the Unix runtime path is too long", async () => {
+    if (process.platform === "win32") return;
+    const previousRuntime = process.env["XDG_RUNTIME_DIR"];
+    const longRuntime = join("/tmp", `tidesurf-${"x".repeat(120)}`);
+    const name = `long-path-${randomUUID()}`;
+    let candidate: SessionState | undefined;
+    let directory: string | undefined;
+    process.env["XDG_RUNTIME_DIR"] = longRuntime;
+    try {
+      candidate = await ensureSession({ session: name, config, entryPath });
+      directory = getSessionPaths(name).directory;
+      expect(Buffer.byteLength(candidate.socketPath)).toBeLessThanOrEqual(100);
+      expect(candidate.socketPath.startsWith(longRuntime)).toBe(false);
+    } finally {
+      await stop(candidate);
+      if (directory) rmSync(directory, { recursive: true, force: true });
+      if (previousRuntime === undefined) {
+        delete process.env["XDG_RUNTIME_DIR"];
+      } else {
+        process.env["XDG_RUNTIME_DIR"] = previousRuntime;
+      }
+    }
+  });
+
   it("uses the requested warm operation as the health check", async () => {
     const name = `single-request-${randomUUID()}`;
     const paths = getSessionPaths(name);

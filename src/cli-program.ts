@@ -24,7 +24,7 @@ import {
   validateToolInput,
   type ToolSpec,
 } from "./tools/registry.js";
-import type { ToolResult } from "./types.js";
+import type { ReadPageOptions, ToolResult } from "./types.js";
 import { VERSION } from "./version.js";
 
 const DAEMON_STARTUP_TIMEOUT = 10_000;
@@ -375,10 +375,8 @@ async function inspect(invocation: ParsedInvocation): Promise<number> {
   const { BrowserController } = await import("./cli/browser-controller.js");
   const controller = new BrowserController(invocation.sessionConfig);
   try {
-    const browser = await controller.getBrowser();
-    await browser.navigate(url);
     return printToolResult(
-      await controller.execute("get_state", input),
+      await controller.inspect(url, input as ReadPageOptions),
       invocation.json
     );
   } finally {

@@ -2,29 +2,37 @@
 
 # TideSurf
 
-**살아 있는 페이지. 서핑하는 에이전트.**
+**Agents Surfing**
 
 [웹사이트](https://tidesurf.org) · [문서](https://tidesurf.org/docs) · [llms.txt](https://tidesurf.org/llms.txt) · [npm](https://www.npmjs.com/package/@tidesurf/core) · [후원](https://github.com/sponsors/MercuriusDream)
 
 TideSurf는 실행 중인 Chromium 페이지를 에이전트용 간결한 텍스트로 바꿉니다. 조작 가능한 요소에는 현재 DOM과 연결된 짧은 ID가 붙습니다. CLI, SDK executor, MCP는 같은 18개 도구를 사용합니다.
+
+## 설치
+
+```sh
+brew install TideSurf/tap/tidesurf
+# 또는
+npm install --global @tidesurf/core
+```
 
 ## 에이전트 CLI
 
 도구 명령을 바로 실행할 수 있습니다. 첫 도구 명령이 비공개 로컬 세션과 헤드리스 격리 브라우저를 시작합니다. 이후 셸 호출도 같은 브라우저, 탭, 활성 탭, 요소 ID 맵을 유지합니다.
 
 ```sh
-bunx @tidesurf/core navigate https://example.com
-bunx @tidesurf/core get_state
-bunx @tidesurf/core click L1
-bunx @tidesurf/core status
-bunx @tidesurf/core stop
+tidesurf navigate https://example.com
+tidesurf get_state
+tidesurf click L1
+tidesurf status
+tidesurf stop
 ```
 
 병렬 작업에는 이름 있는 세션을 사용합니다.
 
 ```sh
-bunx @tidesurf/core --session research navigate https://example.com
-bunx @tidesurf/core --session research get_state --mode interactive
+tidesurf --session research navigate https://example.com
+tidesurf --session research get_state --mode interactive
 ```
 
 직접 실행할 수 있는 명령은 다음 18개입니다.
@@ -44,7 +52,7 @@ clipboard_write download
 읽기 전용 정책은 세션이 끝날 때까지 고정됩니다.
 
 ```sh
-bunx @tidesurf/core --session audit --read-only get_state
+tidesurf --session audit --read-only get_state
 ```
 
 읽기 전용 세션은 `get_state`, `extract`, `list_tabs`, `switch_tab`, `search`, `screenshot`만 허용합니다. 탐색, 페이지 조작, JavaScript, 클립보드, 업로드/다운로드, 탭 생성/닫기는 SDK와 도구의 모든 경계에서 거부됩니다.
@@ -100,8 +108,8 @@ MCP는 같은 레지스트리와 executor를 사용하는 얇은 어댑터로 �
 {
   "mcpServers": {
     "tidesurf": {
-      "command": "bunx",
-      "args": ["@tidesurf/core", "mcp"]
+      "command": "tidesurf",
+      "args": ["mcp"]
     }
   }
 }

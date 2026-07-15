@@ -14,7 +14,7 @@ import {
   terminateChromeProcess,
 } from "./cdp/launcher.js";
 import { connect, disconnect, type CDPConnection } from "./cdp/connection.js";
-import { SurfingPage } from "./cdp/page.js";
+import { SurfingPage, isSurfingPageConnected } from "./cdp/page.js";
 import { TabManager, type TabInfo } from "./cdp/tab-manager.js";
 import { createToolExecutor, getToolDefinitions } from "./tools/registry.js";
 import { rm } from "node:fs/promises";
@@ -580,6 +580,10 @@ export class TideSurf {
     validateTabId(tabId);
     return this.queueTabMutation(async () => {
       this.assertOpen();
+      const cached = this.pages.get(tabId);
+      if (cached && !isSurfingPageConnected(cached)) {
+        this.pages.delete(tabId);
+      }
       const page = await this.connectTabOnce(tabId);
       this.assertOpen();
       this.activePage = page;
@@ -625,7 +629,19 @@ export class TideSurf {
       }
 
       this.assertOpen();
-      await this.tabManager.closeTab(tabId, this.timeout);
+      try {
+        await this.tabManager.closeTab(tabId, this.timeout);
+      } catch (error) {
+        if (error instanceof ActionCommittedError && successor) {
+          if (successor.ownsTarget) {
+            this.pages.set(successor.tab.id, successor.page);
+          }
+          this.activePage = successor.page;
+          this.activeTabId = successor.tab.id;
+          successorCommitted = true;
+        }
+        throw error;
+      }
       this.assertOpen();
 
       this.pages.delete(tabId);

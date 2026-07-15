@@ -98,7 +98,9 @@ Page reads run a bounded, non-mutating node preflight followed by `DOMSnapshot.c
 
 Clipboard tools access the system clipboard visible to Chromium. Downloads write to the host filesystem. Both stay unavailable in read-only sessions.
 
-A page handles one TideSurf download operation at a time. TideSurf waits for filename metadata before reporting a completed file and runs cleanup through one path.
+Clipboard permission changes run serially for each browser endpoint within one TideSurf process. Its page connections cannot race permission reset, while separate processes and browsers do not share a lock or cooldown.
+
+A `SurfingPage` connection handles one TideSurf download operation at a time. Separate clients attached to the same target do not share this process-local lock. TideSurf waits for filename metadata before reporting a completed file. A disconnect stops the wait, and late setup replies cannot leave downloads enabled for the next call.
 
 ## Chromium sandbox
 

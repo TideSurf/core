@@ -374,12 +374,16 @@ function legacyClipBounds(value: string, bounds: Bounds): Bounds | null | undefi
   if (tokens.length !== 4) return undefined;
   const width = bounds.right - bounds.left;
   const height = bounds.bottom - bounds.top;
-  const length = (token: string, size: number): number | undefined =>
-    token.toLowerCase() === "auto" ? size : parseClipLength(token, size);
-  const top = length(tokens[0], height);
-  const right = length(tokens[1], width);
-  const bottom = length(tokens[2], height);
-  const left = length(tokens[3], width);
+  const length = (
+    token: string,
+    size: number,
+    autoValue: number
+  ): number | undefined =>
+    token.toLowerCase() === "auto" ? autoValue : parseClipLength(token, size);
+  const top = length(tokens[0], height, 0);
+  const right = length(tokens[1], width, width);
+  const bottom = length(tokens[2], height, height);
+  const left = length(tokens[3], width, 0);
   if (top === undefined || right === undefined || bottom === undefined || left === undefined) {
     return undefined;
   }
@@ -941,7 +945,7 @@ function preflightExpression(limit: number): string {
     const current = stack.pop();
     count++;
     if (count > limit) break;
-    if (current.nodeType === Node.ELEMENT_NODE) {
+    if (current.nodeType === 1) {
       const tag = current.tagName;
       const type = tag === 'INPUT' ? (current.getAttribute('type') || 'text').toLowerCase() : '';
       const hasLiveValue = tag === 'INPUT' || tag === 'TEXTAREA';
@@ -964,7 +968,7 @@ function preflightExpression(limit: number): string {
           };
         } catch {}
       }
-    } else if (current.nodeType === Node.TEXT_NODE) {
+    } else if (current.nodeType === 3) {
       characterCount += current.nodeValue.length;
     }
     if (characterCount > ${MAX_SNAPSHOT_CHARACTERS}) {

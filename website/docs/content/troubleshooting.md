@@ -65,6 +65,8 @@ If startup still fails:
 
 A protocol-version or TideSurf-version mismatch requires stopping the old session before using the new CLI build.
 
+Managed launch failures include the final bounded portion of Chrome stderr. Use it to identify missing system libraries, profile permission failures, or unsupported flags without searching an unbounded browser log.
+
 ## Connect-only cannot find Chrome
 
 `--connect-only` never launches. Without an explicit endpoint, it checks a supported Chrome profile `DevToolsActivePort` and the conventional local endpoint on port `9222`.
@@ -130,6 +132,8 @@ tidesurf click B3
 
 Do not increment or guess IDs after a failure.
 
+If a tab was closed outside TideSurf, `switch_tab` rejects its old tab ID immediately and removes the stale connection. Run `list_tabs` and choose a current tab.
+
 ## State omits expected content
 
 Check these settings:
@@ -167,7 +171,9 @@ tidesurf --session files \
 
 `--file-access-root` is a startup option. Stop the session before changing its roots.
 
-Only one download can run on a page at a time. A second call fails instead of sharing browser download state. A path that resolves outside the allowed roots is rejected before browser download setup.
+Only one download can run through a `SurfingPage` connection at a time. A second call on that connection fails instead of sharing browser download state; separate clients attached to the same target do not share this lock. A path that resolves outside the allowed roots is rejected before browser download setup.
+
+A browser or target disconnect stops the download wait. The trigger may already have clicked, so an uncertain trigger returns the committed-action warning path. Inspect session and page state instead of retrying the click. A completed transfer can also use that path when final browser-policy cleanup fails.
 
 ## Screenshot output is unreadable
 

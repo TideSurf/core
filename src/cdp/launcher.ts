@@ -12,6 +12,7 @@ import { rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { join, posix, win32 } from "node:path";
+import type { Readable } from "node:stream";
 import CDP from "chrome-remote-interface";
 import { CHROME_CHANNELS, type ChromeChannel } from "../types.js";
 import { CDPConnectionError, ChromeLaunchError } from "../errors.js";
@@ -379,6 +380,24 @@ function processExited(proc: ChildProcess): boolean {
   return proc.exitCode !== null || proc.signalCode !== null;
 }
 
+function captureStartupStderr(stream: Readable | null): {
+  read: () => string;
+  stop: () => void;
+} {
+  const limit = 8_192;
+  let tail = "";
+  const onData = (chunk: Buffer | string) => {
+    tail += typeof chunk === "string" ? chunk : chunk.toString("utf8");
+    if (tail.length > limit) tail = tail.slice(-limit);
+  };
+  stream?.on("data", onData);
+  stream?.resume();
+  return {
+    read: () => tail.trim(),
+    stop: () => stream?.removeListener("data", onData),
+  };
+}
+
 function isConnectionRefused(error: unknown): boolean {
   if ((error as NodeJS.ErrnoException | undefined)?.code === "ECONNREFUSED") {
     return true;
@@ -482,7 +501,8 @@ async function waitForLaunchedBrowser(
   proc: ChildProcess,
   requestedPort: number,
   userDataDir: string,
-  timeout: number
+  timeout: number,
+  readStderr: () => string
 ): Promise<DiscoverResult> {
   const deadline = Date.now() + timeout;
   let lastError: unknown;
@@ -490,9 +510,11 @@ async function waitForLaunchedBrowser(
 
   while (Date.now() < deadline) {
     if (processExited(proc)) {
+      const stderr = readStderr();
       throw new ChromeLaunchError(
         `Chrome exited before DevTools was ready` +
-          (proc.exitCode === null ? "" : ` (code ${proc.exitCode})`)
+          (proc.exitCode === null ? "" : ` (code ${proc.exitCode})`) +
+          (stderr ? `\nChrome stderr:\n${stderr}` : "")
       );
     }
 
@@ -536,7 +558,10 @@ async function waitForLaunchedBrowser(
     await delay(50);
   }
 
-  throw new ChromeLaunchError("Timed out waiting for Chrome DevTools", {
+  const stderr = readStderr();
+  throw new ChromeLaunchError(
+    `Timed out waiting for Chrome DevTools` +
+      (stderr ? `\nChrome stderr:\n${stderr}` : ""), {
     cause: lastError instanceof Error ? lastError : undefined,
   });
 }
@@ -555,50 +580,50 @@ export async function launchChrome(options: LaunchOptions = {}): Promise<LaunchR
 
   const ownsTempDir = options.userDataDir === undefined;
   const userDataDir = options.userDataDir ?? join(tmpdir(), `tidesurf-${randomUUID()}`);
-  mkdirSync(userDataDir, { recursive: true, mode: 0o700 });
-
-  // A dead browser may leave a valid marker behind. Remove it only after the
-  // recorded endpoint has been shown to be stale; malformed markers are not
-  // safe evidence that the profile is unused.
-  const activePortFile = join(userDataDir, "DevToolsActivePort");
-  const active = readDevToolsActivePort(userDataDir);
-  if (active) {
-    let reachable = false;
-    let probeError: unknown;
-    try {
-      await inspectMarkedEndpoint(active, 250, "active Chrome profile");
-      reachable = true;
-    } catch (error) {
-      probeError = error;
-    }
-    if (reachable) {
-      throw new ChromeLaunchError(`The Chrome profile is already active: ${userDataDir}`);
-    }
-    if (
-      !(probeError instanceof DevToolsEndpointMismatchError) &&
-      !isConnectionRefused(probeError)
-    ) {
-      throw new ChromeLaunchError(
-        `Could not verify whether the Chrome profile is active: ${userDataDir}`,
-        { cause: probeError instanceof Error ? probeError : undefined }
-      );
-    }
-    rmSync(activePortFile, { force: true });
-  }
-
-  const args = buildChromeArgs({
-    headless: options.headless ?? true,
-    port: requestedPort,
-    userDataDir,
-  });
   let proc: ChildProcess | undefined;
   try {
+    mkdirSync(userDataDir, { recursive: true, mode: 0o700 });
+
+    // A valid marker is removed only after its recorded browser is unreachable.
+    const activePortFile = join(userDataDir, "DevToolsActivePort");
+    const active = readDevToolsActivePort(userDataDir);
+    if (active) {
+      let reachable = false;
+      let probeError: unknown;
+      try {
+        await inspectMarkedEndpoint(active, 250, "active Chrome profile");
+        reachable = true;
+      } catch (error) {
+        probeError = error;
+      }
+      if (reachable) {
+        throw new ChromeLaunchError(
+          `The Chrome profile is already active: ${userDataDir}`
+        );
+      }
+      if (
+        !(probeError instanceof DevToolsEndpointMismatchError) &&
+        !isConnectionRefused(probeError)
+      ) {
+        throw new ChromeLaunchError(
+          `Could not verify whether the Chrome profile is active: ${userDataDir}`,
+          { cause: probeError instanceof Error ? probeError : undefined }
+        );
+      }
+      rmSync(activePortFile, { force: true });
+    }
+
+    const args = buildChromeArgs({
+      headless: options.headless ?? true,
+      port: requestedPort,
+      userDataDir,
+    });
     const launchedProcess = spawn(chromePath, args, {
       stdio: ["ignore", "pipe", "pipe"],
     });
     proc = launchedProcess;
     launchedProcess.stdout?.resume();
-    launchedProcess.stderr?.resume();
+    const stderr = captureStartupStderr(launchedProcess.stderr);
 
     let onSpawnError: ((error: Error) => void) | undefined;
     const spawnFailure = new Promise<never>((_resolve, reject) => {
@@ -611,11 +636,13 @@ export async function launchChrome(options: LaunchOptions = {}): Promise<LaunchR
         launchedProcess,
         requestedPort,
         userDataDir,
-        options.timeout ?? 15_000
+        options.timeout ?? 15_000,
+        stderr.read
       ),
       spawnFailure,
     ]).finally(() => {
       if (onSpawnError) launchedProcess.removeListener("error", onSpawnError);
+      stderr.stop();
     });
     return {
       process: launchedProcess,

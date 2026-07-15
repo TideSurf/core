@@ -8,6 +8,14 @@ Runtime: Node.js 18+ or Bun 1+
 Docs: https://tidesurf.org/docs
 Source: https://github.com/TideSurf/core
 
+## Install
+
+```sh
+brew install TideSurf/tap/tidesurf
+# or
+npm install --global @tidesurf/core
+```
+
 ## Agent CLI
 
 The first tool command starts a private local daemon and a managed headless browser. Separate CLI invocations reuse the same browser, active tab, open tabs, and element ID maps. The default session name is `default`.
@@ -155,7 +163,7 @@ Blocked operations: navigation, interaction, evaluation, clipboard, upload/downl
 
 SDK uploads and downloads stay inside `fileAccessRoots`. Omit the option for the working directory and OS temporary directory; pass `fileAccessRoots: []` to disable SDK filesystem operations. The CLI adds roots with repeatable `--file-access-root` flags.
 
-One download may run on a page at a time. TideSurf checks the destination again after directory creation and before enabling browser downloads.
+One download may run through a `SurfingPage` connection at a time. TideSurf checks the destination again after directory creation and before enabling browser downloads.
 
 Localhost, loopback, private, and link-local navigation is blocked by default. Use `allowLocalhost` or `allowPrivateHosts` only for trusted targets.
 
@@ -165,8 +173,8 @@ Localhost, loopback, private, and link-local navigation is blocked by default. U
 {
   "mcpServers": {
     "tidesurf": {
-      "command": "bunx",
-      "args": ["@tidesurf/core", "mcp"]
+      "command": "tidesurf",
+      "args": ["mcp"]
     }
   }
 }

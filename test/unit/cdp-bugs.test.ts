@@ -1,10 +1,12 @@
 import { describe, expect, it, mock } from "bun:test";
+import { EventEmitter } from "node:events";
 import { mkdtemp, rm, stat, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   clickNode,
   captureScreenshot,
+  clipboardRead,
   clipboardWrite,
   disconnect,
   evaluate,
@@ -17,11 +19,19 @@ import {
   type CDPConnection,
 } from "../../src/cdp/connection.js";
 import { downloadFromAction } from "../../src/cdp/download-manager.js";
-import { CDPTimeoutError, NavigationError, ValidationError } from "../../src/errors.js";
+import {
+  ActionCommittedError,
+  CDPTimeoutError,
+  NavigationError,
+  ValidationError,
+} from "../../src/errors.js";
 
 function connection(overrides: Partial<CDPConnection> = {}): CDPConnection {
   return {
-    client: { close: mock(async () => {}) } as unknown as CDPConnection["client"],
+    client: Object.assign(new EventEmitter(), {
+      close: mock(async () => {}),
+      send: mock(async () => ({})),
+    }) as unknown as CDPConnection["client"],
     DOM: {
       resolveNode: mock(async () => ({ object: { objectId: "object-1" } })),
     } as unknown as CDPConnection["DOM"],
@@ -88,14 +98,17 @@ function connectionForPageObject(
 }
 
 describe("CDP operations", () => {
-  it("times out a stalled scroll", async () => {
+  it("does not invite a retry when a scroll response times out", async () => {
     const conn = connection({
       Runtime: {
         evaluate: mock(() => new Promise(() => {})),
       } as unknown as CDPConnection["Runtime"],
     });
 
-    await expect(scroll(conn, "down", 100, 5)).rejects.toBeInstanceOf(CDPTimeoutError);
+    await expect(scroll(conn, "down", 100, 5)).rejects.toMatchObject({
+      name: "ActionCommittedError",
+      message: expect.stringContaining("may have completed"),
+    });
   });
 
   it("rejects page-side exceptions from raw runtime evaluations", async () => {
@@ -137,6 +150,36 @@ describe("CDP operations", () => {
     expect(resolveNode).toHaveBeenCalledTimes(1);
     expect(callFunctionOn).toHaveBeenCalledTimes(1);
     expect(releaseObject).toHaveBeenCalledWith({ objectId: "remote-7" });
+  });
+
+  it("keeps element resolution timeouts retryable before mutation starts", async () => {
+    const callFunctionOn = mock(async () => ({ result: { value: true } }));
+    const conn = connection({
+      DOM: {
+        resolveNode: mock(() => new Promise(() => {})),
+      } as unknown as CDPConnection["DOM"],
+      Runtime: {
+        callFunctionOn,
+        releaseObject: mock(async () => ({})),
+      } as unknown as CDPConnection["Runtime"],
+    });
+
+    await expect(clickNode(conn, 7, 5)).rejects.toBeInstanceOf(CDPTimeoutError);
+    expect(callFunctionOn).not.toHaveBeenCalled();
+  });
+
+  it("does not invite a retry when an element mutation response times out", async () => {
+    const conn = connection({
+      Runtime: {
+        callFunctionOn: mock(() => new Promise(() => {})),
+        releaseObject: mock(async () => ({})),
+      } as unknown as CDPConnection["Runtime"],
+    });
+
+    await expect(clickNode(conn, 7, 5)).rejects.toMatchObject({
+      name: "ActionCommittedError",
+      message: expect.stringContaining("Click may have completed"),
+    });
   });
 
   it("does not turn cleanup failure into a failed committed action", async () => {
@@ -404,6 +447,54 @@ describe("CDP operations", () => {
     expect(unsubscribe).toHaveBeenCalledTimes(1);
   });
 
+  it("stops a committed navigation when the target disconnects", async () => {
+    const client = Object.assign(new EventEmitter(), {
+      close: mock(async () => {}),
+      send: mock(async () => ({})),
+    });
+    const unsubscribe = mock(() => {});
+    const conn = connection({
+      client: client as unknown as CDPConnection["client"],
+      Page: {
+        lifecycleEvent: mock(() => unsubscribe),
+        navigate: mock(async () => ({ loaderId: "loader-1" })),
+      } as unknown as CDPConnection["Page"],
+    });
+    const started = Date.now();
+    const pending = navigate(conn, "https://example.com", 5_000);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    client.emit("disconnect");
+
+    await expect(pending).rejects.toBeInstanceOf(ActionCommittedError);
+    expect(Date.now() - started).toBeLessThan(500);
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
+    expect(client.listenerCount("disconnect")).toBe(0);
+  });
+
+  it("does not invite a retry when navigation disconnects before its reply", async () => {
+    const client = Object.assign(new EventEmitter(), {
+      close: mock(async () => {}),
+      send: mock(async () => ({})),
+    });
+    const conn = connection({
+      client: client as unknown as CDPConnection["client"],
+      Page: {
+        lifecycleEvent: mock(() => () => {}),
+        navigate: mock(() => new Promise(() => {})),
+      } as unknown as CDPConnection["Page"],
+    });
+
+    const pending = navigate(conn, "https://example.com", 5_000);
+    await Promise.resolve();
+    client.emit("disconnect");
+
+    await expect(pending).rejects.toMatchObject({
+      name: "ActionCommittedError",
+      message: expect.stringContaining("may have completed"),
+    });
+    expect(client.listenerCount("disconnect")).toBe(0);
+  });
+
   it("resolves an upload target once and releases it", async () => {
     const resolveNode = mock(async () => ({ object: { objectId: "upload-1" } }));
     const setFileInputFiles = mock(async () => {});
@@ -539,6 +630,22 @@ describe("CDP operations", () => {
     expect(capture).not.toHaveBeenCalled();
   });
 
+  it("captures clipped screenshots beyond the current viewport", async () => {
+    const capture = mock(async () => ({ data: "png" }));
+    const conn = connection({
+      Page: { captureScreenshot: capture } as unknown as CDPConnection["Page"],
+    });
+    const clip = { x: 20, y: 2_000, width: 120, height: 60, scale: 1 };
+
+    await captureScreenshot(conn, { clip });
+
+    expect(capture).toHaveBeenCalledWith({
+      format: "png",
+      clip,
+      captureBeyondViewport: true,
+    });
+  });
+
   it("returns CDP unserializable values without breaking JSON adapters", async () => {
     const conn = connection({
       Runtime: {
@@ -560,7 +667,7 @@ describe("CDP operations", () => {
     });
     const send = mock(async () => ({}));
     const conn = connection({
-      client: { send } as unknown as CDPConnection["client"],
+      client: Object.assign(new EventEmitter(), { send }) as unknown as CDPConnection["client"],
       Runtime: {
         evaluate: mock(() => origin),
       } as unknown as CDPConnection["Runtime"],
@@ -583,7 +690,7 @@ describe("CDP operations", () => {
       return {};
     });
     const conn = connection({
-      client: { send } as unknown as CDPConnection["client"],
+      client: Object.assign(new EventEmitter(), { send }) as unknown as CDPConnection["client"],
       Runtime: {
         evaluate: mock(async () => ({
           result: { value: "https://example.com" },
@@ -628,7 +735,7 @@ describe("CDP operations", () => {
       return {};
     });
     const conn = connection({
-      client: { send } as unknown as CDPConnection["client"],
+      client: Object.assign(new EventEmitter(), { send }) as unknown as CDPConnection["client"],
       Runtime: {
         evaluate: mock(async ({ expression }: { expression: string }) => {
           if (expression === "location.origin") {
@@ -667,6 +774,45 @@ describe("CDP operations", () => {
     expect(events.filter((event) => event === "Browser.resetPermissions")).toHaveLength(3);
   });
 
+  it("keeps later clipboard work behind a timed-out permission reset", async () => {
+    let resolveReset!: () => void;
+    const lateReset = new Promise<void>((resolve) => {
+      resolveReset = resolve;
+    });
+    const events: string[] = [];
+    let resetCount = 0;
+    const send = mock(async (method: string) => {
+      events.push(method);
+      if (method === "Browser.resetPermissions" && resetCount++ === 0) {
+        return lateReset;
+      }
+      return {};
+    });
+    const conn = connection({
+      client: Object.assign(new EventEmitter(), { send }) as unknown as CDPConnection["client"],
+      Runtime: {
+        evaluate: mock(async ({ expression }: { expression: string }) => ({
+          result: {
+            value: expression === "location.origin"
+              ? "https://example.com"
+              : undefined,
+          },
+        })),
+      } as unknown as CDPConnection["Runtime"],
+    });
+
+    await expect(clipboardWrite(conn, "first", 5)).rejects.toBeInstanceOf(
+      ActionCommittedError
+    );
+    const second = clipboardWrite(conn, "second", 100);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(events.filter((event) => event === "Browser.grantPermissions")).toHaveLength(1);
+
+    resolveReset();
+    await second;
+    expect(events.filter((event) => event === "Browser.grantPermissions")).toHaveLength(2);
+  });
+
   it("resets temporary clipboard permissions after writing", async () => {
     const send = mock(async () => ({}));
     const evaluate = mock(async ({ expression }: { expression: string }) => ({
@@ -677,7 +823,7 @@ describe("CDP operations", () => {
       },
     }));
     const conn = connection({
-      client: { send } as unknown as CDPConnection["client"],
+      client: Object.assign(new EventEmitter(), { send }) as unknown as CDPConnection["client"],
       Runtime: { evaluate } as unknown as CDPConnection["Runtime"],
     });
 
@@ -690,6 +836,52 @@ describe("CDP operations", () => {
     ]);
   });
 
+  it("keeps clipboard cooldowns independent across browser connections", async () => {
+    const clipboardConnection = () => connection({
+      Runtime: {
+        evaluate: mock(async ({ expression }: { expression: string }) => ({
+          result: {
+            value: expression === "location.origin"
+              ? "https://example.com"
+              : "clipboard",
+          },
+        })),
+      } as unknown as CDPConnection["Runtime"],
+    });
+    const first = clipboardConnection();
+    const second = clipboardConnection();
+
+    await expect(clipboardRead(first)).resolves.toBe("clipboard");
+    await expect(clipboardRead(second)).resolves.toBe("clipboard");
+    await expect(clipboardRead(first)).rejects.toThrow("rate limit exceeded");
+  });
+
+  it("does not serialize clipboard writes from independent browsers", async () => {
+    let active = 0;
+    let peak = 0;
+    const clipboardConnection = () => connection({
+      Runtime: {
+        evaluate: mock(async ({ expression }: { expression: string }) => {
+          if (expression === "location.origin") {
+            return { result: { value: "https://example.com" } };
+          }
+          active++;
+          peak = Math.max(peak, active);
+          await new Promise((resolve) => setTimeout(resolve, 10));
+          active--;
+          return { result: { value: undefined } };
+        }),
+      } as unknown as CDPConnection["Runtime"],
+    });
+
+    await Promise.all([
+      clipboardWrite(clipboardConnection(), "first"),
+      clipboardWrite(clipboardConnection(), "second"),
+    ]);
+
+    expect(peak).toBe(2);
+  });
+
   it("keeps a clipboard failure primary when permission reset also fails", async () => {
     const writeError = new Error("clipboard write failed");
     const send = mock(async (method: string) => {
@@ -697,7 +889,7 @@ describe("CDP operations", () => {
       return {};
     });
     const conn = connection({
-      client: { send } as unknown as CDPConnection["client"],
+      client: Object.assign(new EventEmitter(), { send }) as unknown as CDPConnection["client"],
       Runtime: {
         evaluate: mock(async ({ expression }: { expression: string }) => {
           if (expression === "location.origin") {
@@ -732,7 +924,12 @@ describe("download listeners", () => {
   function downloadConnection() {
     const handlers = new Map<string, (params: never) => void>();
     const removed: string[] = [];
+    const client = Object.assign(new EventEmitter(), {
+      close: mock(async () => {}),
+      send: mock(async () => ({})),
+    });
     const conn = connection({
+      client: client as unknown as CDPConnection["client"],
       Page: {
         setDownloadBehavior: mock(async () => ({})),
         on: mock((event: string, handler: (params: never) => void) => {
@@ -744,7 +941,7 @@ describe("download listeners", () => {
         }),
       } as unknown as CDPConnection["Page"],
     });
-    return { conn, handlers, removed };
+    return { conn, handlers, removed, client };
   }
 
   it("buffers completion until filename metadata arrives", async () => {
@@ -802,7 +999,7 @@ describe("download listeners", () => {
     await expect(first).resolves.toMatchObject({ fileName: "first.txt" });
   });
 
-  it("cleans up listeners after a timeout", async () => {
+  it("cleans up listeners after a committed download times out", async () => {
     const { conn, removed } = downloadConnection();
     await expect(
       downloadFromAction(
@@ -810,8 +1007,37 @@ describe("download listeners", () => {
         { downloadDir: "/tmp/downloads", timeout: 5 },
         async () => {}
       )
-    ).rejects.toBeInstanceOf(CDPTimeoutError);
+    ).rejects.toBeInstanceOf(ActionCommittedError);
     expect(removed).toHaveLength(2);
+  });
+
+  it("reports an ambiguous trigger disconnect without inviting a retry", async () => {
+    const { conn, client } = downloadConnection();
+    const started = Date.now();
+
+    await expect(
+      downloadFromAction(
+        conn,
+        { downloadDir: "/tmp/downloads", timeout: 10_000 },
+        async () => {
+          client.emit("disconnect");
+          await new Promise(() => {});
+        }
+      )
+    ).rejects.toMatchObject({
+      name: "ActionCommittedError",
+      message: expect.stringContaining("may have completed"),
+    });
+
+    expect(Date.now() - started).toBeLessThan(500);
+    expect(client.listenerCount("disconnect")).toBe(0);
+    await expect(
+      downloadFromAction(
+        conn,
+        { downloadDir: "/tmp/downloads", timeout: 5 },
+        async () => {}
+      )
+    ).rejects.toBeInstanceOf(ActionCommittedError);
   });
 
   it("does not reset download behavior when directory setup fails", async () => {

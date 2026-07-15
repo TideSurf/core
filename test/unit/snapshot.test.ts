@@ -396,6 +396,22 @@ describe("DOM snapshot decoder", () => {
     }
   });
 
+  it("uses each edge default for legacy clip auto values", () => {
+    const data = fixture();
+    setStyle(data, 18, {
+      clip: "rect(auto auto auto auto)",
+      position: "absolute",
+    });
+
+    const result = decodeDOMSnapshot(data, {
+      viewportWidth: 400,
+      viewportHeight: 300,
+      markerAttributes: MARKERS,
+    });
+
+    expect(attributes(findBackend(result.root, 123)!)[MARKERS.visible]).toBe("1");
+  });
+
   it("rejects oversized and structurally invalid snapshots", () => {
     expect(() =>
       decodeDOMSnapshot(fixture(), {
@@ -452,6 +468,8 @@ describe("DOM snapshot capture", () => {
     expect(expression).toContain("childNodes");
     expect(expression).toContain("shadowRoot");
     expect(expression).toContain("contentDocument");
+    expect(expression).not.toContain("Node.ELEMENT_NODE");
+    expect(expression).not.toContain("Node.TEXT_NODE");
     expect(expression).not.toContain("setAttribute");
     expect(expression).not.toContain("removeAttribute");
     expect(calls).toEqual([

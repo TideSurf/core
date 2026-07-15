@@ -59,11 +59,16 @@ export class ReadOnlyError extends TideSurfError {
 }
 
 export class ActionCommittedError extends TideSurfError {
-  constructor(operation: string, cause: unknown) {
+  constructor(
+    operation: string,
+    cause: unknown,
+    certainty: "committed" | "uncertain" = "committed"
+  ) {
     const detail = cause instanceof Error ? cause.message : String(cause);
+    const status = certainty === "uncertain" ? "may have completed" : "completed";
     super(
-      `${operation} completed, but the page could not be confirmed afterward: ${detail}. ` +
-      "Read the page again before the next action.",
+      `${operation} ${status}, but follow-up verification or cleanup failed: ${detail}. ` +
+      "Inspect current state before the next action.",
       { cause: cause instanceof Error ? cause : undefined }
     );
     this.name = "ActionCommittedError";

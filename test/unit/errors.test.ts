@@ -6,6 +6,7 @@ import {
   ElementNotFoundError,
   NavigationError,
   ValidationError,
+  ActionCommittedError,
 } from "../../src/errors.js";
 
 describe("Error classes", () => {
@@ -56,6 +57,20 @@ describe("Error classes", () => {
     const err = new ValidationError("invalid URL");
     expect(err).toBeInstanceOf(TideSurfError);
     expect(err.name).toBe("ValidationError");
+  });
+
+  it("ActionCommittedError distinguishes confirmed and uncertain actions", () => {
+    const confirmed = new ActionCommittedError("Download", new Error("cleanup failed"));
+    const uncertain = new ActionCommittedError(
+      "Download trigger",
+      new Error("connection closed"),
+      "uncertain"
+    );
+
+    expect(confirmed.message).toContain("Download completed");
+    expect(confirmed.message).toContain("follow-up verification or cleanup failed");
+    expect(uncertain.message).toContain("Download trigger may have completed");
+    expect(uncertain.message).toContain("Inspect current state");
   });
 
   it("preserves cause via ErrorOptions", () => {

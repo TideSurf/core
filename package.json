@@ -1,6 +1,6 @@
 {
   "name": "@tidesurf/core",
-  "version": "0.5.4",
+  "version": "0.6.0",
   "description": "Stateful Chromium tools with compact DOM text for browser agents",
   "type": "module",
   "main": "dist/index.js",
@@ -22,6 +22,7 @@
   ],
   "scripts": {
     "build": "node scripts/build.mjs",
+    "prepack": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
     "typecheck:examples": "tsc -p tsconfig.examples.json",
     "test": "bun test test/unit",

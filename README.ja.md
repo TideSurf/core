@@ -2,29 +2,37 @@
 
 # TideSurf
 
-**ライブページを、エージェントがサーフする。**
+**Agents Surfing**
 
 [Webサイト](https://tidesurf.org) · [ドキュメント](https://tidesurf.org/docs) · [llms.txt](https://tidesurf.org/llms.txt) · [npm](https://www.npmjs.com/package/@tidesurf/core) · [スポンサー](https://github.com/sponsors/MercuriusDream)
 
 TideSurfは、実行中のChromiumページをエージェント向けのコンパクトなテキストへ変換します。操作可能な要素には、現在のDOMに結び付いた短いIDが付きます。CLI、SDK executor、MCPは同じ18ツールを使います。
+
+## インストール
+
+```sh
+brew install TideSurf/tap/tidesurf
+# または
+npm install --global @tidesurf/core
+```
 
 ## エージェントCLI
 
 ツールコマンドを直接実行できます。最初のコマンドが非公開のローカルセッションと、ヘッドレスの分離ブラウザーを起動します。次のシェル呼び出しでも、ブラウザー、タブ、アクティブタブ、要素IDマップが維持されます。
 
 ```sh
-bunx @tidesurf/core navigate https://example.com
-bunx @tidesurf/core get_state
-bunx @tidesurf/core click L1
-bunx @tidesurf/core status
-bunx @tidesurf/core stop
+tidesurf navigate https://example.com
+tidesurf get_state
+tidesurf click L1
+tidesurf status
+tidesurf stop
 ```
 
 並行する作業には名前付きセッションを使います。
 
 ```sh
-bunx @tidesurf/core --session research navigate https://example.com
-bunx @tidesurf/core --session research get_state --mode interactive
+tidesurf --session research navigate https://example.com
+tidesurf --session research get_state --mode interactive
 ```
 
 直接実行できるコマンドは次の18個です。
@@ -44,7 +52,7 @@ clipboard_write download
 読み取り専用ポリシーはセッション終了まで固定されます。
 
 ```sh
-bunx @tidesurf/core --session audit --read-only get_state
+tidesurf --session audit --read-only get_state
 ```
 
 読み取り専用セッションでは、`get_state`、`extract`、`list_tabs`、`switch_tab`、`search`、`screenshot`だけを使用できます。ナビゲーション、ページ操作、JavaScript、クリップボード、アップロード/ダウンロード、タブの作成と終了はSDKとツールの全境界で拒否されます。
@@ -100,8 +108,8 @@ MCPは同じレジストリとexecutorを使う薄いアダプターとして利
 {
   "mcpServers": {
     "tidesurf": {
-      "command": "bunx",
-      "args": ["@tidesurf/core", "mcp"]
+      "command": "tidesurf",
+      "args": ["mcp"]
     }
   }
 }

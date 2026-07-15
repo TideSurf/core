@@ -6,13 +6,21 @@ TideSurf gives agents a stateful Chromium CLI and a compact view of the live DOM
 
 Use Node.js 18+ or Bun 1+. Install Chrome stable, Beta, Dev, Canary, or Chromium. TideSurf finds supported installs automatically and never downloads a browser.
 
-## Start with the CLI
-
-Run a tool command through the package binary:
+Install the CLI:
 
 ```bash
-bunx @tidesurf/core navigate https://example.com
-bunx @tidesurf/core get_state
+brew install TideSurf/tap/tidesurf
+# or
+npm install --global @tidesurf/core
+```
+
+## Start with the CLI
+
+Run a tool command:
+
+```bash
+tidesurf navigate https://example.com
+tidesurf get_state
 ```
 
 The first command starts a private local session and a managed headless browser. The second command connects to that session. The latest snapshot ID map, open tabs, and active tab stay in memory between shell calls. Read fresh state after the page changes.
@@ -20,16 +28,16 @@ The first command starts a private local session and a managed headless browser.
 Act with an ID from `get_state`:
 
 ```bash
-bunx @tidesurf/core click L1
-bunx @tidesurf/core get_state --mode interactive --max-tokens 500
-bunx @tidesurf/core stop
+tidesurf click L1
+tidesurf get_state --mode interactive --max-tokens 500
+tidesurf stop
 ```
 
 The default session is named `default`. Use a name to isolate work:
 
 ```bash
-bunx @tidesurf/core --session checkout navigate https://example.com/shop
-bunx @tidesurf/core --session checkout get_state
+tidesurf --session checkout navigate https://example.com/shop
+tidesurf --session checkout get_state
 ```
 
 `stop` is idempotent. Sessions do not stop while idle. [CLI](#cli) covers every command, startup policy, output mode, and exit code.
@@ -106,8 +114,8 @@ The CLI uses managed launch by default. `--auto-connect` tries an endpoint or di
 Startup and security options become immutable when a named session starts. A later command may omit them or repeat matching standalone values such as `--read-only`, but it cannot change an explicit value. Stop the session or choose a new name for another policy.
 
 ```bash
-bunx @tidesurf/core --session audit --read-only get_state
-bunx @tidesurf/core --session audit status
+tidesurf --session audit --read-only get_state
+tidesurf --session audit status
 ```
 
 Read-only sessions allow `get_state`, `extract`, `list_tabs`, `switch_tab`, `search`, and `screenshot`. Navigation, page interaction, JavaScript, clipboard, upload/download, and tab creation or closure fail in the CLI, registry, SDK, and `getPage()` surface.
@@ -137,8 +145,8 @@ Add the packaged adapter to an MCP client:
 {
   "mcpServers": {
     "tidesurf": {
-      "command": "bunx",
-      "args": ["@tidesurf/core", "mcp"]
+      "command": "tidesurf",
+      "args": ["mcp"]
     }
   }
 }

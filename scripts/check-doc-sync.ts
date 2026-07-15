@@ -67,6 +67,29 @@ const llms = read("llms.txt");
 const publicLlms = read("website/landing/public/llms.txt");
 equal(publicLlms, llms, "website llms.txt must be byte-identical to package llms.txt");
 
+const installCommands = [
+  "brew install TideSurf/tap/tidesurf",
+  "npm install --global @tidesurf/core",
+] as const;
+for (const path of [
+  "README.md",
+  "README.ja.md",
+  "README.ko.md",
+  "llms.txt",
+  "website/docs/content/getting-started.md",
+  "website/docs/content/cli.md",
+  "website/docs/content/migration.md",
+]) {
+  const source = read(path);
+  for (const command of installCommands) {
+    check(
+      source.split(command).length === 2,
+      `${path} must contain the canonical install command once: ${command}`
+    );
+  }
+  check(!source.includes("bunx @tidesurf/core"), `${path} contains the retired bunx flow`);
+}
+
 const llmsTools = [...markdownSection(llms, "Direct tool commands, in registry order:").matchAll(
   /^(\d+)\. `([^`]+)`$/gm
 )].map((match) => ({
@@ -256,7 +279,6 @@ const publicToolNamePaths = [
   "website/landing/src/main.ts",
   "website/landing/public/llms.txt",
   "website/landing/public/og.html",
-  "website/landing/public/og.svg",
   ...readdirSync(resolve(root, "examples"))
     .filter((name) => name.endsWith(".ts"))
     .map((name) => `examples/${name}`),
@@ -319,7 +341,6 @@ const terminologyPaths = [
   "website/docs/index.html",
   "website/landing/index.html",
   "website/landing/public/og.html",
-  "website/landing/public/og.svg",
   "src/tools/registry.ts",
   ...contentNames
     .filter((name) => name !== "changelog")
@@ -429,7 +450,10 @@ check(
   "benchmark docs must describe the aggregate ratio"
 );
 
-const packageJson = JSON.parse(read("package.json")) as { scripts?: Record<string, string> };
+const packageJson = JSON.parse(read("package.json")) as {
+  scripts?: Record<string, string>;
+  version?: string;
+};
 check(packageJson.scripts?.["demo"] === undefined, "package must not expose the retired demo script");
 for (const name of readdirSync(resolve(root, ".github/workflows"))) {
   if (!name.endsWith(".yml") && !name.endsWith(".yaml")) continue;
@@ -445,10 +469,24 @@ for (const path of terminologyPaths) {
 }
 
 const ogHtml = read("website/landing/public/og.html");
-const ogSvg = read("website/landing/public/og.svg");
-for (const value of ["Live DOM → compact text → current action handles.", "bunx @tidesurf/core"]) {
+const landingHtml = read("website/landing/index.html");
+const hero = landingHtml.match(/<h1 id="hero-title">([^<]+)<\/h1>/)?.[1];
+const heroCommand = landingHtml.match(/data-copy="([^"]+)"/)?.[1];
+check(hero === "Agents Surfing", "landing hero must be exactly Agents Surfing");
+check(
+  heroCommand === "tidesurf navigate https://example.com",
+  "landing command must use the installed TideSurf CLI"
+);
+for (const value of [
+  hero,
+  "Live DOM → compact text → current action handles.",
+  heroCommand,
+]) {
+  if (!value) continue;
   check(ogHtml.includes(value), `og.html must include: ${value}`);
-  check(ogSvg.includes(value), `og.svg must include: ${value}`);
+}
+for (const retired of ["The live page.", "Agents surfing.", "bunx @tidesurf/core"]) {
+  check(!ogHtml.includes(retired), `og.html contains retired copy: ${retired}`);
 }
 const ogManifest = JSON.parse(read("website/landing/public/og-manifest.json")) as {
   sourceSha256: string;
@@ -474,6 +512,23 @@ equal(
   markdownSection(webChangelog, "## Unreleased"),
   markdownSection(rootChangelog, "## Unreleased"),
   "root and website Unreleased changelog sections must be identical"
+);
+const currentReleaseSection = (source: string): string => {
+  if (!packageJson.version) return "";
+  const version = packageJson.version.replaceAll(".", "\\.");
+  const heading = source.match(
+    new RegExp(`^## ${version} \\([^\\n]+\\)$`, "m")
+  )?.[0];
+  return heading ? markdownSection(source, heading) : "";
+};
+const rootCurrentRelease = currentReleaseSection(rootChangelog);
+const webCurrentRelease = currentReleaseSection(webChangelog);
+check(rootCurrentRelease !== "", "root changelog must contain the current release");
+check(webCurrentRelease !== "", "website changelog must contain the current release");
+equal(
+  webCurrentRelease,
+  rootCurrentRelease,
+  "root and website current release notes must be identical"
 );
 const releaseHeadings = (source: string): string[] =>
   [...source.matchAll(/^## (\d+\.\d+\.\d+ \([^\n]+\))$/gm)].map((match) => match[1]);

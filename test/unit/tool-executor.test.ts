@@ -2,7 +2,10 @@ import { createToolExecutor } from "../../src/tools/registry.js";
 import { ElementNotFoundError } from "../../src/errors.js";
 
 function mockInstance<T extends object>(value: T, readOnly = false): T {
-  return Object.assign(value, { isReadOnly: () => readOnly });
+  return Object.assign(value, {
+    isReadOnly: () => readOnly,
+    getUrlValidationOptions: () => ({}),
+  });
 }
 
 describe("createToolExecutor", () => {

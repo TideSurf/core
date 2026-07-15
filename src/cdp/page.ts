@@ -94,6 +94,13 @@ function retainNodeMap(nodes: OSNode[], nodeMap: NodeMap): NodeMap {
   return retained;
 }
 
+const pageConnections = new WeakMap<SurfingPage, CDPConnection>();
+const closingPages = new WeakSet<SurfingPage>();
+
+export function isSurfingPageConnected(page: SurfingPage): boolean {
+  return !closingPages.has(page) && pageConnections.get(page)?.disconnected !== true;
+}
+
 /** Stateful page inspection and interaction over one CDP target. */
 export class SurfingPage {
   private readonly conn: CDPConnection;
@@ -113,6 +120,7 @@ export class SurfingPage {
     timeout?: number
   ) {
     this.conn = conn;
+    pageConnections.set(this, conn);
     this.fileAccessRoots = [...fileAccessRoots];
     this.urlValidationOptions = { ...urlValidationOptions };
     this.readOnly = readOnly;
@@ -274,7 +282,7 @@ export class SurfingPage {
     this.assertOpen();
     this.assertWritable("evaluate");
     validateExpression(expression);
-    return cdp.evaluate(this.conn, expression, this.timeout);
+    return cdp.evaluate(this.conn, expression, this.timeout, "Evaluation");
   }
 
   async search(query: string, maxResults: number = 10): Promise<SearchResult[]> {
@@ -368,11 +376,11 @@ export class SurfingPage {
         this.timeout ?? 5_000,
         "screenshot:getBoxModel"
       );
-      const content = model.content;
-      const x = Math.min(content[0], content[2], content[4], content[6]);
-      const y = Math.min(content[1], content[3], content[5], content[7]);
-      const maxX = Math.max(content[0], content[2], content[4], content[6]);
-      const maxY = Math.max(content[1], content[3], content[5], content[7]);
+      const border = model.border;
+      const x = Math.min(border[0], border[2], border[4], border[6]);
+      const y = Math.min(border[1], border[3], border[5], border[7]);
+      const maxX = Math.max(border[0], border[2], border[4], border[6]);
+      const maxY = Math.max(border[1], border[3], border[5], border[7]);
 
       return cdp.captureScreenshot(this.conn, {
         clip: {
@@ -456,7 +464,12 @@ export class SurfingPage {
   }
 
   async close(): Promise<void> {
-    this.closePromise ??= cdp.disconnect(this.conn);
+    if (this.closePromise === null) {
+      closingPages.add(this);
+      this.closePromise = this.conn.disconnected
+        ? Promise.resolve()
+        : cdp.disconnect(this.conn);
+    }
     return this.closePromise;
   }
 
@@ -473,7 +486,7 @@ export class SurfingPage {
   }
 
   private assertOpen(): void {
-    if (this.closePromise) {
+    if (this.closePromise || this.conn.disconnected) {
       throw new CDPConnectionError("SurfingPage is closed");
     }
   }

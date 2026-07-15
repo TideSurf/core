@@ -2,6 +2,43 @@
 
 Upgrade notes for TideSurf releases with API or output changes.
 
+## v0.6.0
+
+v0.6.0 adds a stateful CLI. Install it, then call tools across separate shell processes:
+
+```bash
+brew install TideSurf/tap/tidesurf
+# or
+npm install --global @tidesurf/core
+
+tidesurf navigate https://example.com
+tidesurf get_state
+tidesurf click L1
+```
+
+Direct CLI commands use the exact registry and MCP identifiers, including underscores in `get_state`, `list_tabs`, `new_tab`, `switch_tab`, `close_tab`, `clipboard_read`, and `clipboard_write`. The CLI, SDK executor, and packaged MCP adapter share one registry, schema, and handler for each of the 18 tools.
+
+The first tool command starts a named local session and managed browser. Later commands reuse its active tab and exact element ID map. Startup and security policy remain fixed until `tidesurf stop`; choose another `--session` name for a different policy.
+
+Managed launches now select an ephemeral debugging port unless `port` or `--port` is explicit. `TideSurf.launch()` remains strict launch, while `TideSurf.connect()` remains strict attach and defaults to port `9222`. `ChromeChannel` and `TideSurfOptions.channel` select stable, Beta, Dev, Canary, or Chromium.
+
+`includeHidden: true` now means full-DOM debugging: it includes hidden nodes and disables viewport filtering. Read-only mode is enforced by the registry, executor, `TideSurf`, and direct `SurfingPage` methods. `switch_tab` remains available because it changes only the observation target.
+
+The unpublished standalone MCP implementation was removed. Use the packaged adapter from the installed CLI:
+
+```json
+{
+  "mcpServers": {
+    "tidesurf": {
+      "command": "tidesurf",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+`evaluate` now validates expression shape and size only. It runs arbitrary unsandboxed page JavaScript. Use read-only mode when page JavaScript must be unavailable.
+
 ## Preferred page-read method
 
 Use `readPage()` in new SDK code:

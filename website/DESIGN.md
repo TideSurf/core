@@ -91,9 +91,13 @@ Structure:
 4. Operational capabilities and guardrails as compact rows.
 5. Final docs and install action.
 
+The hero thesis is exactly `Agents Surfing`. Its command shows the installed CLI path, `tidesurf navigate https://example.com`. Social previews and copyable command surfaces use the same thesis and command.
+
 The square wave field is a TideSurf-only signature. Keep it quiet and fixed
 behind the page so no section edge can cut it off. Page depth darkens this one
 flat canvas; scrolling back toward the top restores its starting tone.
+
+On Safari, size the fixed canvas from stable CSS viewport bounds. Cache its CSS size and device-pixel ratio so visual viewport events that do not change either value cannot reallocate the backing buffer. Use `100vh` as the fallback and `100lvh` when supported.
 
 Do not make sections invisible before an IntersectionObserver fires. Any reveal
 is progressive enhancement and may only affect decoration.

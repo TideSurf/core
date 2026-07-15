@@ -2,29 +2,37 @@
 
 # TideSurf
 
-**The live page. Agents surfing.**
+**Agents Surfing**
 
 [Website](https://tidesurf.org) · [Docs](https://tidesurf.org/docs) · [llms.txt](https://tidesurf.org/llms.txt) · [npm](https://www.npmjs.com/package/@tidesurf/core) · [Sponsor](https://github.com/sponsors/MercuriusDream)
 
 TideSurf turns live Chromium pages into compact text for agents. Interactive elements receive short IDs tied to the current DOM. The same 18 tools work through the CLI, SDK executor, and MCP.
+
+## Install
+
+```sh
+brew install TideSurf/tap/tidesurf
+# or
+npm install --global @tidesurf/core
+```
 
 ## Agent CLI
 
 Run commands directly. The first tool command starts a private local session and a headless, isolated browser. Later shell calls reuse the same browser, tabs, active tab, and element ID map.
 
 ```sh
-bunx @tidesurf/core navigate https://example.com
-bunx @tidesurf/core get_state
-bunx @tidesurf/core click L1
-bunx @tidesurf/core status
-bunx @tidesurf/core stop
+tidesurf navigate https://example.com
+tidesurf get_state
+tidesurf click L1
+tidesurf status
+tidesurf stop
 ```
 
 Use a named session for parallel workflows:
 
 ```sh
-bunx @tidesurf/core --session research navigate https://example.com
-bunx @tidesurf/core --session research get_state --mode interactive
+tidesurf --session research navigate https://example.com
+tidesurf --session research get_state --mode interactive
 ```
 
 TideSurf exposes these direct commands:
@@ -44,7 +52,7 @@ Managed launch is the default. TideSurf finds Chrome stable, Beta, Dev, Canary, 
 Read-only policy remains fixed for the session lifetime:
 
 ```sh
-bunx @tidesurf/core --session audit --read-only get_state
+tidesurf --session audit --read-only get_state
 ```
 
 Read-only sessions keep `get_state`, `extract`, `list_tabs`, `switch_tab`, `search`, and `screenshot`. Navigation, page interaction, JavaScript, clipboard, upload/download, and tab creation or closure fail at every SDK and tool boundary.
@@ -100,8 +108,8 @@ MCP is a thin adapter over the same registry and executor:
 {
   "mcpServers": {
     "tidesurf": {
-      "command": "bunx",
-      "args": ["@tidesurf/core", "mcp"]
+      "command": "tidesurf",
+      "args": ["mcp"]
     }
   }
 }

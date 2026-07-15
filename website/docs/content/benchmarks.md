@@ -13,6 +13,23 @@ TideSurf compresses the live DOM into model-readable text. Deep nesting, SVGs, a
 
 The token-budget regression also reduces the 469-token e-commerce state to 267 tokens with a 300-token target while retaining actionable IDs and visible omission markers.
 
+## Runtime guardrails
+
+Executable performance tests exercise a 65,536-branch tree and a 10,000-element page. They check near-linear parser and pruning growth, bounded output, stable source order, and retained action IDs. These gates run production code rather than copied benchmark implementations.
+
+A 10,000-button release profile showed where time is spent after the current cleanup:
+
+| Stage | Mean time |
+|---|---:|
+| CDP snapshot capture | 50.5 ms |
+| Snapshot decode | 8.0 ms |
+| Semantic walk | 2.3 ms |
+| Token pruning | 3.0 ms |
+| Viewport filtering | 0.5 ms |
+| Serialization | 0.3 ms |
+
+The values are diagnostic, not a cross-machine promise. They show that browser capture and JSON decoding dominate this synthetic case; local filtering and serialization are already small. Compare changes on the same machine and Chrome build.
+
 ## Understanding the numbers
 
 Compression follows page structure:

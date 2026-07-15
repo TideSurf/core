@@ -194,6 +194,67 @@ describe("TideSurf.switchTab", () => {
     await expect(surf.switchTab("missing")).rejects.toThrow("tab not found");
   });
 
+  it("rejects and evicts an externally closed cached tab", async () => {
+    const tabManager = {
+      connectToTab: mock(async (tabId: string) => {
+        if (tabId === "initial") throw new Error("target missing");
+        return connection();
+      }),
+      listTabs: mock(async () => [
+        { id: "next", url: "about:blank", title: "", type: "page" },
+      ]),
+    };
+    const surf = instance(
+      tabManager as unknown as Pick<TabManager, "connectToTab">
+    );
+    const initialPage = surf.getPage();
+    await surf.switchTab("next");
+    Reflect.set(Reflect.get(initialPage, "conn"), "disconnected", true);
+
+    await expect(surf.switchTab("initial")).rejects.toThrow("target missing");
+
+    expect(Reflect.get(surf, "activeTabId")).toBe("next");
+    expect(
+      (Reflect.get(surf, "pages") as Map<string, SurfingPage>).has("initial")
+    ).toBe(false);
+    await surf.close();
+  });
+
+  it("rejects and evicts an externally closed active tab", async () => {
+    let connections = 0;
+    const surf = instance({
+      connectToTab: mock(async () => {
+        if (connections++ > 0) throw new Error("target missing");
+        return connection();
+      }),
+    } as Pick<TabManager, "connectToTab">);
+    await surf.switchTab("next");
+    const activePage = surf.getPage();
+    Reflect.set(Reflect.get(activePage, "conn"), "disconnected", true);
+
+    await expect(surf.switchTab("next")).rejects.toThrow("target missing");
+
+    expect(
+      (Reflect.get(surf, "pages") as Map<string, SurfingPage>).has("next")
+    ).toBe(false);
+    await surf.close();
+  });
+
+  it("reconnects a cached target after its public page connection closes", async () => {
+    const connectToTab = mock(async () => connection());
+    const surf = instance({ connectToTab } as Pick<TabManager, "connectToTab">);
+    await surf.switchTab("next");
+    const firstPage = surf.getPage();
+    await firstPage.close();
+
+    await surf.switchTab("next");
+
+    expect(connectToTab).toHaveBeenCalledTimes(2);
+    expect(surf.getPage()).not.toBe(firstPage);
+    expect(Reflect.get(surf, "activeTabId")).toBe("next");
+    await surf.close();
+  });
+
   it("disconnects a tab whose setup loses a race with close", async () => {
     let releaseViewport!: () => void;
     const viewportGate = new Promise<void>((resolve) => {
@@ -374,6 +435,47 @@ describe("TideSurf.closeTab", () => {
     expect(calls).toEqual(["create", "connect", "close:initial"]);
     expect(Reflect.get(surf, "activeTabId")).toBe("replacement");
     expect(surf.getPage()).toBeInstanceOf(SurfingPage);
+  });
+
+  it("keeps the replacement when the final target close is uncertain", async () => {
+    const replacementClose = mock(async () => {});
+    const closeTab = mock(async (id: string) => {
+      if (id === "initial") {
+        throw new ActionCommittedError(
+          "Tab initial close",
+          new Error("socket hang up"),
+          "uncertain"
+        );
+      }
+    });
+    const tabManager = {
+      listTabs: mock(async () => [
+        { id: "initial", url: "about:blank", title: "", type: "page" },
+      ]),
+      createTab: mock(async () => ({
+        id: "replacement",
+        url: "about:blank",
+        title: "",
+        type: "page",
+      })),
+      connectToTab: mock(async () =>
+        connection({ close: replacementClose })
+      ),
+      closeTab,
+    };
+    const surf = instance(
+      tabManager as unknown as Pick<TabManager, "connectToTab">
+    );
+
+    await expect(surf.closeTab("initial")).rejects.toBeInstanceOf(
+      ActionCommittedError
+    );
+
+    expect(closeTab).toHaveBeenCalledTimes(1);
+    expect(Reflect.get(surf, "activeTabId")).toBe("replacement");
+    expect(surf.getPage()).toBeInstanceOf(SurfingPage);
+    expect(replacementClose).not.toHaveBeenCalled();
+    await surf.close();
   });
 
   it("keeps the final target open when replacement setup fails", async () => {

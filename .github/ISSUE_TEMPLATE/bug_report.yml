@@ -21,7 +21,7 @@ body:
     id: version
     attributes:
       label: TideSurf version
-      placeholder: "0.5.0"
+      placeholder: "0.6.0"
     validations:
       required: true
   - type: dropdown

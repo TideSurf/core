@@ -57,6 +57,14 @@ function assertSession(output, session) {
   }
 }
 
+function assertVersion(output, runtime) {
+  if (output.trim() !== packageJson.version) {
+    throw new Error(
+      `${runtime} packed CLI returned ${JSON.stringify(output.trim())}; expected ${packageJson.version}`
+    );
+  }
+}
+
 let cliPath;
 try {
   const packOutput = JSON.parse(run(npm, [
@@ -136,8 +144,8 @@ try {
   }
 
   run(bin, ["--help"]);
-  run(process.execPath, [cliPath, "--version"]);
-  run("bun", [cliPath, "--version"]);
+  assertVersion(run(process.execPath, [cliPath, "--version"]), "Node");
+  assertVersion(run("bun", [cliPath, "--version"]), "Bun");
   run(process.execPath, [minimalCliPath, "mcp", "--quiet"], {
     cwd: minimalInstallRoot,
     expected: [5],

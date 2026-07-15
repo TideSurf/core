@@ -1,6 +1,7 @@
 import {
   TOOL_REGISTRY,
   createToolExecutor,
+  executeValidatedToolSpec,
   getToolDefinitions,
   getToolSpec,
 } from "../../src/tools/registry.js";
@@ -138,6 +139,109 @@ describe("getToolDefinitions", () => {
 
     expect(result.success).toBe(true);
     expect(result.data).toContain("Click completed");
-    expect(result.data).toContain("Read the page again");
+    expect(result.data).toContain("Inspect current state");
+  });
+
+  it("uses the navigate handler for one-shot page reads without a second capture", async () => {
+    const calls: string[] = [];
+    const instance = {
+      navigate: async () => { calls.push("navigate"); },
+      readPage: async (options: unknown) => {
+        calls.push(`read:${JSON.stringify(options)}`);
+        return { content: "page state" };
+      },
+    } as unknown as TideSurf;
+    const navigate = getToolSpec("navigate")!;
+
+    const result = await executeValidatedToolSpec(
+      instance,
+      navigate,
+      { url: "https://example.com" },
+      {
+        pageRead: {
+          options: { mode: "interactive", maxTokens: 500 },
+          contentOnly: true,
+        },
+      }
+    );
+
+    expect(result).toEqual({ success: true, data: "page state" });
+    expect(calls).toEqual([
+      "navigate",
+      'read:{"mode":"interactive","maxTokens":500}',
+    ]);
+  });
+
+  it("reports a failed one-shot page read instead of returning a success warning", async () => {
+    const instance = {
+      navigate: async () => undefined,
+      readPage: async () => {
+        throw new Error("snapshot failed");
+      },
+    } as unknown as TideSurf;
+
+    const result = await executeValidatedToolSpec(
+      instance,
+      getToolSpec("navigate")!,
+      { url: "https://example.com" },
+      { pageRead: { contentOnly: true } }
+    );
+
+    expect(result).toMatchObject({
+      success: false,
+      error: "snapshot failed",
+      errorType: "Error",
+    });
+  });
+
+  it("recovers one-shot state after navigation reaches an uncertain boundary", async () => {
+    const instance = {
+      navigate: async () => {
+        throw new ActionCommittedError(
+          "Navigation",
+          new Error("load timeout"),
+          "uncertain"
+        );
+      },
+      readPage: async () => ({ content: "recovered state" }),
+    } as unknown as TideSurf;
+
+    const result = await executeValidatedToolSpec(
+      instance,
+      getToolSpec("navigate")!,
+      { url: "https://example.com" },
+      { pageRead: { contentOnly: true } }
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.data).toContain("Navigation may have completed");
+    expect(result.data).toContain("Current page state:\n\nrecovered state");
+  });
+
+  it("fails one-shot inspection when committed navigation state is unreadable", async () => {
+    const instance = {
+      navigate: async () => {
+        throw new ActionCommittedError(
+          "Navigation",
+          new Error("load timeout"),
+          "uncertain"
+        );
+      },
+      readPage: async () => {
+        throw new Error("snapshot failed");
+      },
+    } as unknown as TideSurf;
+
+    const result = await executeValidatedToolSpec(
+      instance,
+      getToolSpec("navigate")!,
+      { url: "https://example.com" },
+      { pageRead: { contentOnly: true } }
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.errorType).toBe("Error");
+    expect(result.error).toContain("may have completed");
+    expect(result.error).toContain("snapshot failed");
   });
 });

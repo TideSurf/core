@@ -2,13 +2,36 @@ import CDP from "chrome-remote-interface";
 import type { CDPConnection } from "./connection.js";
 import { connect } from "./connection.js";
 import { withTimeout } from "./timeout.js";
-import { CDPConnectionError, TideSurfError } from "../errors.js";
+import {
+  ActionCommittedError,
+  CDPConnectionError,
+  CDPTimeoutError,
+  TideSurfError,
+} from "../errors.js";
 
 export interface TabInfo {
   id: string;
   url: string;
   title: string;
   type: string;
+}
+
+const UNCERTAIN_TRANSPORT_CODES = new Set([
+  "ECONNABORTED",
+  "ECONNRESET",
+  "EPIPE",
+  "ERR_SOCKET_CLOSED",
+  "ERR_STREAM_PREMATURE_CLOSE",
+  "ETIMEDOUT",
+]);
+
+function isUncertainTransportFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const code = (error as NodeJS.ErrnoException).code;
+  return (
+    (code !== undefined && UNCERTAIN_TRANSPORT_CODES.has(code)) ||
+    /socket hang up/i.test(error.message)
+  );
 }
 
 /**
@@ -69,11 +92,7 @@ export class TabManager {
       ).catch(() => undefined);
     }).catch(() => undefined);
     try {
-      const target = await withTimeout(
-        pending,
-        operationTimeout,
-        "createTab"
-      );
+      const target = await withTimeout(pending, operationTimeout, "createTab");
       return {
         id: target.id,
         url: target.url,
@@ -82,6 +101,9 @@ export class TabManager {
       };
     } catch (err) {
       abandoned = true;
+      if (err instanceof CDPTimeoutError || isUncertainTransportFailure(err)) {
+        throw new ActionCommittedError("Tab creation", err, "uncertain");
+      }
       if (err instanceof TideSurfError) throw err;
       throw new CDPConnectionError(
         `Failed to create tab: ${err instanceof Error ? err.message : String(err)}`,
@@ -104,6 +126,9 @@ export class TabManager {
         "closeTab"
       );
     } catch (err) {
+      if (err instanceof CDPTimeoutError || isUncertainTransportFailure(err)) {
+        throw new ActionCommittedError(`Tab ${tabId} close`, err, "uncertain");
+      }
       if (err instanceof TideSurfError) throw err;
       throw new CDPConnectionError(
         `Failed to close tab ${tabId}: ${err instanceof Error ? err.message : String(err)}`,

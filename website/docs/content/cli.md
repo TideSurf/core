@@ -2,6 +2,14 @@
 
 The TideSurf CLI gives shell agents direct browser tools without an MCP client. One background process owns each named session, so state survives across commands.
 
+Install it before running commands:
+
+```bash
+brew install TideSurf/tap/tidesurf
+# or
+npm install --global @tidesurf/core
+```
+
 ## Core loop
 
 ```bash

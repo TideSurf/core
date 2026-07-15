@@ -109,6 +109,16 @@ describe("CLI process behavior", () => {
     }
   });
 
+  it("validates inspect before starting a browser", () => {
+    const invalid = cli("inspect", "not-a-url");
+    expect(invalid.code).toBe(2);
+    expect(invalid.stderr).toContain("Invalid URL");
+
+    const readOnly = cli("inspect", "https://example.com", "--read-only");
+    expect(readOnly.code).toBe(4);
+    expect(readOnly.stderr).toContain('Tool "navigate" is disabled');
+  });
+
   it("lists canonical tool names when call receives an unknown tool", () => {
     const result = cli("call", "not-a-tool", "--input", "{}");
     expect(result.code).toBe(2);

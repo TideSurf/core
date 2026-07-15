@@ -171,7 +171,7 @@ select(id: string, value: string): Promise<void>
 
 Selects an option by value on a native `<select>`. ARIA listboxes can appear in page state but are not action targets for this method.
 
-`navigate`, `click`, `type`, `select`, `scroll`, and `upload` can throw `ActionCommittedError` after completing their mutation when page confirmation fails. Read the page before deciding on another action; do not retry blindly.
+Mutation methods can throw `ActionCommittedError` after work commits. A mutating CDP request that times out or disconnects after dispatch can also use this error when navigation, interaction, evaluation, clipboard write, file selection, download trigger, or tab mutation may have completed. Read current page, tab, session, clipboard, or filesystem state as relevant; do not retry blindly.
 
 ### `scroll(direction, amount?)`
 
@@ -257,7 +257,7 @@ download(
 ): Promise<DownloadResult>
 ```
 
-Clicks one current element and waits for its file. The destination must resolve inside `fileAccessRoots`; TideSurf checks it again after directory creation and before browser setup. A second download on the same page fails while one is active.
+Clicks one current element and waits for its file. The destination must resolve inside `fileAccessRoots`; TideSurf checks it again after directory creation and before browser setup. A second download on the same `SurfingPage` connection fails while one is active.
 
 ### `close()`
 
@@ -266,6 +266,8 @@ close(): Promise<void>
 ```
 
 Disconnects this page CDP client. Normal callers should close the owning `TideSurf` instance instead.
+
+The browser target remains open. A later `switchTab()` to the same target creates a fresh page connection.
 
 ## Public types
 

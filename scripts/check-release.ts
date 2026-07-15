@@ -5,6 +5,13 @@ import { resolve } from "node:path";
 import { VERSION } from "../src/version.js";
 
 const root = resolve(import.meta.dir, "..");
+const changelogPaths = ["CHANGELOG.md", "website/docs/content/changelog.md"] as const;
+
+export interface ReleaseMetadata {
+  packageVersion: unknown;
+  sourceVersion: string;
+  changelogs: ReadonlyArray<{ path: string; source: string }>;
+}
 
 function read(path: string): string {
   return readFileSync(resolve(root, path), "utf8");
@@ -25,26 +32,61 @@ function unreleasedContent(source: string): string {
   ).trim();
 }
 
-export function releaseMetadataFailures(releaseTag?: string): string[] {
+function validIsoDate(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  );
+}
+
+function readMetadata(): ReleaseMetadata {
+  return {
+    packageVersion: (JSON.parse(read("package.json")) as { version?: unknown }).version,
+    sourceVersion: VERSION,
+    changelogs: changelogPaths.map((path) => ({ path, source: read(path) })),
+  };
+}
+
+export function releaseMetadataFailures(
+  releaseTag?: string,
+  metadata: ReleaseMetadata = readMetadata()
+): string[] {
   const failures: string[] = [];
-  const packageVersion = (JSON.parse(read("package.json")) as { version?: unknown }).version;
+  const packageVersion = metadata.packageVersion;
   if (typeof packageVersion !== "string") {
     return ["package.json must contain a string version"];
   }
 
-  if (VERSION !== packageVersion) {
-    failures.push(`src/version.ts has ${VERSION}; package.json has ${packageVersion}`);
+  if (metadata.sourceVersion !== packageVersion) {
+    failures.push(
+      `src/version.ts has ${metadata.sourceVersion}; package.json has ${packageVersion}`
+    );
   }
 
   if (releaseTag !== undefined && releaseTag !== `v${packageVersion}`) {
     failures.push(`release tag ${releaseTag} must be v${packageVersion}`);
   }
 
-  const heading = new RegExp(`^## ${escapeRegExp(packageVersion)} \\(\\d{4}-\\d{2}-\\d{2}\\)$`, "gm");
-  for (const path of ["CHANGELOG.md", "website/docs/content/changelog.md"]) {
-    const changelog = read(path);
-    if ([...changelog.matchAll(heading)].length !== 1) {
+  const heading = new RegExp(
+    `^## ${escapeRegExp(packageVersion)} \\(([^\\r\\n)]+)\\)$`,
+    "gm"
+  );
+  for (const { path, source: changelog } of metadata.changelogs) {
+    const releaseHeadings = [...changelog.matchAll(heading)];
+    if (releaseHeadings.length !== 1) {
       failures.push(`${path} must contain one dated ${packageVersion} release heading`);
+    } else if (!validIsoDate(releaseHeadings[0][1])) {
+      failures.push(`${path} has an invalid ${packageVersion} release date`);
+    }
+    if ([...changelog.matchAll(/^## Unreleased\s*$/gm)].length !== 1) {
+      failures.push(`${path} must contain one Unreleased heading`);
     }
     if (releaseTag !== undefined && unreleasedContent(changelog) !== "") {
       failures.push(`${path} must have an empty Unreleased section for ${releaseTag}`);

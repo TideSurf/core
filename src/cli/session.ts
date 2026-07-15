@@ -22,6 +22,7 @@ import { MAX_SESSION_EXECUTION_TIMEOUT_MS } from "./timeouts.js";
 export const SESSION_PROTOCOL_VERSION = 2;
 const MAX_RESPONSE_BYTES = 64 * 1024 * 1024;
 const READY_POLL_INTERVAL_MS = 10;
+const MAX_UNIX_SOCKET_PATH_BYTES = 100;
 const SENT_REQUEST_ERRORS = new WeakSet<object>();
 
 export interface SessionConfig {
@@ -151,9 +152,30 @@ function runtimeDirectory(): string {
   return join(tmpdir(), `tidesurf-${uid}`);
 }
 
+function sessionKey(directory: string, session: string): string {
+  return createHash("sha256")
+    .update(`${directory}\0${session}`)
+    .digest("hex")
+    .slice(0, 20);
+}
+
 export function getSessionPaths(sessionName: string): SessionPaths {
   const session = validateSessionName(sessionName);
-  const directory = runtimeDirectory();
+  let directory = runtimeDirectory();
+  let key = sessionKey(directory, session);
+  if (
+    process.platform !== "win32" &&
+    Buffer.byteLength(join(directory, `${key}.sock`)) >
+      MAX_UNIX_SOCKET_PATH_BYTES
+  ) {
+    const owner = process.getuid?.() ?? "user";
+    const namespace = createHash("sha256")
+      .update(directory)
+      .digest("hex")
+      .slice(0, 12);
+    directory = join("/tmp", `tidesurf-${owner}-${namespace}`);
+    key = sessionKey(directory, session);
+  }
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   const stats = lstatSync(directory);
   if (!stats.isDirectory() || stats.isSymbolicLink()) {
@@ -166,10 +188,6 @@ export function getSessionPaths(sessionName: string): SessionPaths {
     }
     if ((stats.mode & 0o777) !== 0o700) chmodSync(directory, 0o700);
   }
-  const key = createHash("sha256")
-    .update(`${directory}\0${session}`)
-    .digest("hex")
-    .slice(0, 20);
   const socketPath = process.platform === "win32"
     ? `\\\\.\\pipe\\tidesurf-${key}`
     : join(directory, `${key}.sock`);

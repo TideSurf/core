@@ -146,17 +146,15 @@ describe("Chrome executable resolution", () => {
 
   it("resolves only the requested channel from PATH", () => {
     const root = mkdtempSync(join(tmpdir(), "tidesurf-channel-"));
-    const name =
-      process.platform === "win32"
-        ? "chrome.exe"
-        : "google-chrome-beta";
+    const channel = process.platform === "win32" ? "chromium" : "beta";
+    const name = process.platform === "win32" ? "chromium.exe" : "google-chrome-beta";
     const executable = join(root, name);
     writeFileSync(executable, "#!/bin/sh\n");
     chmodSync(executable, 0o755);
     try {
       expect(
         resolveChromeExecutable({
-          channel: "beta",
+          channel,
           env: { PATH: root, HOME: root },
         })
       ).toBe(executable);
@@ -438,6 +436,49 @@ describe("CDP discovery", () => {
 });
 
 describe("managed launch failures", () => {
+  it("wraps profile setup failures as Chrome launch errors", async () => {
+    const root = mkdtempSync(join(tmpdir(), "tidesurf-profile-setup-"));
+    const fakeChrome = join(
+      root,
+      process.platform === "win32" ? "chrome.exe" : "chrome"
+    );
+    const blocker = join(root, "not-a-directory");
+    writeFileSync(fakeChrome, "unused", { mode: 0o755 });
+    writeFileSync(blocker, "file");
+    chmodSync(fakeChrome, 0o755);
+
+    try {
+      await expect(
+        launchChrome({
+          chromePath: fakeChrome,
+          userDataDir: join(blocker, "profile"),
+        })
+      ).rejects.toBeInstanceOf(ChromeLaunchError);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("includes bounded Chrome stderr when startup exits", async () => {
+    if (process.platform === "win32") return;
+    const root = mkdtempSync(join(tmpdir(), "tidesurf-launch-stderr-"));
+    const fakeChrome = join(root, "chrome");
+    writeFileSync(
+      fakeChrome,
+      "#!/bin/sh\necho 'missing browser dependency' >&2\nexit 9\n",
+      { mode: 0o755 }
+    );
+    chmodSync(fakeChrome, 0o755);
+
+    try {
+      await expect(
+        launchChrome({ chromePath: fakeChrome, timeout: 1_000 })
+      ).rejects.toThrow("Chrome stderr:\nmissing browser dependency");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("keeps an active profile marker when the endpoint has no page target", async () => {
     const server = createDevToolsServer("/devtools/browser/active", []);
     const port = await listen(server, "localhost");

@@ -818,8 +818,15 @@ select:focus-visible {
   }
 
   .compact-control,
-  .menu-toggle {
+  .menu-toggle,
+  .docs-brand,
+  .topbar-search input,
+  .copy-code-btn {
     min-height: 2.75rem;
+  }
+
+  .copy-code-btn {
+    width: 2.75rem;
   }
 
   .floating-theme .theme-btn {

@@ -67,14 +67,18 @@ function initCopyButtons(): void {
 
       try {
         await navigator.clipboard.writeText(text);
-        const label = button.querySelector(".copy-label");
+        const status = button.querySelector<HTMLElement>(".copy-status");
         button.classList.add("is-copied");
-        if (label) label.textContent = "copied";
+        button.setAttribute("aria-label", "Copied");
+        if (status) status.textContent = "CLI command copied";
         setTimeout(() => {
           button.classList.remove("is-copied");
-          if (label) label.textContent = "copy";
+          button.setAttribute("aria-label", "Copy CLI command");
+          if (status) status.textContent = "";
         }, 1600);
       } catch (error) {
+        const status = button.querySelector<HTMLElement>(".copy-status");
+        if (status) status.textContent = "Copy failed";
         console.error("Copy failed:", error);
       }
     });
@@ -93,16 +97,15 @@ function parseHex(hex: string): RGB | null {
   ];
 }
 
-// Static fallback under reduced-motion, reduced-data, and compact viewports.
+// Wave motion follows user preferences, viewport size, and page visibility.
 function initWaves(): void {
   const canvas = document.querySelector<HTMLCanvasElement>(".waves-canvas");
   if (!canvas) return;
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
-  const reducedData = window.matchMedia("(prefers-reduced-data: reduce)").matches;
-  const compact = window.matchMedia("(max-width: 720px)").matches;
-  const shouldAnimate = !prefersReducedMotion() && !reducedData && !compact;
+  const reducedDataQuery = window.matchMedia("(prefers-reduced-data: reduce)");
+  const compactQuery = window.matchMedia("(max-width: 720px)");
   const TILE_SIZE = 32;
   const HORIZONTAL_FREQUENCY = 0.1067;
   const VERTICAL_FREQUENCY = 0.0433;
@@ -121,6 +124,8 @@ function initWaves(): void {
   let staticRaf = 0;
   let resizeRaf = 0;
   let running = false;
+  let canvasWidth = 0;
+  let canvasHeight = 0;
   let cellPhases = new Float32Array();
   let cellJitters = new Float32Array();
   const palette = new Array<string>(PALETTE_STEPS);
@@ -169,14 +174,19 @@ function initWaves(): void {
     updatePalette();
   }
 
-  function resize(): void {
-    dpr = Math.min(window.devicePixelRatio || 1, 1.5);
-    const w = document.documentElement.clientWidth;
-    const h = Math.ceil(window.innerHeight);
+  function resize(): boolean {
+    const nextDpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    const bounds = canvas.getBoundingClientRect();
+    const w = Math.ceil(bounds.width);
+    const h = Math.ceil(bounds.height);
+    if (w === canvasWidth && h === canvasHeight && nextDpr === dpr) {
+      return false;
+    }
+    dpr = nextDpr;
+    canvasWidth = w;
+    canvasHeight = h;
     canvas.width = Math.ceil(w * dpr);
     canvas.height = Math.ceil(h * dpr);
-    canvas.style.width = `${w}px`;
-    canvas.style.height = `${h}px`;
     cols = Math.ceil(w / TILE_SIZE) + 1;
     rows = Math.ceil(h / TILE_SIZE) + 1;
     const cellCount = cols * rows;
@@ -191,6 +201,7 @@ function initWaves(): void {
       }
     }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return true;
   }
 
   function draw(): void {
@@ -222,7 +233,7 @@ function initWaves(): void {
   }
 
   function start(): void {
-    if (running || !shouldAnimate) return;
+    if (running || !shouldAnimate()) return;
     running = true;
     raf = requestAnimationFrame(loop);
   }
@@ -233,13 +244,30 @@ function initWaves(): void {
     raf = 0;
   }
 
+  function shouldAnimate(): boolean {
+    return !prefersReducedMotion() && !reducedDataQuery.matches && !compactQuery.matches;
+  }
+
+  function syncAnimation(redrawStatic = true): void {
+    if (document.hidden) {
+      stop();
+      return;
+    }
+    if (shouldAnimate()) {
+      start();
+      return;
+    }
+    stop();
+    if (redrawStatic) draw();
+  }
+
   function onScroll(): void {
     const dy = window.scrollY - lastScroll;
     lastScroll = window.scrollY;
     boost += Math.abs(dy) * 0.00625;
     if (boost > MAX_BOOST) boost = MAX_BOOST;
     syncScrollProgress();
-    if (!shouldAnimate && !staticRaf) {
+    if (!shouldAnimate() && !staticRaf) {
       staticRaf = requestAnimationFrame(() => {
         staticRaf = 0;
         draw();
@@ -252,29 +280,27 @@ function initWaves(): void {
   syncScrollProgress(true);
   draw();
 
-  window.addEventListener(
-    "resize",
-    () => {
-      if (resizeRaf) return;
-      resizeRaf = requestAnimationFrame(() => {
-        resizeRaf = 0;
-        resize();
-        syncScrollProgress();
-        draw();
-      });
-    },
-    { passive: true }
-  );
+  function scheduleResize(): void {
+    if (resizeRaf) return;
+    resizeRaf = requestAnimationFrame(() => {
+      resizeRaf = 0;
+      if (!resize()) return;
+      syncScrollProgress();
+      draw();
+      syncAnimation(false);
+    });
+  }
+
+  window.addEventListener("resize", scheduleResize, { passive: true });
+  window.visualViewport?.addEventListener("resize", scheduleResize, { passive: true });
 
   window.addEventListener("scroll", onScroll, { passive: true });
 
-  if (shouldAnimate) {
-    start();
-    document.addEventListener("visibilitychange", () => {
-      if (document.hidden) stop();
-      else start();
-    });
-  }
+  document.addEventListener("visibilitychange", () => syncAnimation(false));
+  motionQuery.addEventListener("change", () => syncAnimation());
+  reducedDataQuery.addEventListener("change", () => syncAnimation());
+  compactQuery.addEventListener("change", () => syncAnimation());
+  syncAnimation(false);
 
   const themeObserver = new MutationObserver(() => {
     readColors();
