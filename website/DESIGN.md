@@ -88,7 +88,7 @@ install action, and global navigation; product proof begins below the fold.
 
 Structure:
 
-1. Thesis, install command, and a direct link to the real output.
+1. Thesis, first CLI command, and a direct link to the real output.
 2. A raw-HTML to TideSurf-text specimen using the documented page format.
 3. The live loop: read state, choose a handle, use the page.
 4. Operational capabilities and guardrails as compact rows.

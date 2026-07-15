@@ -66,9 +66,17 @@ export interface GetStateOptions {
   viewport?: boolean;
   /** Output mode: "full" (default), "minimal" (landmarks + summaries), "interactive" (only elements with IDs) */
   mode?: "full" | "minimal" | "interactive";
-  /** Include elements hidden by CSS (opacity:0, visibility:hidden, etc). Default: false */
+  /** Include the full DOM, including hidden elements, and disable viewport filtering. */
   includeHidden?: boolean;
 }
+
+/** Chromium release channel used for executable and profile discovery. */
+export type ChromeChannel =
+  | "stable"
+  | "beta"
+  | "dev"
+  | "canary"
+  | "chromium";
 
 /**
  * Options for launching TideSurf
@@ -76,13 +84,15 @@ export interface GetStateOptions {
 export interface TideSurfOptions {
   headless?: boolean;
   chromePath?: string;
+  /** Browser channel to auto-detect when chromePath is not provided. */
+  channel?: ChromeChannel;
   port?: number;
   userDataDir?: string;
   defaultViewport?: { width: number; height: number };
   timeout?: number;
-  /** Disable write tools (click, type, select, scroll, navigate, etc.) */
+  /** Reject navigation, interaction, evaluation, clipboard, filesystem, and tab mutation. */
   readOnly?: boolean;
-  /** Allowed host filesystem roots for upload/download operations (defaults to cwd + tmpdir) */
+  /** Allowed host filesystem roots. Omit for cwd + tmpdir; pass [] to disable file access. */
   fileAccessRoots?: string[];
   /** Allow navigation to localhost/loopback URLs. Intended for trusted local development. */
   allowLocalhost?: boolean;
@@ -102,9 +112,9 @@ export interface TideSurfConnectOptions {
   defaultViewport?: { width: number; height: number };
   /** Connect timeout in ms */
   timeout?: number;
-  /** Disable write tools */
+  /** Reject navigation, interaction, evaluation, clipboard, filesystem, and tab mutation. */
   readOnly?: boolean;
-  /** Allowed host filesystem roots for upload/download operations (defaults to cwd + tmpdir) */
+  /** Allowed host filesystem roots. Omit for cwd + tmpdir; pass [] to disable file access. */
   fileAccessRoots?: string[];
   /** Allow navigation to localhost/loopback URLs. Intended for trusted local development. */
   allowLocalhost?: boolean;
@@ -113,7 +123,7 @@ export interface TideSurfConnectOptions {
 }
 
 /**
- * Tool definition compatible with Claude/OpenAI function calling
+ * Provider-neutral tool definition used by TideSurf adapters.
  */
 export interface ToolDefinition {
   name: string;

@@ -14,7 +14,7 @@ agent loop.
 ## Product Purpose
 
 TideSurf connects browser agents to live Chromium through CDP. It compresses
-the rendered DOM into compact text, assigns stable action handles, and routes
+the rendered DOM into compact text, assigns snapshot-scoped action handles, and routes
 the model's chosen action back to the real page. The website should make that
 loop understandable in under a minute and make the implementation feel safe to
 adopt.

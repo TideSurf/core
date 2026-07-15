@@ -1,4 +1,4 @@
-import { CDPTimeoutError } from "../errors.js";
+import { CDPTimeoutError, ValidationError } from "../errors.js";
 
 export interface RetryOptions {
   maxAttempts?: number;
@@ -30,23 +30,28 @@ export async function withRetry<T>(
     retryable = DEFAULT_RETRYABLE,
   } = options;
 
-  let lastError: unknown;
+  if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
+    throw new ValidationError("maxAttempts must be a positive integer");
+  }
+  if (!Number.isFinite(initialDelayMs) || initialDelayMs < 0) {
+    throw new ValidationError("initialDelayMs must be a non-negative finite number");
+  }
+  if (!Number.isFinite(backoffFactor) || backoffFactor <= 0) {
+    throw new ValidationError("backoffFactor must be a positive finite number");
+  }
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+  let attempt = 1;
+  while (true) {
     try {
       return await fn();
     } catch (err) {
-      lastError = err;
-
       if (attempt === maxAttempts || !retryable(err)) {
         throw err;
       }
 
       const delay = initialDelayMs * Math.pow(backoffFactor, attempt - 1);
       await new Promise((resolve) => setTimeout(resolve, delay));
+      attempt++;
     }
   }
-
-  // Should not reach here, but TypeScript needs it
-  throw lastError;
 }

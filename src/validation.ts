@@ -4,7 +4,9 @@ import { dirname, isAbsolute, relative, resolve } from "node:path";
 import { ValidationError } from "./errors.js";
 
 const ELEMENT_ID_PATTERN = /^[A-Z]\d+$/;
-const DEFAULT_FILE_ACCESS_ROOTS = [process.cwd(), tmpdir()];
+const ALLOWED_URL_PROTOCOLS = new Set(["http:", "https:", "about:"]);
+const NON_LATIN_HOST_SCRIPTS =
+  /\p{Script=Han}|\p{Script=Cyrl}|\p{Script=Greek}|\p{Script=Arabic}/u;
 
 export interface UrlValidationOptions {
   /** Allow localhost and loopback addresses such as 127.0.0.1 and ::1. */
@@ -13,8 +15,7 @@ export interface UrlValidationOptions {
   allowPrivateHosts?: boolean;
 }
 
-// 0.5.2: IPv4-mapped IPv6 unmap. Covers both dotted (::ffff:1.2.3.4) and
-// hex (::ffff:0102:0304) tails since Chrome accepts both in URLs.
+// Chrome accepts dotted and hexadecimal IPv4-mapped IPv6 addresses.
 function unmapIPv4FromIPv6(host: string): string | null {
   const lower = host.toLowerCase();
   const dotted = /^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/.exec(lower);
@@ -30,9 +31,7 @@ function unmapIPv4FromIPv6(host: string): string | null {
   return null;
 }
 
-// 0.5.2: reject reserved IPv6 ranges including the unspecified address (::)
-// which was previously missed. Covers loopback, unspecified, ULA (fc00::/7),
-// and link-local (fe80::/10).
+// Cover loopback, unspecified, ULA, and link-local IPv6 ranges.
 function isLocalhostIPv6(host: string): boolean {
   return host.toLowerCase() === "::1";
 }
@@ -56,7 +55,7 @@ export function validateUrl(url: string, options: UrlValidationOptions = {}): vo
     throw new ValidationError("URL must be a non-empty string");
   }
 
-  // NEW-CRIT-004: URL length limit to prevent buffer overflow and DoS
+  // Bound inputs before URL parsing.
   if (url.length > 2048) {
     throw new ValidationError("URL exceeds maximum length of 2048 characters");
   }
@@ -68,9 +67,7 @@ export function validateUrl(url: string, options: UrlValidationOptions = {}): vo
     throw new ValidationError(`Invalid URL: "${url}". Must be a valid absolute URL`);
   }
 
-  // HIGH-019: data: URLs are blocked to prevent XSS and data exfiltration
-  const allowedProtocols = new Set(["http:", "https:", "about:"]);
-  if (!allowedProtocols.has(parsed.protocol)) {
+  if (!ALLOWED_URL_PROTOCOLS.has(parsed.protocol)) {
     throw new ValidationError(
       `Invalid URL: "${url}". Must start with http://, https://, or about:`
     );
@@ -80,18 +77,19 @@ export function validateUrl(url: string, options: UrlValidationOptions = {}): vo
     throw new ValidationError(`Invalid URL: "${url}". Whitespace is not allowed`);
   }
 
-  // Check for private IP addresses ( SSRF prevention )
+  // Apply the literal-host network policy.
   let hostname = parsed.hostname;
   if (hostname) {
     // IPv6 addresses in URLs may have brackets; normalize for checks
     if (hostname.startsWith("[") && hostname.endsWith("]")) {
       hostname = hostname.slice(1, -1);
     }
-    // 0.5.2: IPv4-mapped IPv6 (::ffff:169.254.169.254) used to bypass the
-    // IPv4 checks below — unmap it so the v4-range regexes see the real v4.
+    hostname = hostname.toLowerCase().replace(/\.$/, "");
+    // Unmap IPv4-mapped IPv6 before applying IPv4 range checks.
     const ipv4 = unmapIPv4FromIPv6(hostname) ?? hostname;
     const isLocalhost =
       ipv4 === "localhost" ||
+      ipv4.endsWith(".localhost") ||
       /^127\./.test(ipv4) ||
       isLocalhostIPv6(hostname);
     const isPrivateHost =
@@ -112,8 +110,7 @@ export function validateUrl(url: string, options: UrlValidationOptions = {}): vo
     }
   }
 
-  // Check for IDN homograph attacks ( mixed script / punycode )
-  // First check if hostname contains punycode (xn--)
+  // Reject punycode and mixed-script hostnames.
   if (hostname && hostname.includes("xn--")) {
     throw new ValidationError(
       `Invalid URL: "${url}". Punycode hostnames are not allowed (possible homograph attack)`
@@ -121,9 +118,7 @@ export function validateUrl(url: string, options: UrlValidationOptions = {}): vo
   }
   // Check for mixed scripts in the hostname
   if (hostname && /\p{Script=Latin}/u.test(hostname)) {
-    // If hostname has Latin chars, check for other scripts
-    const nonLatinScripts = /\p{Script=Han}|\p{Script=Cyrl}|\p{Script=Greek}|\p{Script=Arabic}/u;
-    if (nonLatinScripts.test(hostname)) {
+    if (NON_LATIN_HOST_SCRIPTS.test(hostname)) {
       throw new ValidationError(
         `Invalid URL: "${url}". Mixed-script hostnames are not allowed (possible homograph attack)`
       );
@@ -144,59 +139,7 @@ export function validateSelector(selector: string): void {
 }
 
 /**
- * Blocked patterns for dangerous JavaScript APIs
- * CRIT-002: Prevent access to cookies, storage, network, and code execution
- */
-const BLOCKED_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
-  { pattern: /\bdocument\s*\.\s*cookie\b/i, label: "document.cookie" },
-  {
-    pattern: /\b(?:localStorage|sessionStorage|indexedDB)\b/i,
-    label: "storage API",
-  },
-  { pattern: /\bfetch\s*\(/i, label: "fetch()" },
-  { pattern: /\b(?:XMLHttpRequest|WebSocket)\b/i, label: "network constructor" },
-  // 0.5.2: \beval\b (word boundary) catches (0,eval)(...) and window.eval
-  { pattern: /\beval\b/i, label: "eval" },
-  // Function constructor (case-sensitive — `function` keyword is fine)
-  { pattern: /\bFunction\s*\(/, label: "Function constructor" },
-  // 0.5.2: .constructor chain blocks "".constructor.constructor(...) bypass
-  { pattern: /\.\s*constructor\b/i, label: ".constructor" },
-  // 0.5.2: dynamic import
-  { pattern: /\bimport\s*\(/i, label: "import()" },
-];
-
-// 0.5.2: decode common escape sequences so attackers can't hide identifiers
-// behind \uXXXX / \xXX / \u{XXXX}. Done BEFORE scanning so e.g. "\u0063ookie"
-// normalizes to "cookie".
-function decodeEscapes(expression: string): string {
-  return expression
-    .replace(/\\u\{([0-9a-fA-F]{1,6})\}/g, (_, h) => {
-      try {
-        return String.fromCodePoint(parseInt(h, 16));
-      } catch {
-        return "";
-      }
-    })
-    .replace(/\\u([0-9a-fA-F]{4})/g, (_, h) =>
-      String.fromCharCode(parseInt(h, 16))
-    )
-    .replace(/\\x([0-9a-fA-F]{2})/g, (_, h) =>
-      String.fromCharCode(parseInt(h, 16))
-    );
-}
-
-// 0.5.2: collapse static-string bracket indexing to dot access so
-// document["cookie"] and window[`eval`] normalize into the dot-notation the
-// denylist already covers.
-function normalizeBracketAccess(expression: string): string {
-  return expression.replace(
-    /\[\s*(["'`])([A-Za-z_$][\w$]*)\1\s*\]/g,
-    ".$2"
-  );
-}
-
-/**
- * Validate a JavaScript expression
+ * Validate the shape and size of arbitrary page JavaScript.
  */
 export function validateExpression(expression: string): void {
   if (!expression || typeof expression !== "string") {
@@ -206,19 +149,6 @@ export function validateExpression(expression: string): void {
     throw new ValidationError(
       "Expression is too long (max 10000 characters)"
     );
-  }
-
-  // CRIT-002 / 0.5.2: normalize bracket indexing + decoded escapes, then
-  // denylist-scan. Scanning BOTH the original and normalized forms ensures a
-  // pattern can't be hidden by partial normalization.
-  const decoded = decodeEscapes(expression);
-  const normalized = normalizeBracketAccess(decoded);
-  for (const { pattern, label } of BLOCKED_PATTERNS) {
-    if (pattern.test(expression) || pattern.test(normalized)) {
-      throw new ValidationError(
-        `Expression contains disallowed pattern: ${label}`
-      );
-    }
   }
 }
 
@@ -281,8 +211,7 @@ function findNearestExistingAncestor(pathValue: string): string {
 }
 
 export function resolveFileAccessRoots(roots?: string[]): string[] {
-  const candidates =
-    roots && roots.length > 0 ? roots : DEFAULT_FILE_ACCESS_ROOTS;
+  const candidates = roots ?? [process.cwd(), tmpdir()];
 
   const normalized = candidates.map((root) => {
     validateFilePath(root);
@@ -305,6 +234,20 @@ export function resolveFileAccessRoots(roots?: string[]): string[] {
   return [...new Set(normalized)];
 }
 
+export function resolveImplicitDownloadRoot(roots?: string[]): string {
+  const allowedRoots = resolveFileAccessRoots(roots);
+  if (allowedRoots.length === 0) {
+    throw new ValidationError(
+      "Downloads are disabled because no file access roots are configured"
+    );
+  }
+
+  const systemTemp = realpathSync.native(tmpdir());
+  return allowedRoots.some((root) => isWithinRoot(systemTemp, root))
+    ? systemTemp
+    : allowedRoots[0];
+}
+
 function ensureAllowedPath(
   pathValue: string,
   roots: string[],
@@ -323,6 +266,12 @@ export function validateUploadFilePath(
   roots?: string[]
 ): string {
   validateFilePath(filePath);
+  const allowedRoots = resolveFileAccessRoots(roots);
+  if (allowedRoots.length === 0) {
+    throw new ValidationError(
+      "Uploads are disabled because no file access roots are configured"
+    );
+  }
 
   const absolute = resolve(filePath);
   if (!existsSync(absolute)) {
@@ -335,11 +284,8 @@ export function validateUploadFilePath(
     throw new ValidationError(`Upload path must be a file: "${filePath}"`);
   }
 
-  // SEC-005: TOCTOU protection - re-resolve at point of use
-  const finalResolved = realpathSync.native(absolute);
-  const allowedRoots = resolveFileAccessRoots(roots);
-  ensureAllowedPath(filePath, allowedRoots, finalResolved, "File");
-  return finalResolved;
+  ensureAllowedPath(filePath, allowedRoots, resolved, "File");
+  return resolved;
 }
 
 export function validateDownloadDirectory(
@@ -350,6 +296,11 @@ export function validateDownloadDirectory(
 
   const absolute = resolve(downloadDir);
   const allowedRoots = resolveFileAccessRoots(roots);
+  if (allowedRoots.length === 0) {
+    throw new ValidationError(
+      "Downloads are disabled because no file access roots are configured"
+    );
+  }
   const existingAncestor = findNearestExistingAncestor(absolute);
   const ancestorRealPath = realpathSync.native(existingAncestor);
 

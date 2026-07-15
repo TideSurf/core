@@ -22,6 +22,7 @@ const translations: Record<string, TranslationSet> = {
   "search.empty": { en: "Nothing found", ja: "結果はありません", ko: "검색 결과가 없습니다" },
   "sidebar.gettingstarted": { en: "Getting started", ja: "はじめに", ko: "시작하기" },
   "sidebar.intro": { en: "Introduction", ja: "導入", ko: "소개" },
+  "sidebar.cli": { en: "CLI", ja: "CLI", ko: "CLI" },
   "sidebar.guide": { en: "Guide", ja: "ガイド", ko: "가이드" },
   "sidebar.pageformat": { en: "Page format", ja: "ページ形式", ko: "페이지 형식" },
   "sidebar.tokenbudget": { en: "Token budget", ja: "トークン予算", ko: "토큰 예산" },
@@ -34,6 +35,7 @@ const translations: Record<string, TranslationSet> = {
   "sidebar.api": { en: "API reference", ja: "APIリファレンス", ko: "API 참조" },
   "sidebar.bench": { en: "Benchmarks", ja: "ベンチマーク", ko: "벤치마크" },
   "sidebar.arch": { en: "Architecture", ja: "アーキテクチャ", ko: "아키텍처" },
+  "sidebar.migration": { en: "Migration", ja: "移行", ko: "마이그레이션" },
   "sidebar.changelog": { en: "Changelog", ja: "変更履歴", ko: "변경 이력" },
   "sidebar.feedback": { en: "Feedback", ja: "フィードバック", ko: "피드백" },
   "toc.heading": { en: "On this page", ja: "このページ", ko: "이 페이지" },
@@ -121,6 +123,19 @@ let pageMap: Record<string, string> = {};
 let tocScrollFrame = 0;
 let initialNavigation = true;
 let removeTocTracking: (() => void) | null = null;
+
+const translatedReadmes: Record<Exclude<Language, "en">, { label: string; text: string; url: string }> = {
+  ja: {
+    label: "日本語README",
+    text: "本文は英語です。日本語の概要はREADMEで確認できます。",
+    url: "https://github.com/TideSurf/core/blob/main/README.ja.md",
+  },
+  ko: {
+    label: "한국어 README",
+    text: "본문은 영어로 제공됩니다. 한국어 개요는 README에서 확인할 수 있습니다.",
+    url: "https://github.com/TideSurf/core/blob/main/README.ko.md",
+  },
+};
 
 function prefersReducedMotion(): boolean {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -408,6 +423,8 @@ function renderPage(pageName: string): void {
   const html = marked.parse(markdown, { async: false }) as string;
   contentEl.replaceChildren(sanitizeHtmlFragment(html));
   contentEl.setAttribute("aria-busy", "false");
+  contentEl.lang = "en";
+  renderLanguageNotice();
   wrapTables();
   prepareCodeBlocks();
   highlightCode();
@@ -422,6 +439,25 @@ function renderPage(pageName: string): void {
 
   const title = contentEl.querySelector("h1")?.textContent;
   document.title = title ? `${title} | TideSurf Docs` : "TideSurf Docs";
+}
+
+function renderLanguageNotice(): void {
+  contentEl.querySelector(".language-notice")?.remove();
+  if (currentLang === "en") return;
+  const copy = translatedReadmes[currentLang];
+  const heading = contentEl.querySelector("h1");
+  if (!copy || !heading) return;
+
+  const notice = document.createElement("aside");
+  notice.className = "language-notice";
+  notice.lang = currentLang;
+  const text = document.createElement("span");
+  text.textContent = `${copy.text} `;
+  const link = document.createElement("a");
+  link.href = copy.url;
+  link.textContent = copy.label;
+  notice.append(text, link);
+  heading.insertAdjacentElement("afterend", notice);
 }
 
 function parseLocation(): { page: string; heading: string | null } {
@@ -588,11 +624,13 @@ function applyLanguage(): void {
     if (key) element.placeholder = translate(key);
   });
   document.documentElement.lang = currentLang;
+  contentEl.lang = "en";
   document.querySelectorAll<HTMLButtonElement>(".lang-btn[data-lang]").forEach((button) => {
     const active = button.dataset.lang === currentLang;
     button.classList.toggle("active", active);
     button.setAttribute("aria-pressed", String(active));
   });
+  renderLanguageNotice();
 }
 
 function initLanguage(): void {

@@ -21,7 +21,11 @@ declare module "chrome-remote-interface" {
       enable(): Promise<void>;
       getDocument(params: { depth?: number; pierce?: boolean }): Promise<{ root: unknown }>;
       resolveNode(params: { backendNodeId: number }): Promise<{ object: { objectId?: string } }>;
-      setFileInputFiles(params: { files: string[]; backendNodeId: number }): Promise<void>;
+      setFileInputFiles(params: {
+        files: string[];
+        backendNodeId?: number;
+        objectId?: string;
+      }): Promise<void>;
       getBoxModel(params: { backendNodeId: number }): Promise<{
         model: {
           content: number[];
@@ -37,6 +41,7 @@ declare module "chrome-remote-interface" {
       enable(): Promise<void>;
       navigate(params: { url: string }): Promise<unknown>;
       loadEventFired(): Promise<unknown>;
+      loadEventFired(callback: () => void): () => void;
       captureScreenshot(params: {
         format?: string;
         clip?: { x: number; y: number; width: number; height: number; scale: number };
@@ -56,14 +61,42 @@ declare module "chrome-remote-interface" {
         awaitPromise?: boolean;
         userGesture?: boolean;
       }): Promise<{
-        result: { value?: unknown };
-        exceptionDetails?: { text?: string };
+        result: {
+          value?: unknown;
+          unserializableValue?: string;
+          description?: string;
+        };
+        exceptionDetails?: {
+          text?: string;
+          exception?: {
+            description?: string;
+            value?: unknown;
+          };
+        };
       }>;
       callFunctionOn(params: {
         objectId: string;
         functionDeclaration: string;
+        arguments?: Array<{
+          value?: unknown;
+          unserializableValue?: string;
+          objectId?: string;
+        }>;
         returnByValue?: boolean;
-      }): Promise<unknown>;
+      }): Promise<{
+        result?: {
+          value?: unknown;
+          unserializableValue?: string;
+          description?: string;
+        };
+        exceptionDetails?: {
+          text?: string;
+          exception?: {
+            description?: string;
+            value?: unknown;
+          };
+        };
+      }>;
       releaseObject(params: { objectId: string }): Promise<void>;
     };
     Input: {
@@ -80,11 +113,6 @@ declare module "chrome-remote-interface" {
         deviceScaleFactor: number;
         mobile: boolean;
       }): Promise<void>;
-    };
-    Inspector?: {
-      enable?(): Promise<void>;
-      targetCrashed?(callback: () => void): () => void;
-      detached?(callback: () => void): () => void;
     };
     send(method: string, params?: Record<string, unknown>): Promise<unknown>;
     close(): Promise<void>;

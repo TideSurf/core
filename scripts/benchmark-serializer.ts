@@ -55,7 +55,7 @@ function countNodes(nodes: OSNode[]): number {
 
 // Benchmark collectText with memoization
 console.log("\n" + "=".repeat(60));
-console.log("  SERIALIZER PERFORMANCE BENCHMARK (HIGH-001)");
+console.log("  SERIALIZER PERFORMANCE BENCHMARK");
 console.log("=".repeat(60));
 console.log("\nTesting collectText memoization\n");
 

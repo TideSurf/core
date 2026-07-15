@@ -107,7 +107,7 @@ describe("filterViewportOnly", () => {
     expect(result).toHaveLength(0);
   });
 
-  it("keeps entire subtree when parent is visible", () => {
+  it("does not keep off-screen descendants just because a container is visible", () => {
     const nodes: OSNode[] = [
       makeNode("nav", [
         makeNode("link", [makeText("A")], { id: "L1" }),
@@ -116,7 +116,27 @@ describe("filterViewportOnly", () => {
     ];
     const { nodes: result } = filterViewportOnly(nodes);
     expect(result).toHaveLength(1);
-    expect(result[0].children).toHaveLength(2);
+    expect(result[0].children).toHaveLength(0);
+  });
+
+  it("keeps only the marked buttons inside a viewport-spanning container", () => {
+    const buttons = Array.from({ length: 100 }, (_, index) =>
+      makeNode("button", [makeText(`Button ${index + 1}`)], {
+        id: `B${index + 1}`,
+        visible: index >= 40 && index < 45,
+      })
+    );
+    const { nodes: result } = filterViewportOnly([
+      makeNode("main", buttons, { visible: true }),
+    ]);
+
+    expect(result[0].children.map((node) => node.id)).toEqual([
+      "B41",
+      "B42",
+      "B43",
+      "B44",
+      "B45",
+    ]);
   });
 
   it("generates above summary for off-screen nodes before visible", () => {
@@ -133,6 +153,22 @@ describe("filterViewportOnly", () => {
     expect(aboveSummary).toBeDefined();
     expect(aboveSummary!.tag).toBe("above");
     expect(aboveSummary!.text).toContain("nav");
+  });
+
+  it("stops collecting off-screen text at the summary limit", () => {
+    const unreadTail = makeText("");
+    Object.defineProperty(unreadTail, "text", {
+      get() {
+        throw new Error("off-screen tail should not be read");
+      },
+    });
+    const nodes = [
+      makeNode("main", [makeText("A".repeat(100)), unreadTail]),
+      makeNode("button", [makeText("Visible")], { id: "B1", visible: true }),
+    ];
+
+    const { aboveSummary } = filterViewportOnly(nodes);
+    expect(aboveSummary?.text).toBe(`main: ${"A".repeat(50)}`);
   });
 
   it("generates below summary for off-screen nodes after visible", () => {
@@ -158,7 +194,7 @@ describe("filterViewportOnly", () => {
     expect(belowSummary).toBeUndefined();
   });
 
-  // HIGH-004: Stack overflow protection with depth limit
+  // Depth limits protect the stack.
   it("handles deeply nested trees without stack overflow", () => {
     // Create a deeply nested structure with a visible node at the bottom (within MAX_FILTER_DEPTH = 500)
     let deepNode = makeNode("button", [makeText("Deep")], { id: "B1", visible: true });

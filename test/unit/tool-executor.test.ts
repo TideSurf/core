@@ -64,7 +64,7 @@ describe("createToolExecutor", () => {
     expect(instance.switchTab).toHaveBeenCalledWith("tab-1");
   });
 
-  describe("HIGH-006: Error type preservation", () => {
+  describe("error type preservation", () => {
     it("should include errorType in error response", async () => {
       const page = {
         click: jest.fn().mockRejectedValue(new Error("Element not found")),
@@ -152,7 +152,7 @@ describe("createToolExecutor", () => {
     });
   });
 
-  describe("HIGH-007: Input validation", () => {
+  describe("input validation", () => {
     it("should validate element ID format for click", async () => {
       const page = {
         click: jest.fn(),
@@ -221,5 +221,37 @@ describe("createToolExecutor", () => {
       expect(result.success).toBe(false);
       expect(result.error).toContain("Text is required");
     });
+  });
+
+  it("does not echo typed or clipboard text", async () => {
+    const page = {
+      type: jest.fn().mockResolvedValue(undefined),
+      clipboardWrite: jest.fn().mockResolvedValue(undefined),
+    };
+    const instance = { getPage: () => page };
+    const executor = createToolExecutor(instance as never);
+
+    const typed = await executor({
+      name: "type",
+      input: { id: "I1", text: "top-secret-value" },
+    });
+    const copied = await executor({
+      name: "clipboard_write",
+      input: { text: "another-secret-value" },
+    });
+
+    expect(typed.success).toBe(true);
+    expect(String(typed.data)).not.toContain("top-secret-value");
+    expect(copied.success).toBe(true);
+    expect(String(copied.data)).not.toContain("another-secret-value");
+  });
+
+  it("generates unknown-tool help from the registry", async () => {
+    const executor = createToolExecutor({} as never);
+    const result = await executor({ name: "missing", input: {} });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("get_state");
+    expect(result.error).toContain("download");
   });
 });

@@ -446,6 +446,16 @@ select:focus-visible {
   text-wrap: balance;
 }
 
+.language-notice {
+  max-width: 69ch;
+  margin: -0.65rem 0 1.5rem;
+  padding: 0.7rem 0.85rem;
+  color: var(--ink-2);
+  background: color-mix(in srgb, var(--c-gold) 20%, var(--canvas));
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
 #content h2 {
   margin: 3rem 0 0.72rem;
   color: var(--ink);

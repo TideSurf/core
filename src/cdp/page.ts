@@ -12,11 +12,17 @@ import type {
 import * as cdp from "./connection.js";
 import { walkDOM } from "../parser/dom-walker.js";
 import { serialize, wrapPage } from "../parser/serializer.js";
-import { markVisibleElements, getScrollPosition } from "./viewport.js";
+import { clearInspectionMarkers, inspectPage } from "./viewport.js";
 import { pruneToFit } from "../parser/token-budget.js";
 import { filterViewportOnly } from "../parser/viewport-filter.js";
 import { filterInteractive, filterMinimal } from "../parser/mode-filter.js";
-import { ElementNotFoundError, ValidationError } from "../errors.js";
+import { truncateGraphemes } from "../parser/truncation.js";
+import {
+  CDPConnectionError,
+  ElementNotFoundError,
+  ReadOnlyError,
+  ValidationError,
+} from "../errors.js";
 import {
   validateUrl,
   validateSelector,
@@ -28,20 +34,19 @@ import {
   validateSearchQuery,
   validateUploadFilePath,
   resolveFileAccessRoots,
+  resolveImplicitDownloadRoot,
   type UrlValidationOptions,
 } from "../validation.js";
-import { setupDownloads, setupDownloadListeners, waitForDownload } from "./download-manager.js";
+import { downloadFromAction } from "./download-manager.js";
+import { withTimeout } from "./timeout.js";
 
-function collectVisibleIds(nodes: OSNode[]): Set<string> {
+function collectIds(nodes: OSNode[]): Set<string> {
   const ids = new Set<string>();
 
   const visit = (list: OSNode[]) => {
     for (const node of list) {
       if (node.id) {
         ids.add(node.id);
-      }
-      if (node.attributes["id"]) {
-        ids.add(node.attributes["id"]);
       }
       if (node.children.length > 0) {
         visit(node.children);
@@ -61,15 +66,23 @@ export class SurfingPage {
   private lastNodeMap: NodeMap = new Map();
   private fileAccessRoots: string[];
   private urlValidationOptions: UrlValidationOptions;
+  private readOnly: boolean;
+  private timeout?: number;
+  private inspectionTail: Promise<void> = Promise.resolve();
+  private closePromise: Promise<void> | null = null;
 
   constructor(
     conn: CDPConnection,
     fileAccessRoots: string[] = resolveFileAccessRoots(),
-    urlValidationOptions: UrlValidationOptions = {}
+    urlValidationOptions: UrlValidationOptions = {},
+    readOnly: boolean = false,
+    timeout?: number
   ) {
     this.conn = conn;
-    this.fileAccessRoots = fileAccessRoots;
-    this.urlValidationOptions = urlValidationOptions;
+    this.fileAccessRoots = [...fileAccessRoots];
+    this.urlValidationOptions = { ...urlValidationOptions };
+    this.readOnly = readOnly;
+    this.timeout = timeout;
   }
 
   /**
@@ -78,41 +91,26 @@ export class SurfingPage {
    * @returns PageState with url, title, xml, and nodeMap
    */
   async getState(options?: GetStateOptions): Promise<PageState> {
+    this.assertOpen();
     if (options?.maxTokens !== undefined) {
       validatePositiveInteger(options.maxTokens, "maxTokens");
     }
 
-    // 1. Clear stale visibility markers to prevent carryover from prior calls
-    await cdp.evaluate(
-      this.conn,
-      "document.querySelectorAll('[data-os-visible],[data-os-state]').forEach(el => { el.removeAttribute('data-os-visible'); el.removeAttribute('data-os-state'); })"
-    );
+    return this.runInspection(() => this.readState(options));
+  }
 
-    // 2. Viewport defaults to true
+  private async readState(options?: GetStateOptions): Promise<PageState> {
     const useViewport = options?.viewport !== false;
     const includeHidden = options?.includeHidden === true;
-
-    // 3. Mark visible elements if viewport mode or maxTokens is set (skip if includeHidden)
-    if ((useViewport || options?.maxTokens) && !includeHidden) {
-      await markVisibleElements(this.conn);
-    }
-
-    // 4. Batch URL, title, and scroll position into single CDP call
-    // BEFORE: 3 sequential CDP calls → AFTER: 1 batched call (HIGH-002a optimization)
-    const pageInfo = await cdp.evaluate(
-      this.conn,
-      `({
-        url: location.href,
-        title: document.title,
-        scrollY: window.scrollY,
-        scrollHeight: document.documentElement.scrollHeight,
-        viewportHeight: window.innerHeight
-      })`
-    ) as { url: string; title: string; scrollY: number; scrollHeight: number; viewportHeight: number };
-    
+    const markViewport =
+      !includeHidden && (useViewport || options?.maxTokens !== undefined);
+    const pageInfo = await inspectPage(this.conn, {
+      markViewport,
+      markHidden: !includeHidden,
+    }, this.timeout);
     const url = pageInfo.url;
     const title = pageInfo.title;
-    
+
     let scrollPosition: ScrollPosition | undefined;
     if (useViewport && !includeHidden) {
       scrollPosition = {
@@ -122,13 +120,28 @@ export class SurfingPage {
       };
     }
 
-    // 5. Get full DOM
-    const root = await cdp.getFullDOM(this.conn);
+    let root;
+    try {
+      root = await cdp.getFullDOM(
+        this.conn,
+        this.timeout,
+        pageInfo.elementCount
+      );
+    } finally {
+      if (pageInfo.elementCount <= cdp.MAX_DOM_NODES) {
+        await clearInspectionMarkers(
+          this.conn,
+          pageInfo.markerAttributes,
+          this.timeout
+        ).catch(() => undefined);
+      }
+    }
+    let { nodes, nodeMap } = walkDOM(root, {
+      includeHidden,
+      markerAttributes: pageInfo.markerAttributes,
+      viewportMarked: markViewport,
+    });
 
-    // 6. Walk DOM
-    let { nodes, nodeMap } = walkDOM(root);
-
-    // 7. If viewport mode, filter to visible subtrees only (skip if includeHidden)
     let aboveSummary: OSNode | undefined;
     let belowSummary: OSNode | undefined;
     if (useViewport && !includeHidden) {
@@ -138,29 +151,25 @@ export class SurfingPage {
       belowSummary = filtered.belowSummary;
     }
 
-    // 8. Apply mode filters
     if (options?.mode === "interactive") {
       nodes = filterInteractive(nodes);
     } else if (options?.mode === "minimal") {
       nodes = filterMinimal(nodes);
     }
 
-    // 9. Prepend/append off-screen summaries (only in full mode)
     if (!options?.mode || options.mode === "full") {
       if (aboveSummary) nodes.unshift(aboveSummary);
       if (belowSummary) nodes.push(belowSummary);
     }
 
-    // 10. If maxTokens, prune to fit budget (after summaries so they count)
     if (options?.maxTokens) {
-      nodes = pruneToFit(nodes, { maxTokens: options.maxTokens });
+      nodes = pruneToFit(nodes, { maxTokens: options.maxTokens, pageUrl: url });
     }
 
-    // 11. Serialize
     const body = serialize(nodes, 0, url);
     const content = wrapPage(body, url, title, scrollPosition);
 
-    const visibleIds = collectVisibleIds(nodes);
+    const visibleIds = collectIds(nodes);
     const filteredNodeMap: NodeMap = new Map();
     for (const id of visibleIds) {
       const backendNodeId = nodeMap.get(id);
@@ -169,7 +178,6 @@ export class SurfingPage {
       }
     }
 
-    // Only update lastNodeMap after all operations succeed
     this.lastNodeMap = filteredNodeMap;
 
     return {
@@ -187,10 +195,12 @@ export class SurfingPage {
    * @throws {ElementNotFoundError} if ID is not in the current node map
    */
   async click(id: string): Promise<void> {
+    this.assertOpen();
+    this.assertWritable("click");
     validateElementId(id);
-    const backendNodeId = await this.resolveId(id);
-    await cdp.clickNode(this.conn, backendNodeId);
-    await cdp.waitForStable(this.conn);
+    const backendNodeId = this.getBackendNodeId(id);
+    await cdp.clickNode(this.conn, backendNodeId, this.timeout);
+    await cdp.waitForStable(this.conn, this.timeout);
   }
 
   /**
@@ -200,10 +210,12 @@ export class SurfingPage {
    * @param clear - Whether to clear the field first
    */
   async type(id: string, text: string, clear: boolean = false): Promise<void> {
+    this.assertOpen();
+    this.assertWritable("type");
     validateElementId(id);
-    const backendNodeId = await this.resolveId(id);
-    await cdp.typeText(this.conn, backendNodeId, text, clear);
-    await cdp.waitForStable(this.conn);
+    const backendNodeId = this.getBackendNodeId(id);
+    await cdp.typeText(this.conn, backendNodeId, text, clear, this.timeout);
+    await cdp.waitForStable(this.conn, this.timeout);
   }
 
   /**
@@ -212,10 +224,12 @@ export class SurfingPage {
    * @param value - Option value to select
    */
   async select(id: string, value: string): Promise<void> {
+    this.assertOpen();
+    this.assertWritable("select");
     validateElementId(id);
-    const backendNodeId = await this.resolveId(id);
-    await cdp.selectOption(this.conn, backendNodeId, value);
-    await cdp.waitForStable(this.conn);
+    const backendNodeId = this.getBackendNodeId(id);
+    await cdp.selectOption(this.conn, backendNodeId, value, this.timeout);
+    await cdp.waitForStable(this.conn, this.timeout);
   }
 
   /**
@@ -224,11 +238,16 @@ export class SurfingPage {
    * @param amount - Pixels to scroll (default 500)
    */
   async scroll(direction: "up" | "down", amount?: number): Promise<void> {
+    this.assertOpen();
+    this.assertWritable("scroll");
+    if (direction !== "up" && direction !== "down") {
+      throw new ValidationError('direction must be "up" or "down"');
+    }
     if (amount !== undefined) {
       validatePositiveNumber(amount, "amount");
     }
-    await cdp.scroll(this.conn, direction, amount);
-    await cdp.waitForStable(this.conn);
+    await cdp.scroll(this.conn, direction, amount, this.timeout);
+    await cdp.waitForStable(this.conn, this.timeout);
   }
 
   /**
@@ -236,7 +255,11 @@ export class SurfingPage {
    * @param timeout - Max wait time in ms
    */
   async waitForStable(timeout?: number): Promise<void> {
-    await cdp.waitForStable(this.conn, timeout);
+    this.assertOpen();
+    if (timeout !== undefined) {
+      validatePositiveInteger(timeout, "timeout");
+    }
+    await cdp.waitForStable(this.conn, timeout ?? this.timeout);
   }
 
   /**
@@ -245,10 +268,12 @@ export class SurfingPage {
    * @returns Text content of the matched element
    */
   async extract(selector: string): Promise<string> {
+    this.assertOpen();
     validateSelector(selector);
     const result = await cdp.evaluate(
       this.conn,
-      `document.querySelector(${JSON.stringify(selector)})?.textContent ?? ""`
+      `document.querySelector(${JSON.stringify(selector)})?.textContent ?? ""`,
+      this.timeout
     );
     return String(result);
   }
@@ -259,9 +284,11 @@ export class SurfingPage {
    * @throws {NavigationError} if navigation fails
    */
   async navigate(url: string): Promise<void> {
+    this.assertOpen();
+    this.assertWritable("navigate");
     validateUrl(url, this.urlValidationOptions);
-    await cdp.navigate(this.conn, url);
-    await cdp.waitForStable(this.conn);
+    await cdp.navigate(this.conn, url, this.timeout);
+    await cdp.waitForStable(this.conn, this.timeout);
   }
 
   /**
@@ -270,8 +297,10 @@ export class SurfingPage {
    * @returns Result of the evaluation
    */
   async evaluate(expression: string): Promise<unknown> {
+    this.assertOpen();
+    this.assertWritable("evaluate");
     validateExpression(expression);
-    return cdp.evaluate(this.conn, expression);
+    return cdp.evaluate(this.conn, expression, this.timeout);
   }
 
   /**
@@ -281,20 +310,44 @@ export class SurfingPage {
    * @returns Array of SearchResult with optional element IDs
    */
   async search(query: string, maxResults: number = 10): Promise<SearchResult[]> {
+    this.assertOpen();
     validateSearchQuery(query);
     validatePositiveInteger(maxResults, "maxResults");
-    const needle = query.trim().toLowerCase();
-    const { nodes, nodeMap: freshNodeMap } = walkDOM(
-      await cdp.getFullDOM(this.conn),
-      { truncate: false }
-    );
 
-    // 0.5.2: cross-reference the fresh walk's IDs against lastNodeMap via
-    // backendNodeId. A fresh ID like "B3" may not exist (or may point at a
-    // different element) in lastNodeMap after DOM mutations, so we only
-    // surface elementIds that resolve to the same backendNodeId the caller
-    // would get through click()/type(). Otherwise we drop the ID to avoid
-    // silent mis-clicks.
+    return this.runInspection(() => this.searchPage(query, maxResults));
+  }
+
+  private async searchPage(
+    query: string,
+    maxResults: number
+  ): Promise<SearchResult[]> {
+    const needle = query.trim().toLowerCase();
+    const inspection = await inspectPage(
+      this.conn,
+      { markViewport: false, markHidden: true },
+      this.timeout
+    );
+    let root;
+    try {
+      root = await cdp.getFullDOM(
+        this.conn,
+        this.timeout,
+        inspection.elementCount
+      );
+    } finally {
+      if (inspection.elementCount <= cdp.MAX_DOM_NODES) {
+        await clearInspectionMarkers(
+          this.conn,
+          inspection.markerAttributes,
+          this.timeout
+        ).catch(() => undefined);
+      }
+    }
+    const { nodes, nodeMap: freshNodeMap } = walkDOM(root, {
+      truncate: false,
+      markerAttributes: inspection.markerAttributes,
+    });
+
     const backendToStableId = new Map<number, string>();
     for (const [id, backendNodeId] of this.lastNodeMap) {
       backendToStableId.set(backendNodeId, id);
@@ -317,15 +370,13 @@ export class SurfingPage {
         if (stableId) {
           currentId = stableId;
         }
-        // If the element isn't in lastNodeMap (or has moved), keep the
-        // parent's nearestId rather than promoting a stale/unstable ID.
       }
 
       const text = node.text?.trim();
 
       if (text && text.toLowerCase().includes(needle)) {
         results.push({
-          text: text.slice(0, 100),
+          text: truncateGraphemes(text, 100),
           tag: currentTag,
           index: results.length + 1,
           elementId: currentId,
@@ -356,16 +407,21 @@ export class SurfingPage {
    * @returns Base64-encoded PNG string
    */
   async screenshot(options?: ScreenshotOptions): Promise<string> {
+    this.assertOpen();
     if (options?.elementId && options.fullPage) {
       throw new ValidationError("screenshot cannot target an element and fullPage at the same time");
     }
 
     if (options?.elementId) {
       validateElementId(options.elementId);
-      const backendNodeId = await this.resolveId(options.elementId);
+      const backendNodeId = this.getBackendNodeId(options.elementId);
 
       // Get box model for the element to create a clip region
-      const { model } = await this.conn.DOM.getBoxModel({ backendNodeId });
+      const { model } = await withTimeout(
+        this.conn.DOM.getBoxModel({ backendNodeId }),
+        this.timeout ?? 5_000,
+        "screenshot:getBoxModel"
+      );
       const content = model.content;
       // content is [x1,y1, x2,y2, x3,y3, x4,y4] — use bounding box
       const x = Math.min(content[0], content[2], content[4], content[6]);
@@ -381,23 +437,24 @@ export class SurfingPage {
           height: maxY - y,
           scale: 1,
         },
-      });
+      }, this.timeout);
     }
 
     if (options?.fullPage) {
       // Get full document dimensions for the clip region
       const dims = (await cdp.evaluate(
         this.conn,
-        "({ width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight })"
+        "({ width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight })",
+        this.timeout
       )) as { width: number; height: number };
 
       return cdp.captureScreenshot(this.conn, {
         clip: { x: 0, y: 0, width: dims.width, height: dims.height, scale: 1 },
         fullPage: true,
-      });
+      }, this.timeout);
     }
 
-    return cdp.captureScreenshot(this.conn);
+    return cdp.captureScreenshot(this.conn, undefined, this.timeout);
   }
 
   /**
@@ -406,13 +463,15 @@ export class SurfingPage {
    * @param filePaths - Array of file paths to upload
    */
   async upload(id: string, filePaths: string[]): Promise<void> {
+    this.assertOpen();
+    this.assertWritable("upload");
     validateElementId(id);
     const validatedFilePaths = filePaths.map((fp) =>
       validateUploadFilePath(fp, this.fileAccessRoots)
     );
-    const backendNodeId = await this.resolveId(id);
-    await cdp.setFileInput(this.conn, backendNodeId, validatedFilePaths);
-    await cdp.waitForStable(this.conn);
+    const backendNodeId = this.getBackendNodeId(id);
+    await cdp.setFileInput(this.conn, backendNodeId, validatedFilePaths, this.timeout);
+    await cdp.waitForStable(this.conn, this.timeout);
   }
 
   /**
@@ -420,7 +479,9 @@ export class SurfingPage {
    * @returns Clipboard text content
    */
   async clipboardRead(): Promise<string> {
-    return cdp.clipboardRead(this.conn);
+    this.assertOpen();
+    this.assertWritable("clipboardRead");
+    return cdp.clipboardRead(this.conn, this.timeout);
   }
 
   /**
@@ -428,7 +489,9 @@ export class SurfingPage {
    * @param text - Text to write to clipboard
    */
   async clipboardWrite(text: string): Promise<void> {
-    await cdp.clipboardWrite(this.conn, text);
+    this.assertOpen();
+    this.assertWritable("clipboardWrite");
+    await cdp.clipboardWrite(this.conn, text, this.timeout);
   }
 
   /**
@@ -442,80 +505,66 @@ export class SurfingPage {
     id: string,
     options?: { downloadDir?: string; timeout?: number }
   ): Promise<DownloadResult> {
+    this.assertOpen();
+    this.assertWritable("download");
     validateElementId(id);
     if (options?.timeout !== undefined) {
       validatePositiveInteger(options.timeout, "timeout");
     }
-    const backendNodeId = await this.resolveId(id);
+    const backendNodeId = this.getBackendNodeId(id);
 
-    // Setup download directory and listeners BEFORE clicking
-    const downloadDir = await setupDownloads(
+    const downloadDir = options?.downloadDir
+      ? validateDownloadDirectory(options.downloadDir, this.fileAccessRoots)
+      : undefined;
+    return downloadFromAction(
       this.conn,
-      options?.downloadDir
-        ? validateDownloadDirectory(options.downloadDir, this.fileAccessRoots)
-        : undefined
+      {
+        downloadDir,
+        temporaryRoot:
+          downloadDir === undefined
+            ? resolveImplicitDownloadRoot(this.fileAccessRoots)
+            : undefined,
+        timeout: options?.timeout ?? this.timeout,
+      },
+      () => cdp.clickNode(this.conn, backendNodeId, this.timeout)
     );
-
-    // Setup listeners FIRST to avoid race with fast downloads
-    const { promise: downloadPromise, cleanup } = setupDownloadListeners(
-      this.conn,
-      downloadDir
-    );
-
-    try {
-      // Click the element to trigger the download
-      await cdp.clickNode(this.conn, backendNodeId);
-
-      // Wait for download to complete
-      return await waitForDownload(downloadPromise, options?.timeout ?? 30000, cleanup);
-    } catch (err) {
-      cleanup();
-      throw err;
-    }
   }
 
   /**
    * Close the CDP connection.
    */
   async close(): Promise<void> {
-    await cdp.disconnect(this.conn);
+    this.closePromise ??= cdp.disconnect(this.conn);
+    return this.closePromise;
   }
 
-  private async resolveId(id: string): Promise<number> {
+  private getBackendNodeId(id: string): number {
     const backendNodeId = this.lastNodeMap.get(id);
     if (backendNodeId === undefined) {
       throw new ElementNotFoundError(id);
     }
-    // Pre-flight validation: verify the node still exists in the DOM
-    // This prevents race conditions where the element was removed after getState()
-    try {
-      // Use resolveNode to check if the node is still attached to the DOM
-      const result = await this.conn.DOM.resolveNode({ backendNodeId });
-      // If we got a result but no object, the node exists but may be detached
-      if (!result || !result.object) {
-        throw new ElementNotFoundError(id, "Element may have changed - call get_state to refresh");
-      }
-      // Release the remote object immediately - we only needed to check existence
-      if (result.object.objectId) {
-        await this.conn.Runtime.releaseObject({ objectId: result.object.objectId }).catch(() => {});
-      }
-    } catch (err) {
-      // If resolveNode throws, the node doesn't exist in the current DOM
-      if (err instanceof ElementNotFoundError) {
-        throw err;
-      }
-      throw new ElementNotFoundError(id, "Element may have changed - call get_state to refresh");
-    }
     return backendNodeId;
   }
 
-  private async getUrl(): Promise<string> {
-    const result = await cdp.evaluate(this.conn, "window.location.href");
-    return String(result);
+  private assertWritable(operation: string): void {
+    if (this.readOnly) throw new ReadOnlyError(operation);
   }
 
-  private async getTitle(): Promise<string> {
-    const result = await cdp.evaluate(this.conn, "document.title");
-    return String(result);
+  private assertOpen(): void {
+    if (this.closePromise) {
+      throw new CDPConnectionError("SurfingPage is closed");
+    }
+  }
+
+  private runInspection<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.inspectionTail.then(() => {
+      this.assertOpen();
+      return operation();
+    });
+    this.inspectionTail = result.then(
+      () => undefined,
+      () => undefined
+    );
+    return result;
   }
 }

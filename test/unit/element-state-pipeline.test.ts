@@ -54,6 +54,41 @@ function walk(body: CDPNode[]): OSNode[] {
   return walkDOM(root).nodes;
 }
 
+describe("pipeline — interactive headings", () => {
+  it("keeps every assigned descendant ID in serialized output", () => {
+    const root = makeElement("BODY", 1, [
+      makeElement("H1", 10, [
+        makeElement("A", 11, [makeText("Documentation", 12)], [
+          "href",
+          "/docs",
+        ]),
+      ]),
+    ]);
+    const { nodes, nodeMap } = walkDOM(root);
+    const output = serialize(nodes, 0, "https://example.com/");
+
+    expect(output).toBe("# [L1](/docs) Documentation");
+    expect(nodeMap.get("L1")).toBe(11);
+    for (const id of nodeMap.keys()) expect(output).toContain(id);
+  });
+
+  it("keeps nested action IDs without folding labels into their parents", () => {
+    const root = makeElement("BODY", 1, [
+      makeElement("A", 10, [
+        makeText("Open", 11),
+        makeElement("BUTTON", 12, [makeText("Menu", 13)]),
+      ], ["href", "/docs"]),
+    ]);
+    const { nodes, nodeMap } = walkDOM(root);
+    const output = serialize(nodes, 0, "https://example.com/");
+
+    expect(output).toBe("[L1](/docs) Open\n  [B1] Menu");
+    expect(nodeMap.get("L1")).toBe(10);
+    expect(nodeMap.get("B1")).toBe(12);
+    for (const id of nodeMap.keys()) expect(output).toContain(id);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Integration: CDPNode → walkDOM → serialize for disabled buttons
 // ---------------------------------------------------------------------------
@@ -210,6 +245,33 @@ describe("pipeline — aria-hidden subtrees", () => {
       ]),
     ]);
     expect(result).toContain("Keep Me");
+  });
+});
+
+describe("pipeline — hidden debugging override", () => {
+  it("includes inline, HTML, ARIA, and computed-hidden subtrees", () => {
+    const root = makeElement("BODY", 1, [
+      makeElement("BUTTON", 10, [makeText("Inline hidden", 11)], [
+        "style",
+        "display:none",
+      ]),
+      makeElement("BUTTON", 12, [makeText("HTML hidden", 13)], ["hidden", ""]),
+      makeElement("BUTTON", 14, [makeText("ARIA hidden", 15)], [
+        "aria-hidden",
+        "true",
+      ]),
+      makeElement("BUTTON", 16, [makeText("Computed hidden", 17)], [
+        "data-os-hidden",
+        "1",
+      ]),
+    ]);
+
+    expect(serialize(walkDOM(root).nodes)).toBe("");
+    const fullDOM = serialize(walkDOM(root, { includeHidden: true }).nodes);
+    expect(fullDOM).toContain("Inline hidden");
+    expect(fullDOM).toContain("HTML hidden");
+    expect(fullDOM).toContain("ARIA hidden");
+    expect(fullDOM).toContain("Computed hidden");
   });
 });
 
@@ -466,7 +528,7 @@ describe("pipeline — nodeMap integrity with state attributes", () => {
 });
 
 // ---------------------------------------------------------------------------
-// State survives through filters (FIX 7)
+// State survives through filters
 // ---------------------------------------------------------------------------
 
 describe("pipeline — state survives filterViewportOnly", () => {

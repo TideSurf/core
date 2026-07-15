@@ -1,206 +1,234 @@
-import { describe, it, expect, mock, beforeEach, afterEach } from "bun:test";
+import { afterEach, describe, expect, it, mock } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { BrowserController } from "../../src/cli/browser-controller.js";
+import { TideSurf } from "../../src/tidesurf.js";
+import type { SessionConfig } from "../../src/cli/session.js";
+import { CDPConnectionError } from "../../src/errors.js";
 
-/**
- * Tests for browser initialization race conditions (CRIT-001)
- * These tests verify that concurrent browser() calls only create one browser instance.
- */
+const originalLaunch = TideSurf.launch;
+const originalConnect = TideSurf.connect;
+const profiles = new Set<string>();
+const config: SessionConfig = {
+  browserMode: "launch",
+  headless: true,
+  readOnly: false,
+  allowLocalhost: false,
+  allowPrivateHosts: false,
+};
 
-describe("Browser initialization race condition (CRIT-001)", () => {
-  it("should use initialization promise pattern to prevent multiple Chrome instances", async () => {
-    // This test verifies the pattern implemented in cli.ts and mcp/index.ts:
-    //
-    // let browserPromise: Promise<TideSurf> | null = null;
-    //
-    // async function browser(): Promise<TideSurf> {
-    //   if (surfing) return surfing;
-    //   if (!browserPromise) {
-    //     browserPromise = (async () => {
-    //       try {
-    //         surfing = await TideSurf.launch({...});
-    //         return surfing;
-    //       } finally {
-    //         browserPromise = null;
-    //       }
-    //     })();
-    //   }
-    //   return browserPromise;
-    // }
-    //
-    // Key properties of this pattern:
-    // 1. First caller creates the browserPromise
-    // 2. Subsequent callers await the same promise
-    // 3. Only one browser instance is created
-    // 4. browserPromise is reset to null after completion
+function replaceLaunch(
+  implementation: (options: Parameters<typeof TideSurf.launch>[0]) => Promise<TideSurf>
+): void {
+  (TideSurf as unknown as { launch: typeof TideSurf.launch }).launch = implementation;
+}
 
-    let instanceCount = 0;
-    let activeInstance: { id: number } | null = null;
-    let instancePromise: Promise<{ id: number }> | null = null;
+function replaceConnect(
+  implementation: (options: Parameters<typeof TideSurf.connect>[0]) => Promise<TideSurf>
+): void {
+  (TideSurf as unknown as { connect: typeof TideSurf.connect }).connect = implementation;
+}
 
-    // Mock browser factory
-    const createBrowser = async (): Promise<{ id: number }> => {
-      instanceCount++;
-      const instance = { id: instanceCount };
-      activeInstance = instance;
-      // Simulate async initialization
-      await new Promise((r) => setTimeout(r, 50));
-      return instance;
-    };
+function emptyProfile(): string {
+  const profile = mkdtempSync(join(tmpdir(), "tidesurf-controller-"));
+  profiles.add(profile);
+  return profile;
+}
 
-    // Implementation following the race-safe pattern
-    const browser = async (): Promise<{ id: number }> => {
-      if (activeInstance) return activeInstance;
-      if (!instancePromise) {
-        instancePromise = (async () => {
-          try {
-            activeInstance = await createBrowser();
-            return activeInstance;
-          } finally {
-            instancePromise = null;
-          }
-        })();
-      }
-      return instancePromise;
-    };
+function fakeBrowser(close = mock(async () => {})): TideSurf {
+  return {
+    close,
+    getToolExecutor: () => mock(async () => ({ success: true })),
+  } as unknown as TideSurf;
+}
 
-    // Test: Simulate 5 concurrent calls
+afterEach(() => {
+  (TideSurf as unknown as { launch: typeof TideSurf.launch }).launch = originalLaunch;
+  (TideSurf as unknown as { connect: typeof TideSurf.connect }).connect = originalConnect;
+  for (const profile of profiles) rmSync(profile, { recursive: true, force: true });
+  profiles.clear();
+});
+describe("BrowserController initialization", () => {
+  it("shares one launch across concurrent callers", async () => {
+    const browser = fakeBrowser();
+    const launch = mock(async () => {
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 20));
+      return browser;
+    });
+    replaceLaunch(launch);
+    const controller = new BrowserController(config);
+
     const results = await Promise.all([
-      browser(),
-      browser(),
-      browser(),
-      browser(),
-      browser(),
+      controller.getBrowser(),
+      controller.getBrowser(),
+      controller.getBrowser(),
     ]);
 
-    // Verify: Only one instance should be created
-    expect(instanceCount).toBe(1);
-    // All callers should get the same instance
-    expect(results.every((r) => r.id === 1)).toBe(true);
-    expect(results[0]).toBe(results[1]);
-    expect(results[0]).toBe(results[2]);
-    expect(results[0]).toBe(results[3]);
-    expect(results[0]).toBe(results[4]);
+    expect(launch).toHaveBeenCalledTimes(1);
+    expect(results.every((result) => result === browser)).toBe(true);
+    await controller.close();
   });
 
-  it("should handle sequential calls after initialization correctly", async () => {
-    let instanceCount = 0;
-    let activeInstance: { id: number } | null = null;
-    let instancePromise: Promise<{ id: number }> | null = null;
+  it("retries after a failed launch", async () => {
+    const browser = fakeBrowser();
+    let attempts = 0;
+    replaceLaunch(mock(async () => {
+      attempts++;
+      if (attempts === 1) throw new Error("launch failed");
+      return browser;
+    }));
+    const controller = new BrowserController(config);
 
-    const createBrowser = async (): Promise<{ id: number }> => {
-      instanceCount++;
-      const instance = { id: instanceCount };
-      activeInstance = instance;
-      await new Promise((r) => setTimeout(r, 10));
-      return instance;
-    };
-
-    const browser = async (): Promise<{ id: number }> => {
-      if (activeInstance) return activeInstance;
-      if (!instancePromise) {
-        instancePromise = (async () => {
-          try {
-            activeInstance = await createBrowser();
-            return activeInstance;
-          } finally {
-            instancePromise = null;
-          }
-        })();
-      }
-      return instancePromise;
-    };
-
-    // First call creates instance
-    const first = await browser();
-    expect(first.id).toBe(1);
-
-    // Subsequent calls should return same instance
-    const second = await browser();
-    const third = await browser();
-
-    expect(second.id).toBe(1);
-    expect(third.id).toBe(1);
-    expect(second).toBe(first);
-    expect(third).toBe(first);
-    expect(instanceCount).toBe(1);
+    await expect(controller.getBrowser()).rejects.toThrow("launch failed");
+    expect(await controller.getBrowser()).toBe(browser);
+    expect(attempts).toBe(2);
+    await controller.close();
   });
 
-  it("should reset promise after completion to allow re-initialization if needed", async () => {
-    let instanceCount = 0;
-    let activeInstance: { id: number } | null = null;
-    let instancePromise: Promise<{ id: number }> | null = null;
+  it("waits for an in-flight launch before closing", async () => {
+    const close = mock(async () => {});
+    const browser = fakeBrowser(close);
+    let release!: () => void;
+    replaceLaunch(mock(async () => {
+      await new Promise<void>((resolveLaunch) => { release = resolveLaunch; });
+      return browser;
+    }));
+    const controller = new BrowserController(config);
+    const opening = controller.getBrowser();
+    const closing = controller.close();
 
-    const createBrowser = async (): Promise<{ id: number }> => {
-      instanceCount++;
-      const instance = { id: instanceCount };
-      activeInstance = instance;
-      await new Promise((r) => setTimeout(r, 10));
-      return instance;
-    };
-
-    const browser = async (): Promise<{ id: number }> => {
-      if (activeInstance) return activeInstance;
-      if (!instancePromise) {
-        instancePromise = (async () => {
-          try {
-            activeInstance = await createBrowser();
-            return activeInstance;
-          } finally {
-            instancePromise = null;
-          }
-        })();
-      }
-      return instancePromise;
-    };
-
-    // First initialization
-    const first = await browser();
-    expect(first.id).toBe(1);
-    expect(instancePromise).toBeNull();
-
-    // Simulate clearing the instance (like closing browser)
-    activeInstance = null;
-
-    // New initialization should create a new instance
-    const second = await browser();
-    expect(second.id).toBe(2);
+    expect(close).toHaveBeenCalledTimes(0);
+    release();
+    await Promise.all([opening, closing]);
+    expect(close).toHaveBeenCalledTimes(1);
   });
 
-  it("should handle concurrent calls where initialization fails", async () => {
-    let attemptCount = 0;
-    let activeInstance: { id: number } | null = null;
-    let instancePromise: Promise<{ id: number }> | null = null;
+  it("closes idempotently and rejects later acquisition", async () => {
+    const close = mock(async () => {});
+    replaceLaunch(mock(async () => fakeBrowser(close)));
+    const controller = new BrowserController(config);
+    await controller.getBrowser();
 
-    const failingCreateBrowser = async (): Promise<{ id: number }> => {
-      attemptCount++;
-      await new Promise((r) => setTimeout(r, 10));
-      throw new Error("Browser launch failed");
-    };
+    await Promise.all([controller.close(), controller.close(), controller.close()]);
 
-    const browser = async (): Promise<{ id: number }> => {
-      if (activeInstance) return activeInstance;
-      if (!instancePromise) {
-        instancePromise = (async () => {
-          try {
-            activeInstance = await failingCreateBrowser();
-            return activeInstance;
-          } finally {
-            instancePromise = null;
-          }
-        })();
-      }
-      return instancePromise;
-    };
+    expect(close).toHaveBeenCalledTimes(1);
+    await expect(controller.getBrowser()).rejects.toThrow("closed");
+  });
 
-    // Multiple concurrent calls should all fail but only try once
-    const results = await Promise.allSettled([
-      browser(),
-      browser(),
-      browser(),
-    ]);
+  it("honors a configured acquisition timeout without a hidden floor", async () => {
+    const observedTimeouts: number[] = [];
+    const connect = mock(async (options: Parameters<typeof TideSurf.connect>[0]) => {
+      const timeout = options?.timeout ?? 0;
+      observedTimeouts.push(timeout);
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, timeout));
+      throw new CDPConnectionError("conventional endpoint timed out");
+    });
+    const launch = mock(async () => fakeBrowser());
+    replaceConnect(connect);
+    replaceLaunch(launch);
+    const controller = new BrowserController({
+      ...config,
+      browserMode: "connect",
+      timeout: 100,
+      userDataDir: emptyProfile(),
+    });
 
-    expect(attemptCount).toBe(1);
-    expect(results.every((r) => r.status === "rejected")).toBe(true);
-    // Promise should be reset after failure
-    expect(instancePromise).toBeNull();
+    const started = Date.now();
+    await expect(controller.getBrowser()).rejects.toThrow("conventional endpoint timed out");
+    const elapsed = Date.now() - started;
+
+    expect(observedTimeouts).toHaveLength(1);
+    expect(observedTimeouts[0]).toBeGreaterThan(0);
+    expect(observedTimeouts[0]).toBeLessThanOrEqual(100);
+    expect(elapsed).toBeLessThan(500);
+    expect(launch).toHaveBeenCalledTimes(0);
+    await controller.close();
+  });
+
+  it("reports the latest conventional endpoint failure", async () => {
+    const connect = mock(async () => {
+      throw new CDPConnectionError("conventional endpoint refused the connection");
+    });
+    replaceConnect(connect);
+    const controller = new BrowserController({
+      ...config,
+      browserMode: "connect",
+      timeout: 1_000,
+      userDataDir: emptyProfile(),
+    });
+
+    await expect(controller.getBrowser()).rejects.toThrow(
+      "conventional endpoint refused the connection"
+    );
+    expect(connect).toHaveBeenCalledTimes(1);
+    await controller.close();
+  });
+
+  it("falls back from local attachment to a managed launch", async () => {
+    const browser = fakeBrowser();
+    const connect = mock(async () => {
+      throw new CDPConnectionError("endpoint unavailable");
+    });
+    const launch = mock(async () => browser);
+    replaceConnect(connect);
+    replaceLaunch(launch);
+    const controller = new BrowserController({
+      ...config,
+      browserMode: "auto",
+      host: "127.0.0.1",
+      port: 9_333,
+      timeout: 2_000,
+      userDataDir: emptyProfile(),
+    });
+
+    expect(await controller.getBrowser()).toBe(browser);
+    expect(connect).toHaveBeenCalledTimes(2);
+    expect(launch).toHaveBeenCalledTimes(1);
+    expect(launch.mock.calls[0]?.[0]).toMatchObject({ port: 9_333 });
+    expect(controller.status().source).toBe("launched");
+    await controller.close();
+  });
+
+  it("never launches in connect-only mode", async () => {
+    const connect = mock(async () => {
+      throw new CDPConnectionError("no attachable browser");
+    });
+    const launch = mock(async () => fakeBrowser());
+    replaceConnect(connect);
+    replaceLaunch(launch);
+    const controller = new BrowserController({
+      ...config,
+      browserMode: "connect",
+      timeout: 1_000,
+      userDataDir: emptyProfile(),
+    });
+
+    await expect(controller.getBrowser()).rejects.toThrow("no attachable browser");
+    expect(connect).toHaveBeenCalledTimes(1);
+    expect(launch).toHaveBeenCalledTimes(0);
+    await controller.close();
+  });
+
+  it("does not turn a failed remote attachment into local discovery or launch", async () => {
+    const connect = mock(async () => {
+      throw new CDPConnectionError("remote endpoint unavailable");
+    });
+    const launch = mock(async () => fakeBrowser());
+    replaceConnect(connect);
+    replaceLaunch(launch);
+    const controller = new BrowserController({
+      ...config,
+      browserMode: "auto",
+      host: "192.0.2.25",
+      port: 9_333,
+      timeout: 1_000,
+      userDataDir: emptyProfile(),
+    });
+
+    await expect(controller.getBrowser()).rejects.toThrow("remote endpoint unavailable");
+    expect(connect).toHaveBeenCalledTimes(1);
+    expect(launch).toHaveBeenCalledTimes(0);
+    await controller.close();
   });
 });

@@ -1,5 +1,9 @@
 import { withRetry } from "../../src/cdp/retry.js";
-import { CDPConnectionError, CDPTimeoutError } from "../../src/errors.js";
+import {
+  CDPConnectionError,
+  CDPTimeoutError,
+  ValidationError,
+} from "../../src/errors.js";
 
 describe("withRetry", () => {
   it("returns result on first success", async () => {
@@ -73,5 +77,19 @@ describe("withRetry", () => {
     const delay1 = timestamps[1] - timestamps[0];
     const delay2 = timestamps[2] - timestamps[1];
     expect(delay2).toBeGreaterThanOrEqual(delay1 * 1.5); // Allow some tolerance
+  });
+
+  it.each([
+    { maxAttempts: 0 },
+    { maxAttempts: 1.5 },
+    { initialDelayMs: -1 },
+    { initialDelayMs: Number.NaN },
+    { backoffFactor: 0 },
+    { backoffFactor: Number.POSITIVE_INFINITY },
+  ])("rejects invalid retry options before calling the task", async (options) => {
+    const fn = jest.fn().mockResolvedValue("unexpected");
+
+    await expect(withRetry(fn, options)).rejects.toBeInstanceOf(ValidationError);
+    expect(fn).not.toHaveBeenCalled();
   });
 });

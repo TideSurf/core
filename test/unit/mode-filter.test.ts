@@ -1,4 +1,9 @@
-import { filterInteractive, filterMinimal } from "../../src/parser/mode-filter.js";
+import {
+  collectTextBounded,
+  filterInteractive,
+  filterMinimal,
+} from "../../src/parser/mode-filter.js";
+import { serialize } from "../../src/parser/serializer.js";
 import type { OSNode } from "../../src/types.js";
 
 // --- Helpers ---
@@ -26,6 +31,15 @@ const makeNode = (
 // --- filterInteractive ---
 
 describe("filterInteractive", () => {
+  it("truncates labels without splitting a grapheme", () => {
+    const expected = `${"a".repeat(99)}😀`;
+    const result = filterInteractive([
+      makeNode("button", [makeText(`${expected}tail`)], { id: "B1" }),
+    ]);
+
+    expect(result[0].children[0].text).toBe(expected);
+  });
+
   it("keeps nodes with IDs and their full subtree", () => {
     const nodes: OSNode[] = [
       makeNode("button", [makeText("Click me")], { id: "B1" }),
@@ -116,11 +130,31 @@ describe("filterInteractive", () => {
     const result = filterInteractive(nodes);
     expect(result[0].children).toHaveLength(3);
   });
+
+  it("does not duplicate a nested action label in its interactive parent", () => {
+    const nodes = [
+      makeNode("link", [
+        makeText("Open"),
+        makeNode("button", [makeText("Menu")], { id: "B1" }),
+      ], { id: "L1" }),
+    ];
+
+    expect(serialize(filterInteractive(nodes))).toBe("[L1] Open\n  [B1] Menu");
+  });
 });
 
 // --- filterMinimal ---
 
 describe("filterMinimal", () => {
+  it("truncates summaries without splitting a grapheme", () => {
+    const expected = `${"a".repeat(99)}😀`;
+    const result = filterMinimal([
+      makeNode("heading", [makeText(`${expected}tail`)]),
+    ]);
+
+    expect(result[0].text).toBe(expected);
+  });
+
   it("keeps landmark tags with text summaries", () => {
     const nodes: OSNode[] = [
       makeNode("heading", [makeText("Welcome to the site")]),
@@ -180,6 +214,39 @@ describe("filterMinimal", () => {
     expect(result[1].tag).toBe("nav");
   });
 
+  it("keeps nested landmarks in source order without repeating their summaries", () => {
+    const nodes: OSNode[] = [
+      makeNode("main", [
+        makeText("Overview"),
+        makeNode("section", [
+          makeText("Account settings"),
+          makeNode("nav", [
+            makeNode("link", [makeText("Profile")], { id: "L1" }),
+            makeNode("link", [makeText("Security")], { id: "L2" }),
+          ]),
+        ]),
+      ]),
+    ];
+
+    const result = filterMinimal(nodes);
+
+    expect(result.map((node) => node.tag)).toEqual(["main", "section", "nav"]);
+    expect(result[0].text).toBe("Overview");
+    expect(result[1].text).toBe("Account settings");
+    expect(result[2].text).toBe("Profile Security [2 links]");
+  });
+
+  it("serializes structural landmark summaries", () => {
+    const nodes: OSNode[] = [
+      makeNode("nav", [
+        makeNode("link", [makeText("Home")], { id: "L1" }),
+        makeNode("button", [makeText("Menu")], { id: "B1" }),
+      ]),
+    ];
+
+    expect(serialize(filterMinimal(nodes))).toBe("NAV: Home Menu [1 link, 1 button]");
+  });
+
   it("truncates text to 100 characters", () => {
     const longText = "A".repeat(200);
     const nodes: OSNode[] = [
@@ -225,7 +292,7 @@ describe("filterMinimal", () => {
     expect(result[0].text).not.toMatch(/1 links/);
   });
 
-  // HIGH-004: Stack overflow protection with depth limit
+  // Depth limits protect the stack.
   it("handles deeply nested trees without stack overflow (filterInteractive)", () => {
     // Create a deeply nested structure (within MAX_FILTER_DEPTH = 500)
     let deepNode = makeNode("button", [makeText("Deep")], { id: "B1" });
@@ -252,5 +319,14 @@ describe("filterMinimal", () => {
     const result = filterMinimal(nodes);
     // Landmark should still be found despite deep nesting
     expect(result.some(n => n.tag === "nav")).toBe(true);
+  });
+});
+
+describe("collectTextBounded", () => {
+  it("stops at a grapheme boundary", () => {
+    const expected = `${"a".repeat(99)}😀`;
+    const node = makeNode("main", [makeText(`${expected}tail`)]);
+
+    expect(collectTextBounded(node, 100)).toBe(expected);
   });
 });

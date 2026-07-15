@@ -31,6 +31,53 @@ interface Result {
   ms: number;
 }
 
+const INTERSTITIAL_TEXT = [
+  /access denied/i,
+  /are you a robot/i,
+  /captcha/i,
+  /checking your browser/i,
+  /enable javascript and cookies/i,
+  /human verification/i,
+  /just a moment/i,
+  /request (?:was )?blocked/i,
+  /robot check/i,
+  /verify (?:that )?you are human/i,
+];
+
+const MIN_RAW_TOKENS = 1_000;
+const MIN_COMPRESSED_TOKENS = 100;
+const MIN_ACTION_IDS = 3;
+
+class RejectedSampleError extends Error {}
+
+function rejectInvalidSample(
+  title: string,
+  content: string,
+  rawTokens: number,
+  compressedTokens: number,
+  interactive: number
+): void {
+  const sample = `${title}\n${content.slice(0, 2_000)}`;
+  if (INTERSTITIAL_TEXT.some((pattern) => pattern.test(sample))) {
+    throw new RejectedSampleError("interstitial or bot challenge detected");
+  }
+  if (rawTokens < MIN_RAW_TOKENS) {
+    throw new RejectedSampleError(
+      `rendered DOM is too small (${rawTokens} < ${MIN_RAW_TOKENS} tokens)`
+    );
+  }
+  if (compressedTokens < MIN_COMPRESSED_TOKENS) {
+    throw new RejectedSampleError(
+      `TideSurf output is too small (${compressedTokens} < ${MIN_COMPRESSED_TOKENS} tokens)`
+    );
+  }
+  if (interactive < MIN_ACTION_IDS) {
+    throw new RejectedSampleError(
+      `too few action IDs (${interactive} < ${MIN_ACTION_IDS})`
+    );
+  }
+}
+
 async function main() {
   console.log("Launching browser...\n");
   const surf = await TideSurf.launch({ headless: true });
@@ -46,13 +93,22 @@ async function main() {
       const rawHtml = await surf.getPage().evaluate("document.documentElement.outerHTML") as string;
       const rawTokens = estimateTokens(rawHtml);
 
-      // Get TideSurf compressed state
+      // Compare the complete rendered page with complete TideSurf state. The
+      // production default is viewport-filtered, which is not a fair full-DOM
+      // compression denominator.
       const start = performance.now();
-      const state = await surf.getState();
+      const state = await surf.getState({ viewport: false });
       const ms = performance.now() - start;
       const tideSurfTokens = estimateTokens(state.content);
 
-      const interactive = (state.content.match(/\b[LBISTFD]\d+\b/g) || []).length;
+      const interactive = state.nodeMap.size;
+      rejectInvalidSample(
+        state.title,
+        state.content,
+        rawTokens,
+        tideSurfTokens,
+        interactive
+      );
       const ratio = rawTokens / tideSurfTokens;
       const reduction = (1 - tideSurfTokens / rawTokens) * 100;
 
@@ -64,7 +120,8 @@ async function main() {
         `  ${interactive} IDs  ${ms.toFixed(0)}ms`
       );
     } catch (err) {
-      console.log(`FAILED: ${err instanceof Error ? err.message : String(err)}`);
+      const label = err instanceof RejectedSampleError ? "SKIPPED" : "FAILED";
+      console.log(`${label}: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -73,11 +130,11 @@ async function main() {
   // Summary
   if (results.length === 0) return;
 
-  const avgRatio = results.reduce((s, r) => s + r.ratio, 0) / results.length;
-  const avgReduction = results.reduce((s, r) => s + r.reduction, 0) / results.length;
   const avgMs = results.reduce((s, r) => s + r.ms, 0) / results.length;
   const totalRaw = results.reduce((s, r) => s + r.rawTokens, 0);
   const totalCompressed = results.reduce((s, r) => s + r.tideSurfTokens, 0);
+  const aggregateRatio = totalRaw / totalCompressed;
+  const aggregateReduction = (1 - totalCompressed / totalRaw) * 100;
 
   console.log("\n" + "═".repeat(80));
   console.log("  TIDESURF LIVE BENCHMARK");
@@ -108,11 +165,11 @@ async function main() {
 
   console.log("  " + "─".repeat(76));
   console.log(
-    `  ${"AVERAGE".padEnd(18)}` +
-    `${(totalRaw / results.length).toLocaleString().padStart(10)}` +
-    `${(totalCompressed / results.length).toLocaleString().padStart(10)}` +
-    `${avgReduction.toFixed(0)}%`.padStart(11) +
-    `${avgRatio.toFixed(1)}x`.padStart(8) +
+    `  ${"TOTAL / AGGREGATE".padEnd(18)}` +
+    `${totalRaw.toLocaleString().padStart(10)}` +
+    `${totalCompressed.toLocaleString().padStart(10)}` +
+    `${aggregateReduction.toFixed(0)}%`.padStart(11) +
+    `${aggregateRatio.toFixed(1)}x`.padStart(8) +
     `${""}`.padStart(6) +
     `${avgMs.toFixed(0)}ms`.padStart(8)
   );
@@ -128,7 +185,7 @@ async function main() {
     );
   }
   console.log(
-    `| **Average** | | | **${avgReduction.toFixed(0)}%** | **${avgRatio.toFixed(0)}x** |`
+    `| **Total / aggregate** | ${totalRaw.toLocaleString()} tokens | ${totalCompressed.toLocaleString()} tokens | **${aggregateReduction.toFixed(0)}%** | **${aggregateRatio.toFixed(1)}x** |`
   );
 }
 

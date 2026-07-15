@@ -1,6 +1,6 @@
 /**
- * TideSurf HTTP bridge — a local JSON API server for Claude Code's /surf skill.
- * Powered by Elysia.
+ * TideSurf SDK HTTP bridge example, powered by Elysia. Shell agents can use
+ * the stateful `tidesurf` CLI directly without this extra transport.
  *
  * Usage:
  *   bun examples/surf-server.ts [--headful] [--port 7370]

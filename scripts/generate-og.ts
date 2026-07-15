@@ -1,47 +1,65 @@
 #!/usr/bin/env bun
-/**
- * Generates og.png social preview image using headless Chrome.
- * Usage: bun scripts/generate-og.ts
- */
+/** Generate synchronized website and repository social previews. */
+import { createHash } from "node:crypto";
 import { TideSurf } from "../src/index.js";
-import { resolve } from "path";
+import { resolve } from "node:path";
 
 const htmlPath = resolve(import.meta.dir, "../website/landing/public/og.html");
 const outPath = resolve(import.meta.dir, "../website/landing/public/og.png");
+const manifestPath = resolve(import.meta.dir, "../website/landing/public/og-manifest.json");
 const ghOutPath = resolve(import.meta.dir, "../assets/social-preview.png");
+const width = 1200;
+const height = 630;
 
-// Serve the file locally
+function sha256(value: string | Uint8Array): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
 const server = Bun.serve({
+  hostname: "127.0.0.1",
   port: 0,
-  async fetch(req) {
-    const file = Bun.file(htmlPath);
-    return new Response(file, { headers: { "Content-Type": "text/html" } });
+  fetch() {
+    return new Response(Bun.file(htmlPath), {
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    });
   },
 });
 
-const surf = await TideSurf.launch({ headless: true, defaultViewport: { width: 1200, height: 630 } });
-await surf.navigate(`http://localhost:${server.port}/`);
+let surf: TideSurf | null = null;
+try {
+  surf = await TideSurf.launch({
+    headless: true,
+    defaultViewport: { width, height },
+    allowLocalhost: true,
+  });
+  await surf.navigate(`http://127.0.0.1:${server.port}/`);
 
-// Wait for fonts
-const page = surf.getPage();
-await page.evaluate("document.fonts.ready");
-await page.evaluate("new Promise(r => setTimeout(r, 500))");
+  const page = surf.getPage();
+  await page.evaluate("document.fonts.ready");
+  await page.evaluate("new Promise(resolve => setTimeout(resolve, 500))");
 
-// Screenshot via CDP
-const conn = (page as any).conn;
-const { data } = await conn.Page.captureScreenshot({
-  format: "png",
-  clip: { x: 0, y: 0, width: 1200, height: 630, scale: 2 },
-});
+  const bytes = Buffer.from(await page.screenshot(), "base64");
+  const source = await Bun.file(htmlPath).text();
+  const manifest = {
+    source: "og.html",
+    sourceSha256: sha256(source),
+    png: "og.png",
+    pngSha256: sha256(bytes),
+    width,
+    height,
+  };
 
-const buf = Buffer.from(data, "base64");
-await Bun.write(outPath, buf);
-await Bun.write(ghOutPath, buf);
+  await Promise.all([
+    Bun.write(outPath, bytes),
+    Bun.write(ghOutPath, bytes),
+    Bun.write(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`),
+  ]);
 
-console.log(`OG image written to:`);
-console.log(`  ${outPath}`);
-console.log(`  ${ghOutPath}`);
-console.log(`  ${(buf.byteLength / 1024).toFixed(0)} KB`);
-
-await surf.close();
-server.stop();
+  console.log(`OG previews written (${width}x${height}, ${(bytes.byteLength / 1024).toFixed(0)} KB):`);
+  console.log(`  ${outPath}`);
+  console.log(`  ${ghOutPath}`);
+  console.log(`  ${manifestPath}`);
+} finally {
+  await surf?.close().catch(() => undefined);
+  server.stop(true);
+}

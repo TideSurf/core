@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Visibility Cases</title>
+  </head>
+  <body>
+    <button id="site-marker" data-os-visible="site-value" data-os-hidden="site-hidden" data-os-state="site-state">SITE MARKER</button>
+    <div style="visibility: hidden">
+      <button style="visibility: visible">VISIBLE CHILD</button>
+    </div>
+    <iframe
+      title="clipped-frame"
+      style="position: fixed; top: -500px; left: 0; width: 300px; height: 600px"
+      srcdoc="<!doctype html><button>CLIPPED FRAME CHILD</button>"
+    ></iframe>
+    <div style="height: 2500px"></div>
+    <iframe
+      title="offscreen-frame"
+      srcdoc="<!doctype html><button>OFFSCREEN FRAME CHILD</button>"
+    ></iframe>
+  </body>
+</html>

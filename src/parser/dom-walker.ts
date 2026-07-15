@@ -1,6 +1,7 @@
 import type { CDPNode, OSNode, NodeMap } from "../types.js";
 import { classify, parseAttributes } from "./element-classifier.js";
 import { IDAssigner } from "./id-assigner.js";
+import { truncateGraphemes } from "./truncation.js";
 
 const KNOWN_STATE_FLAGS = new Set(["disabled", "inert", "obscured"]);
 
@@ -41,46 +42,85 @@ export interface WalkResult {
   nodeMap: NodeMap;
 }
 
+interface MarkerAttributes {
+  visible: string;
+  hidden: string;
+  state: string;
+  text?: string;
+}
+
+interface MarkerContext {
+  markers: MarkerAttributes | undefined;
+  ignoreLegacyMarkers: boolean;
+  viewportMarked: boolean;
+}
+
+function walkAttributes(
+  attributes: string[] | undefined,
+  markerContext: MarkerContext
+): Record<string, string> {
+  const values = parseAttributes(attributes);
+  if (!markerContext.markers && !markerContext.ignoreLegacyMarkers) return values;
+  const markers = markerContext.markers;
+  const visible = markers ? values[markers.visible] : undefined;
+  const hidden = markers ? values[markers.hidden] : undefined;
+  const state = markers ? values[markers.state] : undefined;
+  const text = markers?.text ? values[markers.text] : undefined;
+  delete values["data-os-visible"];
+  delete values["data-os-hidden"];
+  delete values["data-os-state"];
+  delete values["data-os-text"];
+  if (markers) {
+    delete values[markers.visible];
+    delete values[markers.hidden];
+    delete values[markers.state];
+    if (markers.text) delete values[markers.text];
+  }
+  if (visible !== undefined) values["data-os-visible"] = visible;
+  if (hidden !== undefined) values["data-os-hidden"] = hidden;
+  if (state !== undefined) values["data-os-state"] = state;
+  if (text !== undefined) values["data-os-text"] = text;
+  return values;
+}
+
 interface WalkContext {
   insideInteractive: boolean;
   insideHeading: boolean;
+  viewportVisible?: boolean;
+}
+
+function appendNodes(target: OSNode[], nodes: OSNode[]): void {
+  for (const node of nodes) target.push(node);
+}
+
+function visibleTextIndices(
+  attrs: Record<string, string>,
+  markerContext: MarkerContext,
+  shadowRoot: boolean = false
+): ReadonlySet<number> | undefined {
+  if (!markerContext.viewportMarked || !markerContext.markers?.text) {
+    return undefined;
+  }
+  const encoded = attrs["data-os-text"] ?? "";
+  const separator = encoded.indexOf("|");
+  const values = shadowRoot
+    ? separator < 0
+      ? ""
+      : encoded.slice(separator + 1)
+    : separator < 0
+      ? encoded
+      : encoded.slice(0, separator);
+  const indices = new Set<number>();
+  for (const value of values.split(",")) {
+    if (value === "") continue;
+    const index = Number(value);
+    if (Number.isInteger(index) && index >= 0) indices.add(index);
+  }
+  return indices;
 }
 
 const HEADING_TAGS = new Set(["h1", "h2", "h3", "h4", "h5", "h6", "heading"]);
 const TEXT_TRUNCATE_LIMIT = 60;
-
-// MED-004: Use Intl.Segmenter for grapheme-aware truncation if available
-const segmenter = typeof Intl !== "undefined" && "Segmenter" in Intl
-  ? new Intl.Segmenter("en", { granularity: "grapheme" })
-  : null;
-
-function getGraphemeCount(text: string): number {
-  if (segmenter) {
-    return Array.from(segmenter.segment(text)).length;
-  }
-  // Fallback: use code unit length (less accurate for complex scripts)
-  return text.length;
-}
-
-function truncateGraphemes(text: string, limit: number): string {
-  if (getGraphemeCount(text) <= limit) return text;
-
-  if (segmenter) {
-    const segments = Array.from(segmenter.segment(text));
-    // Find a good break point near the limit
-    let end = limit;
-    while (end > 0 && segments[end] && !/\s/.test(segments[end].segment)) {
-      end--;
-    }
-    if (end <= 0) end = limit;
-    return segments.slice(0, end).map(s => s.segment).join("").trimEnd() + "...";
-  }
-
-  // Fallback: use code unit-based truncation
-  const cut = text.lastIndexOf(" ", limit);
-  const end = cut > 0 ? cut : limit;
-  return text.slice(0, end) + "...";
-}
 
 /**
  * Walk a CDP DOM tree and produce compressed OSNode tree + nodeMap.
@@ -88,13 +128,37 @@ function truncateGraphemes(text: string, limit: number): string {
  */
 const MAX_DEPTH = 500;
 
-export function walkDOM(root: CDPNode, options?: { truncate?: boolean }): WalkResult {
+export function walkDOM(
+  root: CDPNode,
+  options?: {
+    truncate?: boolean;
+    includeHidden?: boolean;
+    markerAttributes?: MarkerAttributes;
+    ignoreLegacyMarkers?: boolean;
+    viewportMarked?: boolean;
+  }
+): WalkResult {
   const assigner = new IDAssigner();
   const nodeMap: NodeMap = new Map();
   const doTruncate = options?.truncate !== false;
+  const includeHidden = options?.includeHidden === true;
+  const markerContext: MarkerContext = {
+    markers: options?.markerAttributes,
+    ignoreLegacyMarkers: options?.ignoreLegacyMarkers === true,
+    viewportMarked: options?.viewportMarked === true,
+  };
   const ctx: WalkContext = { insideInteractive: false, insideHeading: false };
 
-  const nodes = walkChildren(root.children ?? [], assigner, nodeMap, ctx, doTruncate, 0);
+  const nodes = walkChildren(
+    root.children ?? [],
+    assigner,
+    nodeMap,
+    ctx,
+    doTruncate,
+    includeHidden,
+    markerContext,
+    0
+  );
   const cleaned = postProcess(nodes);
 
   return { nodes: cleaned, nodeMap };
@@ -106,11 +170,22 @@ function walkNode(
   nodeMap: NodeMap,
   ctx: WalkContext,
   doTruncate: boolean,
+  includeHidden: boolean,
+  markerContext: MarkerContext,
   depth: number = 0
 ): OSNode[] {
   // Prevent stack overflow on deeply nested DOM
   if (depth > MAX_DEPTH) {
-    return [{ tag: "#text", text: "[truncated]", attributes: {}, children: [] }];
+    const truncated: OSNode = {
+      tag: "#text",
+      text: "[truncated]",
+      attributes: {},
+      children: [],
+    };
+    if (ctx.viewportVisible !== undefined) {
+      truncated.visible = ctx.viewportVisible;
+    }
+    return [truncated];
   }
 
   // Text nodes
@@ -118,33 +193,101 @@ function walkNode(
     let text = (node.nodeValue ?? "").trim();
     if (!text) return [];
     if (doTruncate && !ctx.insideInteractive && !ctx.insideHeading) {
-      text = truncateGraphemes(text, TEXT_TRUNCATE_LIMIT);
+      text = truncateGraphemes(text, TEXT_TRUNCATE_LIMIT, {
+        suffix: "...",
+        preferWordBoundary: true,
+      });
     }
-    return [{ tag: "#text", attributes: {}, children: [], text }];
+    const textNode: OSNode = { tag: "#text", attributes: {}, children: [], text };
+    if (ctx.viewportVisible !== undefined) {
+      textNode.visible = ctx.viewportVisible;
+    }
+    return [textNode];
   }
 
   // Only process element nodes
   if (node.nodeType !== 1) return [];
 
-  const attrs = parseAttributes(node.attributes);
+  const attrs = walkAttributes(node.attributes, markerContext);
   const children = node.children ?? [];
+  const elementCtx: WalkContext = markerContext.viewportMarked
+    ? { ...ctx, viewportVisible: attrs["data-os-visible"] === "1" }
+    : ctx;
+  const directTextVisibility = visibleTextIndices(attrs, markerContext);
+  const shadowTextVisibility = visibleTextIndices(attrs, markerContext, true);
+
+  if (!includeHidden && attrs["data-os-hidden"] === "self") {
+    const promoted = walkChildren(
+      children.filter((child) => child.nodeType === 1),
+      assigner,
+      nodeMap,
+      elementCtx,
+      doTruncate,
+      includeHidden,
+      markerContext,
+      depth + 1,
+      directTextVisibility
+    );
+    for (const shadowRoot of node.shadowRoots ?? []) {
+      appendNodes(
+        promoted,
+        walkChildren(
+          shadowRoot.children ?? [],
+          assigner,
+          nodeMap,
+          elementCtx,
+          doTruncate,
+          includeHidden,
+          markerContext,
+          depth + 1,
+          shadowTextVisibility
+        )
+      );
+    }
+    return promoted;
+  }
 
   const result = classify(
     node.nodeName,
     attrs,
-    children.map((c) => ({ nodeName: c.nodeName, attributes: c.attributes }))
+    children.map((c) => ({ nodeName: c.nodeName, attributes: c.attributes })),
+    {
+      includeHidden,
+      computedVisibility: markerContext.markers !== undefined,
+    }
   );
 
   if (result.action === "DISCARD") return [];
 
   if (result.action === "COLLAPSE") {
     // Promote children
-    const promoted = walkChildren(children, assigner, nodeMap, ctx, doTruncate, depth + 1);
+    const promoted = walkChildren(
+      children,
+      assigner,
+      nodeMap,
+      elementCtx,
+      doTruncate,
+      includeHidden,
+      markerContext,
+      depth + 1,
+      directTextVisibility
+    );
     // Also walk shadow roots if present
     if (node.shadowRoots) {
       for (const shadowRoot of node.shadowRoots) {
-        promoted.push(
-          ...walkChildren(shadowRoot.children ?? [], assigner, nodeMap, ctx, doTruncate, depth + 1)
+        appendNodes(
+          promoted,
+          walkChildren(
+            shadowRoot.children ?? [],
+            assigner,
+            nodeMap,
+            elementCtx,
+            doTruncate,
+            includeHidden,
+            markerContext,
+            depth + 1,
+            shadowTextVisibility
+          )
         );
       }
     }
@@ -161,10 +304,8 @@ function walkNode(
     const rawState = stateAttr ? stateAttr.split(",").filter(f => KNOWN_STATE_FLAGS.has(f)) : undefined;
     const state = rawState && rawState.length > 0 ? rawState : undefined;
     const filteredAttrs: Record<string, string> = {};
-    for (const key of PASS_THROUGH_ATTRS) {
-      if (attrs[key] !== undefined) {
-        filteredAttrs[key] = attrs[key];
-      }
+    for (const [key, value] of Object.entries(attrs)) {
+      if (PASS_THROUGH_ATTRS.has(key)) filteredAttrs[key] = value;
     }
 
     if (node.contentDocument) {
@@ -173,9 +314,12 @@ function walkNode(
         node.contentDocument.children ?? [],
         assigner,
         nodeMap,
-        ctx,
+        elementCtx,
         doTruncate,
-        depth + 1
+        includeHidden,
+        markerContext,
+        depth + 1,
+        directTextVisibility
       );
       return [
         {
@@ -210,10 +354,8 @@ function walkNode(
   const filteredAttrs: Record<string, string> = {};
   if (id) filteredAttrs["id"] = id;
 
-  for (const key of PASS_THROUGH_ATTRS) {
-    if (attrs[key] !== undefined) {
-      filteredAttrs[key] = attrs[key];
-    }
+  for (const [key, value] of Object.entries(attrs)) {
+    if (PASS_THROUGH_ATTRS.has(key)) filteredAttrs[key] = value;
   }
 
   // Elide default/redundant attributes
@@ -233,18 +375,40 @@ function walkNode(
 
   // Build child context
   const childCtx: WalkContext = {
-    insideInteractive: ctx.insideInteractive || !!id,
-    insideHeading: ctx.insideHeading || HEADING_TAGS.has(tag),
+    insideInteractive: elementCtx.insideInteractive || !!id,
+    insideHeading: elementCtx.insideHeading || HEADING_TAGS.has(tag),
+    viewportVisible: elementCtx.viewportVisible,
   };
 
   // Walk regular children
-  const osChildren = walkChildren(children, assigner, nodeMap, childCtx, doTruncate, depth + 1);
+  const osChildren = walkChildren(
+    children,
+    assigner,
+    nodeMap,
+    childCtx,
+    doTruncate,
+    includeHidden,
+    markerContext,
+    depth + 1,
+    directTextVisibility
+  );
 
   // Walk shadow roots and merge shadow children into host's children
   if (node.shadowRoots) {
     for (const shadowRoot of node.shadowRoots) {
-      osChildren.push(
-        ...walkChildren(shadowRoot.children ?? [], assigner, nodeMap, childCtx, doTruncate, depth + 1)
+      appendNodes(
+        osChildren,
+        walkChildren(
+          shadowRoot.children ?? [],
+          assigner,
+          nodeMap,
+          childCtx,
+          doTruncate,
+          includeHidden,
+          markerContext,
+          depth + 1,
+          shadowTextVisibility
+        )
       );
     }
   }
@@ -273,18 +437,36 @@ function walkChildren(
   nodeMap: NodeMap,
   ctx: WalkContext,
   doTruncate: boolean,
-  depth: number = 0
+  includeHidden: boolean,
+  markerContext: MarkerContext,
+  depth: number = 0,
+  directTextVisibility?: ReadonlySet<number>
 ): OSNode[] {
   const result: OSNode[] = [];
-  for (const child of children) {
-    result.push(...walkNode(child, assigner, nodeMap, ctx, doTruncate, depth));
+  for (let index = 0; index < children.length; index++) {
+    const child = children[index];
+    const childCtx =
+      child.nodeType === 3 && directTextVisibility
+        ? { ...ctx, viewportVisible: directTextVisibility.has(index) }
+        : ctx;
+    appendNodes(
+      result,
+      walkNode(
+        child,
+        assigner,
+        nodeMap,
+        childCtx,
+        doTruncate,
+        includeHidden,
+        markerContext,
+        depth
+      )
+    );
   }
   return result;
 }
 
-/**
- * Post-process: merge adjacent text nodes, remove empty nodes, collapse single-child wrappers
- */
+/** Merge adjacent text and remove empty non-semantic nodes. */
 function postProcess(nodes: OSNode[]): OSNode[] {
   // Merge adjacent text nodes
   const merged: OSNode[] = [];
@@ -292,7 +474,8 @@ function postProcess(nodes: OSNode[]): OSNode[] {
     if (
       node.tag === "#text" &&
       merged.length > 0 &&
-      merged[merged.length - 1].tag === "#text"
+      merged[merged.length - 1].tag === "#text" &&
+      merged[merged.length - 1].visible === node.visible
     ) {
       const prevText = merged[merged.length - 1].text ?? "";
       const currText = node.text ?? "";

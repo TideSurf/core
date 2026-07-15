@@ -15,19 +15,15 @@ export interface TabInfo {
  * Manages multiple browser tabs via CDP.
  */
 export class TabManager {
-  private port: number;
-  private host: string;
+  private readonly port: number;
+  private readonly host: string;
 
   constructor(port: number, host: string = "localhost") {
     this.port = port;
     this.host = host;
   }
 
-  /**
-   * List all open tabs (pages only, not service workers etc.)
-   * NEW-CDP-003: Added timeout wrapper
-   * MED-008: Wrapped errors in TideSurfError
-   */
+  /** List page targets, excluding workers and browser targets. */
   async listTabs(timeout?: number): Promise<TabInfo[]> {
     try {
       const targets = await withTimeout(
@@ -52,21 +48,33 @@ export class TabManager {
     }
   }
 
-  /**
-   * Create a new tab, optionally navigating to a URL.
-   * NEW-CDP-003: Added timeout wrapper
-   * MED-008: Wrapped errors in TideSurfError
-   */
+  /** Create a page target, optionally with an initial URL. */
   async createTab(url?: string, timeout?: number): Promise<TabInfo> {
-    try {
-      const target = await withTimeout(
-        CDP.New({
+    const operationTimeout = timeout ?? 10_000;
+    let abandoned = false;
+    const pending = CDP.New({
+      port: this.port,
+      host: this.host,
+      url,
+      useHostName: true,
+    }) as Promise<{ id: string; url: string; title: string; type: string }>;
+    void pending.then(async (target) => {
+      if (!abandoned) return;
+      await withTimeout(
+        CDP.Close({
           port: this.port,
           host: this.host,
-          url,
+          id: target.id,
           useHostName: true,
-        }) as Promise<{ id: string; url: string; title: string; type: string }>,
-        timeout ?? 10_000,
+        }),
+        2_000,
+        "createTab:lateClose"
+      ).catch(() => undefined);
+    }).catch(() => undefined);
+    try {
+      const target = await withTimeout(
+        pending,
+        operationTimeout,
         "createTab"
       );
       return {
@@ -76,6 +84,7 @@ export class TabManager {
         type: target.type,
       };
     } catch (err) {
+      abandoned = true;
       if (err instanceof TideSurfError) throw err;
       throw new CDPConnectionError(
         `Failed to create tab: ${err instanceof Error ? err.message : String(err)}`,
@@ -84,11 +93,7 @@ export class TabManager {
     }
   }
 
-  /**
-   * Close a tab by its target ID.
-   * NEW-CDP-003: Added timeout wrapper
-   * MED-008: Wrapped errors in TideSurfError
-   */
+  /** Close a page target by ID. */
   async closeTab(tabId: string, timeout?: number): Promise<void> {
     try {
       await withTimeout(
@@ -117,14 +122,12 @@ export class TabManager {
     return connect({ port: this.port, host: this.host, tab: tabId, timeout });
   }
 
-  /**
-   * Check if the CDP connection is still alive.
-   * MED-009: Disconnect detection
-   */
+  /** Check whether the browser endpoint still responds. */
   async isConnected(timeout?: number): Promise<boolean> {
     try {
-      // Type assertion needed because chrome-remote-interface types don't expose Version method
-      const cdpModule = CDP as unknown as { Version(options: { port: number; host: string }): Promise<unknown> };
+      const cdpModule = CDP as unknown as {
+        Version(options: { port: number; host: string }): Promise<unknown>;
+      };
       await withTimeout(
         cdpModule.Version({ port: this.port, host: this.host }),
         timeout ?? 5_000,

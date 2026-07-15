@@ -23,19 +23,19 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "typecheck:mcp": "bunx tsc --noEmit -p mcp/tsconfig.json",
     "test": "bun test test/unit",
     "test:integration": "bun test test/integration",
     "test:bench": "bun test test/bench",
     "test:all": "bun test",
+    "check:docs": "bun scripts/check-doc-sync.ts",
+    "smoke:pack": "node scripts/smoke-packed.mjs",
     "build:web:landing": "bun run --cwd website/landing build",
     "build:web:docs": "bun run --cwd website/docs build",
-    "verify:release": "bun run typecheck && bun run typecheck:mcp && bun run test && bun run test:integration && bun run build && bun run build:web:landing && bun run build:web:docs && npm_config_cache=.tmp-npm-cache npm pack --dry-run",
-    "demo": "bun run demo/serve.ts"
+    "verify:release": "bun run typecheck && bun run check:docs && bun run test && bun run test:integration && bun run test:bench && bun run build && bun run build:web:landing && bun run build:web:docs && npm_config_cache=.tmp-npm-cache npm pack --dry-run && bun run smoke:pack"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/TideSurf/core"
+    "url": "git+https://github.com/TideSurf/core.git"
   },
   "homepage": "https://tidesurf.org",
   "publishConfig": {

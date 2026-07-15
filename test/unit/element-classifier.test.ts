@@ -243,7 +243,7 @@ describe("classify", () => {
     });
   });
 
-  // HIGH-010: Proper CSS detection with regex
+  // CSS detection uses complete token matches.
   describe("CSS style detection", () => {
     it("discards display:none with no spaces", () => {
       expect(classify("DIV", { style: "display:none" })).toEqual({
@@ -307,6 +307,23 @@ describe("classify", () => {
       expect(classify("DIV", { style: "Display:None" })).toEqual({
         action: "DISCARD",
       });
+    });
+
+    it("does not confuse custom properties with display", () => {
+      expect(classify("DIV", { style: "--display:none" })).toEqual({
+        action: "COLLAPSE",
+      });
+    });
+
+    it("defers inline style interpretation to computed visibility markers", () => {
+      expect(
+        classify(
+          "DIV",
+          { style: "display:none;display:block" },
+          undefined,
+          { computedVisibility: true }
+        )
+      ).toEqual({ action: "COLLAPSE" });
     });
   });
 });

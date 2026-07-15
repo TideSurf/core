@@ -1,155 +1,207 @@
 # Troubleshooting
 
-## Chrome not found
+Start with the exit code and the selected session:
 
-`ChromeLaunchError` usually means TideSurf could not find a Chrome or Chromium binary. Set `CHROME_PATH` or pass `chromePath`:
+```bash
+tidesurf --session default status
+tidesurf --session default help
+```
+
+Exit code `2` means usage, `3` session or browser startup, `4` tool execution, and `5` daemon transport or protocol.
+
+## Browser executable not found
+
+TideSurf searches an explicit path, `CHROME_PATH`, `PATH`, then platform install locations. It checks Chrome stable, Beta, Dev, Canary, then Chromium unless `--channel` selects one.
+
+```bash
+tidesurf --chrome-path /usr/bin/google-chrome get-state
+# or
+CHROME_PATH=/usr/bin/chromium tidesurf get-state
+```
+
+SDK equivalent:
 
 ```typescript
 const browser = await TideSurf.launch({
-  chromePath: "/usr/bin/google-chrome-stable",
+  chromePath: "/usr/bin/google-chrome",
 });
 ```
 
-The usual macOS path is `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`. On Linux, `which google-chrome` or `which chromium-browser` prints the installed path.
+The path must name a regular executable file. Common locations include:
 
-## CDP connection refused
+- macOS: `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`
+- macOS user install: `~/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`
+- Linux: `/usr/bin/google-chrome`, `/usr/bin/chromium`, `/snap/bin/chromium`
+- Windows: Chrome directories under `%LOCALAPPDATA%` or `%PROGRAMFILES%`
 
-Chrome started, but its CDP WebSocket did not accept the connection. TideSurf retries three times. A persistent failure often points to another process on the debugging port. Choose another port:
+Pass Edge or Brave through `--chrome-path`; automatic detection intentionally excludes them. TideSurf does not download a missing browser.
 
-```typescript
-const browser = await TideSurf.launch({ port: 9223 });
+## Session has different startup options
+
+Browser and security policy is immutable after a named session starts. A conflicting flag produces a session error.
+
+Stop that session or choose another name:
+
+```bash
+tidesurf --session default stop
+tidesurf --session default --read-only start
+
+# Keep the old session and start another policy:
+tidesurf --session audit --read-only get-state
 ```
 
-## Auto-connect can't find Chrome
+You do not need to repeat startup flags on later calls. Repeating only matching standalone flags also succeeds; the daemon compares the values you explicitly supply and keeps unrelated policy. Browser-selection flags must resolve to the stored mode. If you repeat `--file-access-root`, supply the complete stored root list.
 
-`TideSurf.connect()` and `--auto-connect` need a running Chrome with remote debugging enabled. Chrome 144+ uses `chrome://inspect#remote-debugging` and shows a permission dialog for each connection. Any supported Chrome can launch with a debugging flag:
+## Session does not start
+
+TideSurf uses a startup lock, PID check, private state file, and local socket or named pipe. It removes stale state when the recorded process is gone.
+
+If startup still fails:
+
+1. Run `tidesurf status`.
+2. Run `tidesurf stop`; stop is safe when no session exists.
+3. Retry the tool command.
+4. Read the daemon log path included in the error.
+
+A protocol-version or TideSurf-version mismatch requires stopping the old session before using the new CLI build.
+
+## Connect-only cannot find Chrome
+
+`--connect-only` never launches. Without an explicit endpoint, it checks a supported Chrome profile `DevToolsActivePort` and the conventional local endpoint on port `9222`.
+
+Chrome 144 profile attachment may require approval at `chrome://inspect#remote-debugging`. For a manual fixed endpoint, launch Chrome with a non-default profile:
 
 ```bash
 # macOS
-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --remote-debugging-port=9222
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+  --remote-debugging-port=9222 \
+  --user-data-dir=/tmp/tidesurf-manual-profile
 
 # Linux
-google-chrome --remote-debugging-port=9222
+google-chrome \
+  --remote-debugging-port=9222 \
+  --user-data-dir=/tmp/tidesurf-manual-profile
 ```
 
-Pass the same custom port to TideSurf:
-
-```typescript
-const browser = await TideSurf.connect({ port: 9333 });
-```
+Then attach:
 
 ```bash
-tidesurf mcp --auto-connect --port 9333
+tidesurf --connect-only --host 127.0.0.1 --port 9222 get-state
 ```
 
-The “Chrome is being controlled by automated test software” banner confirms an active CDP session.
+[Chrome 136+ does not honor remote debugging flags against its default profile directory](https://developer.chrome.com/blog/remote-debugging-port). Keep the explicit non-default `--user-data-dir`. [Chrome agent configuration](https://developer.chrome.com/docs/devtools/agents/get-started/configuration) covers current profile approval and endpoint setup.
 
-## Auto-connect: no page targets
+## Auto-connect launches unexpectedly
 
-Chrome has remote debugging enabled but no regular page tab. Open one normal tab before connecting; DevTools and extension pages do not count.
+`--auto-connect` tries, in order:
 
-## Timeouts
+1. explicit `--browser-url` or host/port
+2. supported Chrome profile `DevToolsActivePort`
+3. conventional local CDP endpoint
+4. managed local launch
 
-Heavy scripts, media, or slow servers can push `navigate()` and `getState()` past the default timeout. Raise it at launch and handle `CDPTimeoutError` in the calling application:
+Use `--connect-only` when launch is never acceptable. A failed remote-host endpoint does not fall back to local launch.
 
-```typescript
-const browser = await TideSurf.launch({ timeout: 60000 });
-```
+## Fixed port is already in use
 
-## Shadow DOM content missing
+Managed launch uses an ephemeral port by default. Remove `--port` unless another process needs a predictable endpoint.
 
-TideSurf pierces open shadow roots by default. Confirm `pierce: true` remains enabled. Closed roots stay private to the browser and may not be available.
-
-## Cross-origin iframes
-
-The browser same-origin policy blocks iframe content from another origin. TideSurf reports the boundary as:
-
-```text
-[iframe: inaccessible]
-```
-
-Same-origin iframe content is compressed normally.
-
-## Empty or unexpected output
-
-Three common causes cover most sparse results:
-
-- The page is still settling. Use `await browser.getPage().waitForStable()` before `getState()`.
-- A client-side app has not rendered its dynamic content yet. Allow the framework to mount.
-- `maxTokens` is too low. Raise it or remove it to inspect the complete compressed output.
-
-## High token count
-
-Pages with many controls or deeply nested DOM trees can still produce large output. Add `maxTokens` so TideSurf keeps the most actionable content first.
-
-## Common CDP connection errors
-
-**“No open page targets found”**
-
-Open a regular Chrome tab. A browser containing only DevTools or extension pages has no usable target.
-
-**“Protocol error: Invalid session”**
-
-Chrome closed, crashed, or interrupted the CDP session. Restart Chrome and reconnect.
-
-**Connection hangs indefinitely**
-
-A frozen tab or extension can block Chrome. Keep one blank tab open, disable suspect extensions, or restart with a fresh profile:
+An explicit launch port fails on collision instead of attaching to or replacing the existing listener. Choose another port or use attach mode intentionally.
 
 ```bash
-google-chrome --remote-debugging-port=9222 --user-data-dir=/tmp/tidesurf-profile
+tidesurf --port 9333 start
+# or attach to an existing endpoint
+tidesurf --connect-only --port 9222 get-state
 ```
 
-**Port conflicts on 9222**
+## Browser has no page target
 
-Use the same alternate port on Chrome and TideSurf:
+An attached Chrome instance must contain a regular page target. Open a normal tab and retry. DevTools, extension, and background targets do not count.
 
-```typescript
-const browser = await TideSurf.launch({ port: 9223 });
-// or: await TideSurf.connect({ port: 9223 })
-```
+## Element ID is stale
+
+IDs refer to the exact in-memory map created by page state. Navigation and dynamic DOM updates can invalidate it. TideSurf rejects a stale ID rather than clicking a replacement.
 
 ```bash
-tidesurf mcp --port 9223
-tidesurf inspect https://example.com --port 9223
+tidesurf get-state
+# select a current ID from this output, then act
+tidesurf click B3
 ```
 
-## Chrome process leaks
+Do not increment or guess IDs after a failure.
 
-A crash or forced exit can leave a launched Chrome process behind. Find the remote-debugging process and stop its PID:
+## State omits expected content
+
+Check these settings:
+
+- `get-state` uses viewport filtering by default. Add `--full-page` for visible content outside the viewport.
+- `--mode interactive` excludes passive text. Use `--mode full`.
+- A low `--max-tokens` value prunes lower-priority content. Raise or remove it.
+- The application may still be rendering. Retry after it settles.
+- Open shadow roots are readable; closed roots remain unavailable.
+- Cross-origin iframe content may remain inaccessible.
+
+Use `--include-hidden` only when debugging the full DOM. It includes hidden nodes and disables viewport filtering.
+
+## Read-only tool fails
+
+Read-only sessions allow only `get-state`, `extract`, `list-tabs`, `switch-tab`, `search`, and `screenshot`. Other tools return a tool failure with exit code `4`.
+
+Start a separate non-read-only session when the workflow genuinely needs mutation:
 
 ```bash
-ps aux | grep "remote-debugging-port"
-kill -9 <pid>
+tidesurf --session audit stop
+tidesurf --session edit navigate https://example.com
 ```
 
-Windows PowerShell:
+## Upload or download path is rejected
 
-```powershell
-Get-Process chrome | Where-Object {$_.CommandLine -like "*remote-debugging-port*"}
-Stop-Process -Id <pid>
+The path lies outside the configured filesystem boundary. Defaults allow the current working directory and OS temporary directory.
+
+```bash
+tidesurf --session files \
+  --file-access-root /absolute/shared-fixtures \
+  start
 ```
 
-## Permission denied errors
+`--file-access-root` is a startup option. Stop the session before changing its roots.
 
-**Upload/download**
+Only one download can run on a page at a time. Wait for the current call to finish before starting another.
 
-```text
-File "/path/to/file" is outside allowed file access roots
+## Screenshot output is unreadable
+
+Without `--output`, TideSurf prints an absolute path to a temporary PNG. `--output -` writes raw PNG bytes and should be redirected:
+
+```bash
+tidesurf screenshot --output - > page.png
 ```
 
-Uploads and custom download directories must resolve inside `fileAccessRoots`, which defaults to the working directory and OS temp directory:
+Do not expect JSON or terminal text on stdout in raw-byte mode.
 
-```typescript
-const browser = await TideSurf.launch({
-  fileAccessRoots: [process.cwd(), "/allowed/path"],
-});
+## MCP dependencies are missing
+
+MCP uses optional dependencies. Install them when an installation omits optional packages:
+
+```bash
+npm install @modelcontextprotocol/sdk zod
+# or
+bun add @modelcontextprotocol/sdk zod
 ```
 
-**Clipboard access**
+Then run `tidesurf mcp`. The direct CLI and SDK do not need MCP packages.
 
-```text
-clipboard_read is not available in read-only mode
+## Stop leaves Chrome open
+
+This is correct for an attached browser. `stop` terminates only Chromium launched and owned by that TideSurf session. Attached browsers remain open; TideSurf disconnects CDP.
+
+If an owned browser survived an external hard kill of the daemon, identify the process by its TideSurf user data directory or remote-debugging argument before terminating it. Do not kill unrelated Chrome processes.
+
+## Operation timeout
+
+Raise the session timeout for slow startup or heavy pages:
+
+```bash
+tidesurf --session slow --timeout 60000 navigate https://example.com
 ```
 
-Clipboard tools stay disabled in read-only sessions. Use a regular session only for a trusted workflow that needs clipboard access.
+For an existing session, choose a new name or stop it before changing the timeout.

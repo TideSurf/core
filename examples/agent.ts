@@ -2,11 +2,11 @@
  * Example: TideSurf + Claude agent loop
  *
  * Usage:
- *   ANTHROPIC_API_KEY=sk-... bun examples/agent.ts "Go to Hacker News and tell me the top 3 stories"
+ *   ANTHROPIC_API_KEY=sk-... ANTHROPIC_MODEL=<model-id> bun examples/agent.ts "Go to Hacker News and tell me the top 3 stories"
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import { TideSurf, getToolDefinitions } from "../src/index.js";
+import { TideSurf } from "../src/index.js";
 
 const task = process.argv[2];
 if (!task) {
@@ -15,11 +15,16 @@ if (!task) {
 }
 
 const client = new Anthropic();
+const model = process.env["ANTHROPIC_MODEL"];
+if (!model) {
+  console.error("Set ANTHROPIC_MODEL to a model available to your account");
+  process.exit(1);
+}
 const surfing = await TideSurf.launch({ headless: true });
 const executor = surfing.getToolExecutor();
 
 // Convert our tool definitions to Anthropic format
-const tools = getToolDefinitions().map((t) => ({
+const tools = surfing.getToolDefinitions().map((t) => ({
   name: t.name,
   description: t.description,
   input_schema: t.input_schema as Anthropic.Tool["input_schema"],
@@ -35,7 +40,7 @@ try {
   // Agent loop
   for (let step = 0; step < 20; step++) {
     const response = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model,
       max_tokens: 4096,
       system:
         "You are a web browsing agent. Use the provided tools to navigate and interact with web pages. " +
@@ -73,9 +78,7 @@ try {
       toolResults.push({
         type: "tool_result",
         tool_use_id: block.id,
-        content: result.success
-          ? String(result.data)
-          : `Error: ${result.error}`,
+        content: JSON.stringify(result),
       });
     }
 

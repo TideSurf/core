@@ -31,12 +31,4 @@ describe("IDAssigner", () => {
     expect(assigner.assign("table")).toBe("T1");
     expect(assigner.assign("dialog")).toBe("D1");
   });
-
-  it("resets counters", () => {
-    const assigner = new IDAssigner();
-    expect(assigner.assign("link")).toBe("L1");
-    expect(assigner.assign("link")).toBe("L2");
-    assigner.reset();
-    expect(assigner.assign("link")).toBe("L1");
-  });
 });

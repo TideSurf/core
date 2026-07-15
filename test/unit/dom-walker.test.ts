@@ -1,4 +1,5 @@
 import { walkDOM } from "../../src/parser/dom-walker.js";
+import { filterViewportOnly } from "../../src/parser/viewport-filter.js";
 import type { CDPNode } from "../../src/types.js";
 
 function makeNode(
@@ -215,7 +216,7 @@ describe("walkDOM", () => {
     expect(nodeMap.get("B1")).toBe(402);
   });
 
-  // CRIT-005: Stack overflow in DOM walker - depth limit test
+  // Depth limit prevents stack overflow.
   it("handles deeply nested DOM without stack overflow", () => {
     // Create a deeply nested structure (1000 levels)
     let current: CDPNode = makeNode({ nodeName: "DIV", children: [makeText("deep content")] });
@@ -258,7 +259,7 @@ describe("walkDOM", () => {
     expect(findTruncated(nodes)).toBe(true);
   });
 
-  // HIGH-009: Text node merging - only add space when needed
+  // Text merging adds spaces only when needed.
   it("merges adjacent text nodes without extra spaces", () => {
     const root = makeNode({
       nodeName: "HTML",
@@ -304,7 +305,7 @@ describe("walkDOM", () => {
     expect(nodes[0].children[0].text).toBe("Hello World");
   });
 
-  // MED-004: Unicode grapheme-aware truncation
+  // Truncation preserves Unicode graphemes.
   it("handles unicode emoji correctly in truncation", () => {
     // Each emoji is 2 UTF-16 code units but 1 grapheme
     const longEmojiText = "👍".repeat(100);
@@ -344,5 +345,145 @@ describe("walkDOM", () => {
 
     const { nodes } = walkDOM(root);
     expect(nodes.length).toBe(0);
+  });
+
+  it("does not promote offscreen text through collapsed wrappers", () => {
+    const markers = {
+      visible: "data-test-visible",
+      hidden: "data-test-hidden",
+      state: "data-test-state",
+    };
+    const root = makeNode({
+      nodeName: "HTML",
+      children: [
+        makeNode({
+          nodeName: "BODY",
+          attributes: [markers.visible, "1"],
+          children: [
+            makeNode({
+              nodeName: "MAIN",
+              attributes: [markers.visible, "1"],
+              children: [
+                makeNode({
+                  nodeName: "DIV",
+                  attributes: [markers.visible, "1"],
+                  children: [makeText("onscreen")],
+                }),
+                makeNode({
+                  nodeName: "DIV",
+                  children: [makeText("OFFSCREEN_SENTINEL")],
+                }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+
+    const walked = walkDOM(root, {
+      markerAttributes: markers,
+      viewportMarked: true,
+    });
+    const filtered = filterViewportOnly(walked.nodes);
+    const output = JSON.stringify(filtered.nodes);
+
+    expect(output).toContain("onscreen");
+    expect(output).not.toContain("OFFSCREEN_SENTINEL");
+  });
+
+  it("uses computed markers instead of contradictory inline declarations", () => {
+    const markers = {
+      visible: "data-test-visible",
+      hidden: "data-test-hidden",
+      state: "data-test-state",
+    };
+    const root = makeNode({
+      nodeName: "HTML",
+      children: [
+        makeNode({
+          nodeName: "DIV",
+          attributes: [
+            "style",
+            "--display:none;display:none;display:block",
+            markers.visible,
+            "1",
+          ],
+          children: [makeText("COMPUTED_VISIBLE")],
+        }),
+      ],
+    });
+
+    const { nodes } = walkDOM(root, { markerAttributes: markers });
+    expect(JSON.stringify(nodes)).toContain("COMPUTED_VISIBLE");
+  });
+
+  it("tracks direct text visibility independently from its container", () => {
+    const markers = {
+      visible: "data-test-visible",
+      hidden: "data-test-hidden",
+      state: "data-test-state",
+      text: "data-test-text",
+    };
+    const root = makeNode({
+      nodeName: "HTML",
+      children: [
+        makeNode({
+          nodeName: "MAIN",
+          attributes: [markers.visible, "1", markers.text, "0"],
+          children: [
+            makeText("DIRECT ONSCREEN"),
+            makeNode({ nodeName: "SPAN", children: [] }),
+            makeText("DIRECT OFFSCREEN"),
+          ],
+        }),
+      ],
+    });
+
+    const walked = walkDOM(root, {
+      markerAttributes: markers,
+      viewportMarked: true,
+    });
+    const output = JSON.stringify(filterViewportOnly(walked.nodes).nodes);
+
+    expect(output).toContain("DIRECT ONSCREEN");
+    expect(output).not.toContain("DIRECT OFFSCREEN");
+  });
+
+  it("tracks shadow-root direct text independently from its host", () => {
+    const markers = {
+      visible: "data-test-visible",
+      hidden: "data-test-hidden",
+      state: "data-test-state",
+      text: "data-test-text",
+    };
+    const root = makeNode({
+      nodeName: "HTML",
+      children: [
+        makeNode({
+          nodeName: "DIV",
+          attributes: [markers.visible, "1", markers.text, "|0"],
+          shadowRoots: [
+            makeNode({
+              nodeName: "#document-fragment",
+              nodeType: 11,
+              children: [
+                makeText("SHADOW ONSCREEN"),
+                makeNode({ nodeName: "SPAN", children: [] }),
+                makeText("SHADOW OFFSCREEN"),
+              ],
+            }),
+          ],
+        }),
+      ],
+    });
+
+    const walked = walkDOM(root, {
+      markerAttributes: markers,
+      viewportMarked: true,
+    });
+    const output = JSON.stringify(filterViewportOnly(walked.nodes).nodes);
+
+    expect(output).toContain("SHADOW ONSCREEN");
+    expect(output).not.toContain("SHADOW OFFSCREEN");
   });
 });

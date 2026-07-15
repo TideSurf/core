@@ -2,10 +2,6 @@ import { walkDOM } from "../../src/parser/dom-walker.js";
 import { hasComputedState } from "../../src/parser/element-classifier.js";
 import type { CDPNode, OSNode, GetStateOptions } from "../../src/types.js";
 
-// ---------------------------------------------------------------------------
-// Helpers — mirror the patterns in dom-walker.test.ts and viewport.test.ts
-// ---------------------------------------------------------------------------
-
 function makeElement(
   nodeName: string,
   backendNodeId: number,
@@ -35,13 +31,6 @@ function makeText(text: string, id: number = 0): CDPNode {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Test: Walker reads data-os-state attribute
-//
-// The parallel branch adds logic to dom-walker to read data-os-state from
-// CDP attributes and populate OSNode.state. These tests document that spec.
-// ---------------------------------------------------------------------------
-
 describe("DOM walker — data-os-state reading", () => {
   it("node with data-os-state='disabled' populates state=['disabled']", () => {
     const btn = makeElement("BUTTON", 10, [makeText("Click", 11)], [
@@ -53,8 +42,6 @@ describe("DOM walker — data-os-state reading", () => {
 
     const buttonNode = nodes.find((n) => n.tag === "button");
     expect(buttonNode).toBeDefined();
-    // New feature: OSNode.state field populated from data-os-state
-    // This test will fail until the parallel branch is merged
     expect((buttonNode as OSNode & { state?: string[] }).state).toEqual([
       "disabled",
     ]);
@@ -83,13 +70,10 @@ describe("DOM walker — data-os-state reading", () => {
 
     const buttonNode = nodes.find((n) => n.tag === "button");
     expect(buttonNode).toBeDefined();
-    // No data-os-state → state remains undefined
     expect((buttonNode as OSNode & { state?: string[] }).state).toBeUndefined();
   });
 
   it("data-os-state does NOT appear in filteredAttrs", () => {
-    // data-os-state is an internal attribute used for state transfer;
-    // it should not leak into the serialized output attributes
     const btn = makeElement("BUTTON", 10, [makeText("Click", 11)], [
       "data-os-state",
       "disabled",
@@ -211,13 +195,6 @@ describe("DOM walker — data-os-state reading", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Test: hasComputedState utility
-//
-// The parallel branch adds a `hasComputedState(state, flag)` utility to the
-// classifier module. We test it here.
-// ---------------------------------------------------------------------------
-
 describe("hasComputedState utility", () => {
   it("returns true when flag is present", () => {
     expect(hasComputedState(["disabled", "obscured"], "disabled")).toBe(true);
@@ -252,38 +229,28 @@ describe("hasComputedState utility", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Test: includeHidden option on GetStateOptions
-//
-// The parallel branch adds `includeHidden?: boolean` to GetStateOptions.
-// We verify the type accepts it at the type level.
-// ---------------------------------------------------------------------------
-
 describe("GetStateOptions — includeHidden", () => {
   it("accepts includeHidden: true", () => {
-    // This is a type-level test. If the type doesn't have includeHidden,
-    // this will fail to compile when the feature is added.
-    // For now, we cast to verify the structure.
-    const opts: GetStateOptions & { includeHidden?: boolean } = {
+    const opts: GetStateOptions = {
       includeHidden: true,
     };
     expect(opts.includeHidden).toBe(true);
   });
 
   it("accepts includeHidden: undefined (default)", () => {
-    const opts: GetStateOptions & { includeHidden?: boolean } = {};
+    const opts: GetStateOptions = {};
     expect(opts.includeHidden).toBeUndefined();
   });
 
   it("accepts includeHidden: false", () => {
-    const opts: GetStateOptions & { includeHidden?: boolean } = {
+    const opts: GetStateOptions = {
       includeHidden: false,
     };
     expect(opts.includeHidden).toBe(false);
   });
 
   it("works alongside existing options", () => {
-    const opts: GetStateOptions & { includeHidden?: boolean } = {
+    const opts: GetStateOptions = {
       maxTokens: 1000,
       viewport: true,
       mode: "full",
@@ -295,13 +262,6 @@ describe("GetStateOptions — includeHidden", () => {
     expect(opts.includeHidden).toBe(true);
   });
 });
-
-// ---------------------------------------------------------------------------
-// Test: Walker preserves existing data-os-visible alongside data-os-state
-//
-// The walker already handles data-os-visible for viewport marking. The new
-// data-os-state should coexist without interference.
-// ---------------------------------------------------------------------------
 
 describe("DOM walker — data-os-state coexists with data-os-visible", () => {
   it("node with both data-os-visible and data-os-state", () => {
@@ -316,7 +276,6 @@ describe("DOM walker — data-os-state coexists with data-os-visible", () => {
 
     const buttonNode = nodes.find((n) => n.tag === "button");
     expect(buttonNode).toBeDefined();
-    // visible should still work as before
     expect(buttonNode!.visible).toBe(true);
     // state should also be populated (new feature)
     expect((buttonNode as OSNode & { state?: string[] }).state).toEqual([

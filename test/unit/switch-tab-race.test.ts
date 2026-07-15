@@ -1,187 +1,339 @@
-import { describe, it, expect, mock } from "bun:test";
+import { describe, expect, it, mock } from "bun:test";
+import type { ChildProcess } from "node:child_process";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { CDPConnection } from "../../src/cdp/connection.js";
+import { SurfingPage } from "../../src/cdp/page.js";
+import type { TabManager } from "../../src/cdp/tab-manager.js";
+import { TideSurf } from "../../src/tidesurf.js";
+import {
+  CDPConnectionError,
+  ChromeLaunchError,
+  ValidationError,
+} from "../../src/errors.js";
 
-/**
- * Tests for switchTab race condition (CRIT-008)
- * Verifies that connections are cleaned up if setup fails after connectToTab.
- */
+function connection(options: {
+  close?: () => Promise<void>;
+  applyViewport?: () => Promise<void>;
+} = {}): CDPConnection {
+  return {
+    client: {
+      close: options.close ?? mock(async () => {}),
+    },
+    Emulation: {
+      setDeviceMetricsOverride:
+        options.applyViewport ?? mock(async () => {}),
+    },
+  } as unknown as CDPConnection;
+}
 
-describe("switchTab race condition (CRIT-008)", () => {
-  it("should close connection if setup fails after connectToTab", async () => {
-    // Mock connection that tracks if close was called
-    const closeMock = mock(() => Promise.resolve());
-    const mockConn = {
-      client: { close: closeMock },
-      DOM: {},
-      Page: {},
-      Runtime: {},
-      Input: {},
-      Emulation: {},
-    };
+function instance(
+  tabManager: Pick<TabManager, "connectToTab">,
+  defaultViewport?: { width: number; height: number },
+  urlValidationOptions: { allowLocalhost?: boolean } = {}
+): TideSurf {
+  const initialPage = new SurfingPage(connection());
+  return Reflect.construct(TideSurf, [
+    null,
+    initialPage,
+    tabManager,
+    "",
+    false,
+    false,
+    "initial",
+    defaultViewport,
+    undefined,
+    urlValidationOptions,
+  ]) as TideSurf;
+}
 
-    let connectToTabCalled = false;
-    let applyViewportCalled = false;
+describe("TideSurf.switchTab", () => {
+  it("disconnects a new tab when viewport setup fails", async () => {
+    const close = mock(async () => {});
+    const applyViewport = mock(async () => {
+      throw new Error("viewport setup failed");
+    });
+    const conn = connection({ close, applyViewport });
+    const connectToTab = mock(async () => conn);
+    const surf = instance(
+      { connectToTab } as Pick<TabManager, "connectToTab">,
+      { width: 1280, height: 720 }
+    );
 
-    // Mock tabManager that succeeds on connect but fails on applyViewport
-    const mockTabManager = {
+    await expect(surf.switchTab("next")).rejects.toThrow(
+      "viewport setup failed"
+    );
+
+    expect(connectToTab).toHaveBeenCalledTimes(1);
+    expect(applyViewport).toHaveBeenCalledTimes(1);
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a successfully initialized tab active", async () => {
+    const close = mock(async () => {});
+    const conn = connection({ close });
+    const surf = instance(
+      {
+        connectToTab: mock(async () => conn),
+      } as Pick<TabManager, "connectToTab">,
+      { width: 1280, height: 720 }
+    );
+
+    await surf.switchTab("next");
+
+    expect(surf.getPage()).toBeInstanceOf(SurfingPage);
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it("preserves connection failures", async () => {
+    const surf = instance({
       connectToTab: mock(async () => {
-        connectToTabCalled = true;
-        return mockConn;
+        throw new Error("tab not found");
+      }),
+    } as Pick<TabManager, "connectToTab">);
+
+    await expect(surf.switchTab("missing")).rejects.toThrow("tab not found");
+  });
+
+  it("disconnects a tab whose setup loses a race with close", async () => {
+    let releaseViewport!: () => void;
+    const viewportGate = new Promise<void>((resolve) => {
+      releaseViewport = resolve;
+    });
+    const close = mock(async () => {});
+    const applyViewport = mock(async () => viewportGate);
+    const conn = connection({ close, applyViewport });
+    const surf = instance(
+      { connectToTab: mock(async () => conn) } as Pick<
+        TabManager,
+        "connectToTab"
+      >,
+      { width: 1280, height: 720 }
+    );
+
+    const switching = surf.switchTab("next");
+    while (applyViewport.mock.calls.length === 0) await Promise.resolve();
+    await surf.close();
+    releaseViewport();
+
+    await expect(switching).rejects.toThrow("TideSurf is closed");
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects an empty new-tab URL before creating a target", async () => {
+    const createTab = mock(async () => ({
+      id: "new",
+      url: "about:blank",
+      title: "",
+      type: "page",
+    }));
+    const surf = instance({
+      connectToTab: mock(async () => connection()),
+      createTab,
+    } as Pick<TabManager, "connectToTab">);
+
+    await expect(surf.newTab("")).rejects.toBeInstanceOf(ValidationError);
+    expect(createTab).not.toHaveBeenCalled();
+  });
+
+  it("does not expose mutable URL policy state", async () => {
+    const createTab = mock(async () => ({
+      id: "new",
+      url: "about:blank",
+      title: "",
+      type: "page",
+    }));
+    const policy = { allowLocalhost: false };
+    const surf = instance(
+      {
+        connectToTab: mock(async () => connection()),
+        createTab,
+      } as Pick<TabManager, "connectToTab">,
+      undefined,
+      policy
+    );
+
+    policy.allowLocalhost = true;
+    surf.getUrlValidationOptions().allowLocalhost = true;
+
+    await expect(
+      surf.newTab("http://127.0.0.1/")
+    ).rejects.toBeInstanceOf(ValidationError);
+    expect(createTab).not.toHaveBeenCalled();
+  });
+});
+
+describe("TideSurf.closeTab", () => {
+  it("connects a replacement before closing the final target", async () => {
+    const calls: string[] = [];
+    const replacementConnection = connection();
+    const tabManager = {
+      listTabs: mock(async () => [
+        { id: "initial", url: "about:blank", title: "", type: "page" },
+      ]),
+      createTab: mock(async () => {
+        calls.push("create");
+        return {
+          id: "replacement",
+          url: "about:blank",
+          title: "",
+          type: "page",
+        };
+      }),
+      connectToTab: mock(async () => {
+        calls.push("connect");
+        return replacementConnection;
+      }),
+      closeTab: mock(async (id: string) => {
+        calls.push(`close:${id}`);
       }),
     };
+    const surf = instance(
+      tabManager as unknown as Pick<TabManager, "connectToTab">
+    );
 
-    // Mock applyViewport that throws error
-    const mockApplyViewport = mock(async () => {
-      applyViewportCalled = true;
-      throw new Error("Viewport setup failed");
-    });
+    await surf.closeTab("initial");
 
-    // Simulate the fixed switchTab implementation pattern
-    const switchTab = async (tabId: string, defaultViewport: unknown): Promise<void> => {
-      let conn: typeof mockConn | undefined;
-      try {
-        conn = await mockTabManager.connectToTab(tabId);
-        if (defaultViewport) {
-          await mockApplyViewport(conn, defaultViewport);
-        }
-        // If we get here, setup succeeded
-        // (would normally set this.pages.set, this.activePage, etc.)
-      } catch (err) {
-        // Clean up connection if it was created but setup failed
-        if (conn) {
-          try {
-            await conn.client.close();
-          } catch {
-            // ignore cleanup errors
-          }
-        }
-        throw err;
-      }
-    };
-
-    // Execute: should throw because applyViewport fails
-    await expect(switchTab("tab-123", { width: 1920, height: 1080 })).rejects.toThrow("Viewport setup failed");
-
-    // Verify: connectToTab was called
-    expect(connectToTabCalled).toBe(true);
-    // Verify: applyViewport was called and threw
-    expect(applyViewportCalled).toBe(true);
-    // Verify: connection was cleaned up
-    expect(closeMock).toHaveBeenCalledTimes(1);
+    expect(calls).toEqual(["create", "connect", "close:initial"]);
+    expect(Reflect.get(surf, "activeTabId")).toBe("replacement");
+    expect(surf.getPage()).toBeInstanceOf(SurfingPage);
   });
 
-  it("should NOT close connection if setup succeeds", async () => {
-    const closeMock = mock(() => Promise.resolve());
-    const mockConn = {
-      client: { close: closeMock },
-      DOM: {},
-      Page: {},
-      Runtime: {},
-      Input: {},
-      Emulation: {},
-    };
-
-    const mockTabManager = {
-      connectToTab: mock(async () => mockConn),
-    };
-
-    const mockApplyViewport = mock(async () => {
-      // Success - no throw
-    });
-
-    const switchTab = async (tabId: string, defaultViewport: unknown): Promise<void> => {
-      let conn: typeof mockConn | undefined;
-      try {
-        conn = await mockTabManager.connectToTab(tabId);
-        if (defaultViewport) {
-          await mockApplyViewport(conn, defaultViewport);
-        }
-        // Setup succeeded
-      } catch (err) {
-        if (conn) {
-          try {
-            await conn.client.close();
-          } catch {
-            // ignore
-          }
-        }
-        throw err;
-      }
-    };
-
-    // Execute: should succeed
-    await switchTab("tab-123", { width: 1920, height: 1080 });
-
-    // Verify: connection was NOT closed (it's being used)
-    expect(closeMock).not.toHaveBeenCalled();
-  });
-
-  it("should handle connectToTab failure without trying to close undefined connection", async () => {
-    const mockTabManager = {
+  it("keeps the final target open when replacement setup fails", async () => {
+    const closeTab = mock(async (_id: string) => {});
+    const tabManager = {
+      listTabs: mock(async () => [
+        { id: "initial", url: "about:blank", title: "", type: "page" },
+      ]),
+      createTab: mock(async () => ({
+        id: "replacement",
+        url: "about:blank",
+        title: "",
+        type: "page",
+      })),
       connectToTab: mock(async () => {
-        throw new Error("Tab not found");
+        throw new Error("replacement setup failed");
       }),
+      closeTab,
     };
+    const surf = instance(
+      tabManager as unknown as Pick<TabManager, "connectToTab">
+    );
 
-    const switchTab = async (tabId: string): Promise<void> => {
-      let conn: unknown | undefined;
-      try {
-        conn = await mockTabManager.connectToTab(tabId);
-        // Would do setup here
-      } catch (err) {
-        if (conn) {
-          // This shouldn't execute if connectToTab threw
-          throw new Error("Cleanup was attempted but shouldn't happen");
-        }
-        throw err;
-      }
-    };
+    await expect(surf.closeTab("initial")).rejects.toThrow(
+      "replacement setup failed"
+    );
 
-    // Execute: should throw the original error
-    await expect(switchTab("nonexistent-tab")).rejects.toThrow("Tab not found");
+    expect(closeTab).toHaveBeenCalledTimes(1);
+    expect(closeTab).toHaveBeenCalledWith("replacement", undefined);
+    expect(surf.getPage()).toBeInstanceOf(SurfingPage);
+  });
+});
+
+describe("TideSurf.close", () => {
+  it("reports a page disconnect failure after attempting cleanup", async () => {
+    const surf = Reflect.construct(TideSurf, [
+      null,
+      new SurfingPage(
+        connection({
+          close: mock(async () => {
+            throw new Error("disconnect failed");
+          }),
+        })
+      ),
+      {} as TabManager,
+      "",
+      false,
+      false,
+      "initial",
+      undefined,
+      [],
+      {},
+    ]) as TideSurf;
+
+    const first = surf.close();
+    await expect(first).rejects.toBeInstanceOf(CDPConnectionError);
+    await expect(surf.close()).rejects.toBeInstanceOf(CDPConnectionError);
   });
 
-  it("should handle cleanup errors gracefully", async () => {
-    // Connection that fails to close
-    const closeMock = mock(() => Promise.reject(new Error("Close failed")));
-    const mockConn = {
-      client: { close: closeMock },
-      DOM: {},
-      Page: {},
-      Runtime: {},
-      Input: {},
-      Emulation: {},
-    };
+  it("rejects browser operations after an attached session closes", async () => {
+    const listTabs = mock(async () => []);
+    const closeTab = mock(async () => {});
+    const createTab = mock(async () => ({
+      id: "new",
+      url: "about:blank",
+      title: "",
+      type: "page",
+    }));
+    const connectToTab = mock(async () => connection());
+    const surf = instance({
+      listTabs,
+      closeTab,
+      createTab,
+      connectToTab,
+    } as unknown as Pick<TabManager, "connectToTab">);
+    const page = surf.getPage();
 
-    const mockTabManager = {
-      connectToTab: mock(async () => mockConn),
-    };
+    await surf.close();
 
-    const mockApplyViewport = mock(async () => {
-      throw new Error("Viewport setup failed");
+    await expect(surf.navigate("https://example.com")).rejects.toBeInstanceOf(
+      CDPConnectionError
+    );
+    await expect(surf.getState()).rejects.toBeInstanceOf(CDPConnectionError);
+    expect(() => surf.getPage()).toThrow(CDPConnectionError);
+    await expect(surf.listTabs()).rejects.toBeInstanceOf(CDPConnectionError);
+    await expect(surf.closeTab("second")).rejects.toBeInstanceOf(
+      CDPConnectionError
+    );
+    await expect(surf.newTab()).rejects.toBeInstanceOf(CDPConnectionError);
+    await expect(surf.switchTab("second")).rejects.toBeInstanceOf(
+      CDPConnectionError
+    );
+    await expect(page.evaluate("1 + 1")).rejects.toBeInstanceOf(
+      CDPConnectionError
+    );
+
+    expect(listTabs).not.toHaveBeenCalled();
+    expect(closeTab).not.toHaveBeenCalled();
+    expect(createTab).not.toHaveBeenCalled();
+    expect(connectToTab).not.toHaveBeenCalled();
+  });
+
+  it("reports a TideSurf-owned Chrome process that survives termination", async () => {
+    const profile = mkdtempSync(join(tmpdir(), "tidesurf-close-survivor-"));
+    const closeClient = mock(async () => {});
+    const kill = mock(() => {
+      throw new Error("signal rejected");
     });
+    const proc = {
+      exitCode: null,
+      signalCode: null,
+      kill,
+    } as unknown as ChildProcess;
+    const surf = Reflect.construct(TideSurf, [
+      proc,
+      new SurfingPage(connection({ close: closeClient })),
+      {} as TabManager,
+      profile,
+      true,
+      false,
+      "initial",
+      undefined,
+      [],
+      {},
+    ]) as TideSurf;
 
-    const switchTab = async (tabId: string, defaultViewport: unknown): Promise<void> => {
-      let conn: typeof mockConn | undefined;
-      try {
-        conn = await mockTabManager.connectToTab(tabId);
-        if (defaultViewport) {
-          await mockApplyViewport(conn, defaultViewport);
-        }
-      } catch (err) {
-        if (conn) {
-          try {
-            await conn.client.close();
-          } catch {
-            // ignore cleanup errors - this is the key part
-          }
-        }
-        throw err;
-      }
-    };
+    try {
+      await expect(surf.close()).rejects.toBeInstanceOf(ChromeLaunchError);
+      expect(closeClient).toHaveBeenCalledTimes(1);
+      expect(kill).toHaveBeenCalledTimes(1);
+      expect(existsSync(profile)).toBe(true);
 
-    // Should throw the original error, not the cleanup error
-    await expect(switchTab("tab-123", { width: 1920 })).rejects.toThrow("Viewport setup failed");
-    // Cleanup should have been attempted
-    expect(closeMock).toHaveBeenCalled();
+      await expect(surf.close()).rejects.toBeInstanceOf(ChromeLaunchError);
+      expect(kill).toHaveBeenCalledTimes(1);
+    } finally {
+      rmSync(profile, { recursive: true, force: true });
+    }
   });
 });

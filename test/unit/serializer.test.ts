@@ -71,7 +71,7 @@ describe("serialize", () => {
     expect(result).toContain("  [B1] Submit");
   });
 
-  it("escapes HTML special characters to prevent XSS (NEW-PARSER-008)", () => {
+  it("escapes HTML special characters", () => {
     const nodes: OSNode[] = [
       {
         tag: "h1",
@@ -86,7 +86,7 @@ describe("serialize", () => {
     expect(result).toContain("A &amp; B &lt; C &gt; D &quot;E&quot;");
   });
 
-  it("escapes script tags to prevent XSS (NEW-PARSER-008)", () => {
+  it("escapes script tags", () => {
     const nodes: OSNode[] = [
       {
         tag: "h1",
@@ -226,6 +226,30 @@ describe("serialize", () => {
     expect(serialize([row])).toBe("| A | B |");
   });
 
+  it("shares one text cache across a serialization", () => {
+    let reads = 0;
+    const text: OSNode = {
+      tag: "#text",
+      attributes: {},
+      children: [],
+    };
+    Object.defineProperty(text, "text", {
+      get() {
+        reads++;
+        return "cached";
+      },
+    });
+    const cell: OSNode = { tag: "cell", attributes: {}, children: [text] };
+    const row: OSNode = {
+      tag: "row",
+      attributes: {},
+      children: [cell, cell],
+    };
+
+    expect(serialize([row])).toBe("| cached | cached |");
+    expect(reads).toBe(1);
+  });
+
   it("serializes data URLs in wrapPage safely", () => {
     const dataUrl =
       "data:text/html;charset=utf-8," + encodeURIComponent("<html>" + "x".repeat(2000) + "</html>");
@@ -272,7 +296,7 @@ describe("serialize", () => {
     expect(result).toBe("Email:");
   });
 
-  // HIGH-012: Quote escaping in input values
+  // Input values escape quotes.
   it("escapes quotes in input values", () => {
     const nodes: OSNode[] = [
       {

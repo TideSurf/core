@@ -1,25 +1,27 @@
 import type { OSNode, ScrollPosition } from "../types.js";
 import { compressUrl } from "./url-compressor.js";
 import { hasComputedState } from "./element-classifier.js";
+import { formatTruncation } from "./truncation.js";
 
-/**
- * Escape double quotes in a string for safe embedding in quoted attributes.
- * HIGH-012: Prevent quote breakage in serialized output.
- */
+/** Escape double quotes in values rendered between quotes. */
 function escapeQuotes(text: string): string {
   return text.replace(/"/g, '\\"');
 }
 
-/**
- * Escape HTML entities to prevent XSS in serialized output.
- * NEW-PARSER-008: All text content must be escaped.
- */
+/** Escape text that could otherwise look like markup in agent output. */
 function escapeHtml(text: string): string {
   return text
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function serializableText(node: OSNode): string | undefined {
+  if (node.tag === "truncated") {
+    return node.text ?? formatTruncation(node.attributes["count"] ?? "?");
+  }
+  return node.text;
 }
 
 interface ElementState {
@@ -75,40 +77,41 @@ const HEADING_MAP: Record<string, string> = {
 /**
  * Collect all text from a node and its children.
  * Uses memoization cache to avoid re-traversing subtrees.
- * NEW-PARSER-008: Text is escaped to prevent XSS.
  */
 export function collectTextMemoized(node: OSNode, cache = new Map<OSNode, string>()): string {
   if (cache.has(node)) return cache.get(node)!;
-  
+
   let result: string;
   if (node.tag === "#text") {
     result = escapeHtml(node.text ?? "");
   } else {
     const parts: string[] = [];
-    if (node.text) parts.push(escapeHtml(node.text));
+    const text = serializableText(node);
+    if (text) parts.push(escapeHtml(text));
     for (const child of node.children) {
       const t = collectTextMemoized(child, cache);
       if (t) parts.push(t);
     }
     result = parts.join(" ");
   }
-  
+
   cache.set(node, result);
   return result;
-}
-
-/**
- * Collect all text from a node and its children.
- * Uses memoization to avoid quadratic complexity on repeated calls.
- */
-export function collectText(node: OSNode): string {
-  return collectTextMemoized(node);
 }
 
 /**
  * Serialize an array of OSNodes to compact markdown-like text.
  */
 export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string): string {
+  return serializeNodes(nodes, indent, pageUrl, new Map());
+}
+
+function serializeNodes(
+  nodes: OSNode[],
+  indent: number,
+  pageUrl: string | undefined,
+  textCache: Map<OSNode, string>
+): string {
   const parts: string[] = [];
   const pad = "  ".repeat(indent);
 
@@ -123,9 +126,9 @@ export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string)
     // Headings: # text
     const headingPrefix = HEADING_MAP[node.tag];
     if (headingPrefix) {
-      const text = collectText(node).trim();
-      if (text) {
-        parts.push(`${pad}${headingPrefix} ${text}`);
+      const content = serializeHeadingContent(node, pageUrl, textCache);
+      if (content) {
+        parts.push(`${pad}${headingPrefix} ${content}`);
       }
       continue;
     }
@@ -134,7 +137,7 @@ export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string)
     if (node.tag === "link") {
       const id = node.id ?? "";
       const href = node.attributes["href"];
-      const text = collectText(node).trim() || node.attributes["aria-label"] || node.attributes["title"] || "";
+      const text = collectNonInteractiveText(node, textCache).trim() || node.attributes["aria-label"] || node.attributes["title"] || "";
       const compHref = href ? compressUrl(href, pageUrl) : undefined;
       const newTab = node.attributes["target"] === "_blank" ? " →" : "";
       const { struck, flags } = getElementState(node, node.attributes["aria-disabled"] === "true");
@@ -145,16 +148,24 @@ export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string)
         line = `[${id}]${text ? " " + text : ""}${flags}`;
       }
       parts.push(struck ? `${pad}~~${line.trim()}~~` : `${pad}${line}`);
+      const nestedActions = collectInteractiveDescendants(node);
+      if (nestedActions.length > 0) {
+        parts.push(serializeNodes(nestedActions, indent + 1, pageUrl, textCache));
+      }
       continue;
     }
 
     // Buttons: [ID] text
     if (node.tag === "button") {
       const id = node.id ?? "";
-      const text = collectText(node).trim() || node.attributes["aria-label"] || node.attributes["title"] || "";
+      const text = collectNonInteractiveText(node, textCache).trim() || node.attributes["aria-label"] || node.attributes["title"] || "";
       const { struck, flags } = getElementState(node, node.attributes["disabled"] !== undefined || node.attributes["aria-disabled"] === "true");
       const line = `[${id}]${text ? " " + text : ""}${flags}`;
       parts.push(struck ? `${pad}~~${line.trim()}~~` : `${pad}${line}`);
+      const nestedActions = collectInteractiveDescendants(node);
+      if (nestedActions.length > 0) {
+        parts.push(serializeNodes(nestedActions, indent + 1, pageUrl, textCache));
+      }
       continue;
     }
 
@@ -192,7 +203,7 @@ export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string)
       const header = `${id}:select${flags}`;
       parts.push(struck ? `${pad}~~${header.trim()}~~` : `${pad}${header}`);
       if (node.children.length > 0) {
-        parts.push(serializeSelectChildren(node.children, indent + 1, pageUrl));
+        parts.push(serializeSelectChildren(node.children, indent + 1, pageUrl, textCache));
       }
       continue;
     }
@@ -210,7 +221,7 @@ export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string)
         // Same-origin iframe with content
         const src = node.attributes["src"];
         parts.push(`${pad}[iframe: ${src ? compressUrl(src, pageUrl) : "inline"}]`);
-        parts.push(serialize(node.children, indent + 1, pageUrl));
+        parts.push(serializeNodes(node.children, indent + 1, pageUrl, textCache));
       } else {
         const status = node.attributes["status"];
         if (status === "inaccessible") {
@@ -227,12 +238,12 @@ export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string)
     if (node.tag === "list") {
       for (const child of node.children) {
         if (child.tag === "item") {
-          const itemText = serializeItem(child, pageUrl);
+          const itemText = serializeItem(child, pageUrl, textCache);
           parts.push(`${pad}- ${itemText}`);
         } else if (child.tag === "#text" && child.text?.trim()) {
           parts.push(`${pad}${child.text}`);
         } else {
-          parts.push(serialize([child], indent, pageUrl));
+          parts.push(serializeNodes([child], indent, pageUrl, textCache));
         }
       }
       continue;
@@ -240,7 +251,7 @@ export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string)
 
     // Items (standalone, outside a list context)
     if (node.tag === "item") {
-      const itemText = serializeItem(node, pageUrl);
+      const itemText = serializeItem(node, pageUrl, textCache);
       parts.push(`${pad}- ${itemText}`);
       continue;
     }
@@ -249,36 +260,48 @@ export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string)
     if (node.tag === "row") {
       const cells = node.children
         .filter((c) => c.tag === "cell" || c.tag === "#text")
-        .map((c) => collectText(c).trim());
+        .map((c) => collectNonInteractiveText(c, textCache).trim());
       parts.push(`${pad}| ${cells.join(" | ")} |`);
+      const interactiveChildren = collectInteractiveRoots(node);
+      if (interactiveChildren.length > 0) {
+        parts.push(serializeNodes(interactiveChildren, indent + 1, pageUrl, textCache));
+      }
       continue;
     }
 
     // Cells (standalone)
     if (node.tag === "cell") {
-      parts.push(`${pad}${collectText(node).trim()}`);
+      const text = collectNonInteractiveText(node, textCache).trim();
+      if (text) parts.push(`${pad}${text}`);
+      const interactiveChildren = collectInteractiveRoots(node);
+      if (interactiveChildren.length > 0) {
+        parts.push(serializeNodes(interactiveChildren, indent + 1, pageUrl, textCache));
+      }
       continue;
     }
 
     // Labels
     if (node.tag === "label") {
-      const text = collectText(node).trim();
+      const text = collectNonInteractiveText(node, textCache).trim();
       if (text) {
         parts.push(`${pad}${text}:`);
+      }
+      const interactiveChildren = collectInteractiveRoots(node);
+      if (interactiveChildren.length > 0) {
+        parts.push(serializeNodes(interactiveChildren, indent + 1, pageUrl, textCache));
       }
       continue;
     }
 
     // Truncated
     if (node.tag === "truncated") {
-      const count = node.attributes["count"] ?? "?";
-      parts.push(`${pad}[...${count} more sections truncated]`);
+      parts.push(`${pad}${serializableText(node)}`);
       continue;
     }
 
     // Above/below off-screen summaries
     if (node.tag === "above" || node.tag === "below") {
-      const text = node.text ?? collectText(node).trim();
+      const text = node.text ?? collectTextMemoized(node, textCache).trim();
       parts.push(`${pad}${node.tag.toUpperCase()}: ${text}`);
       continue;
     }
@@ -288,18 +311,25 @@ export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string)
       const label = node.tag.toUpperCase();
       const id = node.id ? ` ${node.id}` : "";
       const ariaLabel = node.attributes["aria-label"];
-      const desc = ariaLabel ? `: ${ariaLabel}` : "";
+      const summary = node.text?.trim();
+      const description = [ariaLabel, summary]
+        .filter((value, index, values): value is string =>
+          Boolean(value) && values.indexOf(value) === index
+        )
+        .map(escapeHtml)
+        .join(" — ");
+      const desc = description ? `: ${description}` : "";
       parts.push("");
       parts.push(`${pad}${label}${id}${desc}`);
       if (node.children.length > 0) {
-        parts.push(serialize(node.children, indent + 1, pageUrl));
+        parts.push(serializeNodes(node.children, indent + 1, pageUrl, textCache));
       }
       continue;
     }
 
     // Fallback: just serialize children
     if (node.children.length > 0) {
-      parts.push(serialize(node.children, indent, pageUrl));
+      parts.push(serializeNodes(node.children, indent, pageUrl, textCache));
     } else if (node.text) {
       parts.push(`${pad}${node.text}`);
     }
@@ -311,7 +341,12 @@ export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string)
 /**
  * Serialize children of a <select>, marking selected options with `>` prefix.
  */
-function serializeSelectChildren(nodes: OSNode[], indent: number, pageUrl?: string): string {
+function serializeSelectChildren(
+  nodes: OSNode[],
+  indent: number,
+  pageUrl: string | undefined,
+  textCache: Map<OSNode, string>
+): string {
   const parts: string[] = [];
   const pad = "  ".repeat(indent);
 
@@ -327,11 +362,13 @@ function serializeSelectChildren(nodes: OSNode[], indent: number, pageUrl?: stri
       const label = node.attributes["aria-label"] || node.attributes["label"] || "";
       if (label) parts.push(`${pad}${label}:`);
       if (node.children.length > 0) {
-        parts.push(serializeSelectChildren(node.children, indent + 1, pageUrl));
+        parts.push(
+          serializeSelectChildren(node.children, indent + 1, pageUrl, textCache)
+        );
       }
       continue;
     }
-    const text = collectText(node).trim();
+    const text = collectTextMemoized(node, textCache).trim();
     if (!text) continue;
     const isSelected = node.attributes["selected"] !== undefined || node.attributes["aria-selected"] === "true";
     parts.push(`${pad}${isSelected ? "> " : ""}${text}`);
@@ -343,11 +380,15 @@ function serializeSelectChildren(nodes: OSNode[], indent: number, pageUrl?: stri
 /**
  * Serialize a list item's content inline.
  */
-function serializeItem(node: OSNode, pageUrl?: string): string {
+function serializeItem(
+  node: OSNode,
+  pageUrl: string | undefined,
+  textCache: Map<OSNode, string>
+): string {
   // Simple case: just text children
   if (node.children.length === 1 && node.children[0].tag === "#text") {
     const id = node.id ? `[${node.id}] ` : "";
-    return `${id}${node.children[0].text ?? ""}`;
+    return `${id}${collectTextMemoized(node.children[0], textCache)}`;
   }
 
   // Inline children
@@ -355,27 +396,125 @@ function serializeItem(node: OSNode, pageUrl?: string): string {
   if (node.id) inlineParts.push(`[${node.id}]`);
   for (const child of node.children) {
     if (child.tag === "#text") {
-      if (child.text?.trim()) inlineParts.push(child.text);
-    } else if (child.tag === "link") {
-      const href = child.attributes["href"];
-      const text = collectText(child).trim() || child.attributes["aria-label"] || child.attributes["title"] || "";
-      const compHref = href ? compressUrl(href, pageUrl) : undefined;
-      const id = child.id ?? "";
-      if (compHref) {
-        inlineParts.push(`[${id}](${compHref})${text ? " " + text : ""}`);
-      } else {
-        inlineParts.push(`[${id}]${text ? " " + text : ""}`);
-      }
-    } else if (child.tag === "button") {
-      const id = child.id ?? "";
-      const text = collectText(child).trim() || child.attributes["aria-label"] || child.attributes["title"] || "";
-      inlineParts.push(`[${id}]${text ? " " + text : ""}`);
+      if (child.text?.trim()) inlineParts.push(escapeHtml(child.text));
+    } else if (child.id) {
+      const rendered = serializeNodes([child], 0, pageUrl, textCache)
+        .replace(/\s*\n\s*/g, " ")
+        .trim();
+      if (rendered) inlineParts.push(rendered);
+    } else if (hasInteractiveDescendant(child)) {
+      const nested = serializeNodes(collectInteractiveRoots(child), 0, pageUrl, textCache)
+        .replace(/\s*\n\s*/g, " ")
+        .trim();
+      if (nested) inlineParts.push(nested);
     } else {
-      const text = collectText(child).trim();
+      const text = collectTextMemoized(child, textCache).trim();
       if (text) inlineParts.push(text);
     }
   }
   return inlineParts.join(" ");
+}
+
+function hasInteractiveDescendant(node: OSNode): boolean {
+  if (node.id) return true;
+  const stack = [...node.children];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    if (current.id) return true;
+    for (const child of current.children) stack.push(child);
+  }
+  return false;
+}
+
+function collectInteractiveRoots(node: OSNode): OSNode[] {
+  if (node.id) return [node];
+  const result: OSNode[] = [];
+  const stack = [...node.children].reverse();
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    if (current.id) {
+      result.push(current);
+      continue;
+    }
+    for (let index = current.children.length - 1; index >= 0; index--) {
+      stack.push(current.children[index]);
+    }
+  }
+  return result;
+}
+
+function collectInteractiveDescendants(node: OSNode): OSNode[] {
+  const result: OSNode[] = [];
+  const stack = [...node.children].reverse();
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    if (current.id) {
+      result.push(current);
+      continue;
+    }
+    for (let index = current.children.length - 1; index >= 0; index--) {
+      stack.push(current.children[index]);
+    }
+  }
+  return result;
+}
+
+function serializeHeadingContent(
+  node: OSNode,
+  pageUrl: string | undefined,
+  textCache: Map<OSNode, string>
+): string {
+  const parts: string[] = [];
+  const text = serializableText(node);
+  if (text) parts.push(escapeHtml(text));
+
+  for (const child of node.children) {
+    if (child.id) {
+      const rendered = serializeNodes([child], 0, pageUrl, textCache)
+        .replace(/\s*\n\s*/g, " ")
+        .trim();
+      if (rendered) parts.push(rendered);
+      continue;
+    }
+
+    const rendered = serializeHeadingContent(child, pageUrl, textCache);
+    if (rendered) parts.push(rendered);
+  }
+
+  return parts.join(" ").trim();
+}
+
+const nonInteractiveCaches = new WeakMap<
+  Map<OSNode, string>,
+  Map<OSNode, string>
+>();
+
+function collectNonInteractiveText(
+  node: OSNode,
+  textCache: Map<OSNode, string>
+): string {
+  let cache = nonInteractiveCaches.get(textCache);
+  if (!cache) {
+    cache = new Map();
+    nonInteractiveCaches.set(textCache, cache);
+  }
+  const visit = (current: OSNode): string => {
+    const cached = cache!.get(current);
+    if (cached !== undefined) return cached;
+    const parts: string[] = [];
+    const text = serializableText(current);
+    if (text) parts.push(escapeHtml(text));
+    for (const child of current.children) {
+      if (!child.id) {
+        const value = visit(child);
+        if (value) parts.push(value);
+      }
+    }
+    const value = parts.join(" ");
+    cache!.set(current, value);
+    return value;
+  };
+  return visit(node);
 }
 
 function compressPageUrl(url: string): string {

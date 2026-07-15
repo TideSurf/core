@@ -17,12 +17,18 @@ jobs:
         with:
           node-version: 22
           registry-url: https://registry.npmjs.org
+      - uses: browser-actions/setup-chrome@v1
+        id: setup-chrome
+        with:
+          chrome-version: stable
       - run: bun install
       - run: bun install
         working-directory: website/landing
       - run: bun install
         working-directory: website/docs
       - run: bun run verify:release
+        env:
+          CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
       - run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

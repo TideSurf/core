@@ -6,9 +6,52 @@
 
 [Website](https://tidesurf.org) · [Docs](https://tidesurf.org/docs) · [llms.txt](https://tidesurf.org/llms.txt) · [npm](https://www.npmjs.com/package/@tidesurf/core) · [Sponsor](https://github.com/sponsors/MercuriusDream)
 
-TideSurf turns live Chromium into compact, model-readable text. Usable elements receive short IDs tied to the real page, giving an agent a direct read, choose, act loop through the Chrome DevTools Protocol.
+TideSurf turns live Chromium pages into compact text for agents. Interactive elements receive short IDs tied to the current DOM. The same 18 tools work through the CLI, SDK executor, and MCP.
 
-## Start
+## Agent CLI
+
+Run commands directly. The first tool command starts a private local session and a headless, isolated browser. Later shell calls reuse the same browser, tabs, active tab, and element ID map.
+
+```sh
+bunx @tidesurf/core navigate https://example.com
+bunx @tidesurf/core get-state
+bunx @tidesurf/core click L1
+bunx @tidesurf/core status
+bunx @tidesurf/core stop
+```
+
+Use a named session for parallel workflows:
+
+```sh
+bunx @tidesurf/core --session research navigate https://example.com
+bunx @tidesurf/core --session research get-state --mode interactive
+```
+
+TideSurf exposes these direct commands:
+
+```text
+get-state       navigate        click           type
+select          scroll          extract         evaluate
+list-tabs       new-tab         switch-tab      close-tab
+search          screenshot      upload          clipboard-read
+clipboard-write download
+```
+
+Underscore aliases match MCP names, such as `get_state` and `switch_tab`. `tidesurf tools` prints the registry. `tidesurf help <command>` prints generated command help. `tidesurf call <tool> --input '<json>'` accepts a raw tool call.
+
+Managed launch is the default. TideSurf finds Chrome stable, Beta, Dev, Canary, or Chromium and uses an ephemeral debugging port. It checks `--chrome-path`, `CHROME_PATH`, `PATH`, then platform install locations. It never downloads a browser. Use `--auto-connect` to attach when possible and launch locally as a fallback, or `--connect-only` to forbid launch.
+
+Read-only mode fixes the policy for the lifetime of a session:
+
+```sh
+bunx @tidesurf/core --session audit --read-only get-state
+```
+
+Read-only sessions keep `get-state`, `extract`, `list-tabs`, `switch-tab`, `search`, and `screenshot`. Navigation, page interaction, JavaScript, clipboard, upload/download, and tab creation or closure fail at every SDK and tool boundary.
+
+Startup policy is immutable. Later calls may omit startup flags or repeat matching standalone values such as `--read-only`; conflicting values fail.
+
+## SDK
 
 ```sh
 bun add @tidesurf/core
@@ -23,16 +66,16 @@ await browser.navigate("https://example.com");
 const state = await browser.getState();
 console.log(state.content);
 
-const page = browser.getPage();
-await page.click("B1");
+await browser.getPage().click("B1");
 await browser.close();
 ```
 
-The page comes back as plain text with live handles:
+The page returns as plain text with live handles:
 
 ```text
 # Example Search
-> example.com/search
+> example.com/search | 0/1200 800vh
+
 NAV
   [L1](/) Home
   [L2](/about) About
@@ -41,28 +84,31 @@ FORM F1
   [B1] Search
 ```
 
-`B1` points to the real Search button. Links, inputs, tabs, and forms keep the same compact relationship to the live page. CSS classes, wrapper markup, scripts, and decorative DOM stay out of the model context.
+`B1` points to the current Search button. IDs belong to that snapshot. Read fresh state after page changes.
 
-The live benchmark compresses GitHub from 84,236 estimated tokens to 2,593. Page structure changes the result; run `bun scripts/benchmark-live.ts` for a local measurement.
+`TideSurf.launch()` always launches and owns Chromium. It uses an isolated temporary profile unless `userDataDir` selects another profile. `TideSurf.connect()` always attaches to an existing endpoint and defaults to port `9222`. Closing an attached instance disconnects without stopping the user browser.
 
-## Use it
+`getState()` supports `full`, `interactive`, and `minimal` modes, viewport filtering, and `maxTokens`. `includeHidden: true` is a full-DOM debugging override: it includes hidden nodes and disables viewport filtering.
 
-`getState()` supports viewport filtering, `full`, `interactive`, and `minimal` output modes, plus a `maxTokens` budget. TideSurf also provides tab control, file boundaries, typed errors, read-only mode, and 18 standard tools for LLM function calling. The package supports Bun and Node.js 18+.
+SDK uploads and downloads default to the working directory and OS temporary directory. Pass `fileAccessRoots: []` to disable SDK filesystem operations.
 
-Read-only mode removes write and sensitive tools from the agent surface:
+## MCP
 
-```ts
-const browser = await TideSurf.launch({ readOnly: true });
+MCP remains available as a thin adapter over the same registry and executor:
+
+```json
+{
+  "mcpServers": {
+    "tidesurf": {
+      "command": "bunx",
+      "args": ["@tidesurf/core", "mcp"]
+    }
+  }
+}
 ```
 
-Run TideSurf as an MCP server:
+The MCP server exposes the 18 standard tools plus `launch_browser` for compatibility. Screenshot calls return MCP image blocks. Failed calls set `isError`.
 
-```sh
-bunx tidesurf mcp --auto-connect
-```
-
-Chrome 144+ requires remote debugging approval at `chrome://inspect#remote-debugging`. TideSurf can launch Chromium or attach to a session already listening on port `9222`.
-
-Continue with [Getting started](https://tidesurf.org/docs#getting-started), [Page format](https://tidesurf.org/docs#page-format), [Security](https://tidesurf.org/docs#security), or the [API reference](https://tidesurf.org/docs#api-reference).
+Continue with [Getting started](https://tidesurf.org/docs#getting-started), [CLI](https://tidesurf.org/docs#cli), [Security](https://tidesurf.org/docs#security), or the [API reference](https://tidesurf.org/docs#api-reference).
 
 [English](README.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Apache 2.0](LICENSE)

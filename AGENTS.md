@@ -4,23 +4,23 @@ Read this before editing the repo. `CLAUDE.md` points here so Claude, Codex, and
 
 ## Project
 
-TideSurf is a TypeScript library that connects Chromium to LLM agents. It launches or connects to Chrome through CDP, walks the live DOM, compresses it into token-efficient text, and exposes browser tools for function-calling agents. It also ships a local MCP adapter for Claude Code and other MCP clients.
+TideSurf is a TypeScript library and stateful CLI that connects Chromium to agents. It launches or connects through CDP, compresses the live DOM into token-efficient text, and exposes one shared tool registry through the SDK, CLI, and MCP adapter.
 
 ## Architecture
 
 ```text
 src/
   tidesurf.ts              main TideSurf class
-  cli.ts                   inspect and mcp commands
+  cli.ts                   CLI entrypoint and MCP stdio mode
+  cli/                     argument parsing, browser controller, session IPC, daemon
   index.ts                 public API exports
   types.ts                 shared CDP, parser, and tool types
   errors.ts                typed error hierarchy
   validation.ts            URL, selector, expression, and element ID validation
   cdp/                     Chrome launch, connection, page, tabs, retries, timeouts
   parser/                  DOM walk, classify, assign IDs, serialize, budget tokens
-  tools/                   tool definitions and executor
-mcp/
-  index.ts                 MCP server adapter
+  tools/                   canonical tool registry and compatibility exports
+  mcp/                     thin optional-dependency adapter
 website/
   landing/                 TideSurf landing page
   docs/                    TideSurf documentation app
@@ -37,8 +37,11 @@ bun run typecheck
 bun run test
 bun run test:integration
 bun run test:bench
+bun run check:docs
 bun run build:web:landing
 bun run build:web:docs
+bun run smoke:pack
+bun run verify:release
 ```
 
 For local website work, use the package scripts directly:
@@ -64,7 +67,7 @@ The website follows the design philosophy of `../mercuriusdream.github.io`.
 ## Product Rules
 
 - TideSurf is DOM-to-text for browser agents.
-- Stable IDs such as `L1`, `B2`, and `I3` are the interaction handles.
+- Snapshot-scoped IDs such as `L1`, `B2`, and `I3` are current interaction handles. Read state again after page changes.
 - CDP is the browser transport. Playwright is not a runtime dependency for the package.
 - Read-only mode removes write and sensitive tools from agent-facing definitions.
 - MCP dependencies are optional and dynamically imported.

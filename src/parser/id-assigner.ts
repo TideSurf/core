@@ -21,7 +21,7 @@ export class IDAssigner {
   private counters: Map<string, number> = new Map();
 
   /**
-   * Get the next ID for a given mapped tag, or undefined if the tag doesn't get an ID.
+   * Get the next ID for a mapped tag, or undefined when the tag has no ID.
    */
   assign(mappedTag: string): string | undefined {
     const prefix = TAG_PREFIX[mappedTag];
@@ -30,12 +30,5 @@ export class IDAssigner {
     const count = (this.counters.get(prefix) ?? 0) + 1;
     this.counters.set(prefix, count);
     return `${prefix}${count}`;
-  }
-
-  /**
-   * Reset all counters (called at the start of each getState())
-   */
-  reset(): void {
-    this.counters.clear();
   }
 }

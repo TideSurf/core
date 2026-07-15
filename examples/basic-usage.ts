@@ -1,4 +1,4 @@
-import { TideSurf, getToolDefinitions } from "../src/index.js";
+import { TideSurf } from "../src/index.js";
 
 async function main() {
   console.log("Launching TideSurf...");
@@ -7,7 +7,7 @@ async function main() {
 
   try {
     // Show tool definitions (what you'd pass to an LLM)
-    const tools = getToolDefinitions();
+    const tools = surfing.getToolDefinitions();
     console.log(`\nAvailable tools (${tools.length}):`);
     for (const tool of tools) {
       console.log(`  - ${tool.name}: ${tool.description.slice(0, 60)}...`);

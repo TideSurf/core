@@ -77,29 +77,29 @@ export function parseAttributes(attrs?: string[]): Record<string, string> {
 export function classify(
   nodeName: string,
   attributes?: Record<string, string>,
-  _children?: { nodeName: string; attributes?: string[] }[]
+  children?: { nodeName: string; attributes?: string[] }[],
+  options?: { includeHidden?: boolean; computedVisibility?: boolean }
 ): ClassifyResult {
   const upper = nodeName.toUpperCase();
 
-  // aria-hidden elements are discarded
-  if (attributes?.["aria-hidden"] === "true") {
-    return { action: "DISCARD" };
-  }
-
-  // hidden attribute
-  if (attributes?.["hidden"] !== undefined) {
-    return { action: "DISCARD" };
-  }
-
-  // display:none or visibility:hidden in style
-  if (attributes?.["style"]) {
-    const style = attributes["style"];
-    // Use proper regex to handle various whitespace combinations
-    if (/display\s*:\s*none\b/i.test(style)) {
+  if (!options?.includeHidden) {
+    if (
+      attributes?.["aria-hidden"] === "true" ||
+      attributes?.["hidden"] !== undefined ||
+      attributes?.["data-os-hidden"] === "subtree" ||
+      attributes?.["data-os-hidden"] === "1"
+    ) {
       return { action: "DISCARD" };
     }
-    if (/visibility\s*:\s*hidden\b/i.test(style)) {
-      return { action: "DISCARD" };
+
+    const style = attributes?.["style"];
+    if (style && !options?.computedVisibility) {
+      if (/(?:^|;)\s*display\s*:\s*none\b/i.test(style)) {
+        return { action: "DISCARD" };
+      }
+      if (/(?:^|;)\s*visibility\s*:\s*(?:hidden|collapse)\b/i.test(style)) {
+        return { action: "DISCARD" };
+      }
     }
   }
 
@@ -125,7 +125,7 @@ export function classify(
   }
 
   if (upper === "HEADER" || upper === "FOOTER") {
-    const hasInteractiveChild = _children?.some((c) =>
+    const hasInteractiveChild = children?.some((c) =>
       INTERACTIVE_TAGS.has(c.nodeName.toUpperCase())
     );
     if (hasInteractiveChild) {
@@ -149,4 +149,3 @@ export function classify(
 export function hasComputedState(state: string[] | undefined, flag: string): boolean {
   return state?.includes(flag) ?? false;
 }
-

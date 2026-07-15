@@ -1,6 +1,8 @@
 import { estimateTokens, pruneToFit } from "../../src/parser/token-budget.js";
 import { serialize } from "../../src/parser/serializer.js";
+import { filterMinimal } from "../../src/parser/mode-filter.js";
 import type { OSNode } from "../../src/types.js";
+import { ValidationError } from "../../src/errors.js";
 
 describe("estimateTokens", () => {
   it("estimates tokens as length/4", () => {
@@ -11,6 +13,11 @@ describe("estimateTokens", () => {
 
   it("uses custom charsPerToken", () => {
     expect(estimateTokens("abcdef", 3)).toBe(2);
+  });
+
+  it("rejects invalid token ratios", () => {
+    expect(() => estimateTokens("text", 0)).toThrow(ValidationError);
+    expect(() => estimateTokens("text", Number.NaN)).toThrow(ValidationError);
   });
 });
 
@@ -38,6 +45,13 @@ describe("pruneToFit", () => {
     const nodes = [makeText("hello")];
     const result = pruneToFit(nodes, { maxTokens: 1000 });
     expect(result).toEqual(nodes);
+  });
+
+  it("rejects invalid budgets", () => {
+    expect(() => pruneToFit([], { maxTokens: 0 })).toThrow(ValidationError);
+    expect(() =>
+      pruneToFit([], { maxTokens: 10, charsPerToken: Number.POSITIVE_INFINITY })
+    ).toThrow(ValidationError);
   });
 
   it("prunes low-priority nodes first", () => {
@@ -115,16 +129,348 @@ describe("pruneToFit", () => {
     expect(serialized).toContain("truncated");
   });
 
-  // MED-007: structuredClone fallback test
-  it("handles structuredClone failure gracefully with fallback deep copy", () => {
-    const nodes = [
-      makeNode("heading", [makeText("Title")]),
-      makeNode("button", [makeText("Click")], { id: "B1" }),
+  it("recurses through dominant containers and copies only changed paths", () => {
+    const button = makeNode("button", [makeText("Keep action")], { id: "B1" });
+    const section = makeNode("section", [
+      ...Array.from({ length: 30 }, (_, i) =>
+        makeNode("heading", [makeText(`Low priority ${i} `.repeat(6))])
+      ),
+      button,
+    ]);
+    const main = makeNode("main", [section]);
+
+    const result = pruneToFit([main], { maxTokens: 50 });
+    const serialized = serialize(result);
+
+    expect(serialized).toContain("B1");
+    expect(serialized).toContain("truncated");
+    expect(result[0]).not.toBe(main);
+    expect(JSON.stringify(main)).not.toContain("truncated");
+
+    const retainedButton = result[0].children[0].children.find((node) => node.id === "B1");
+    expect(retainedButton).toBe(button);
+  });
+
+  it("keeps an interactive shell when its label exceeds the budget", () => {
+    const button = makeNode("button", [makeText("Action label ".repeat(200))], {
+      id: "B1",
+    });
+    const serialized = serialize(pruneToFit([button], { maxTokens: 20 }));
+    expect(serialized).toContain("B1");
+    expect(estimateTokens(serialized)).toBeLessThanOrEqual(20);
+  });
+
+  it("bounds escaped text and oversized accessible labels", () => {
+    const escaped = serialize(
+      pruneToFit([makeText("<".repeat(100))], { maxTokens: 25 })
+    );
+    expect(estimateTokens(escaped)).toBeLessThanOrEqual(25);
+
+    const labelled: OSNode = {
+      tag: "button",
+      id: "B1",
+      attributes: { "aria-label": "A".repeat(10_000) },
+      children: [],
+    };
+    const labelledOutput = serialize(pruneToFit([labelled], { maxTokens: 20 }));
+    expect(labelledOutput).toContain("B1");
+    expect(estimateTokens(labelledOutput)).toBeLessThanOrEqual(20);
+  });
+
+  it("does not reveal an oversized link fallback after pruning its child text", () => {
+    const link: OSNode = {
+      tag: "link",
+      id: "L1",
+      attributes: {
+        href: "https://example.com/long",
+        "aria-label": "Accessible destination ".repeat(200),
+        title: "Fallback destination ".repeat(200),
+      },
+      children: [makeText("Visible destination ".repeat(200))],
+    };
+
+    const output = serialize(pruneToFit([link], { maxTokens: 20 }));
+
+    expect(output).toBe("[L1](example.com/long)");
+    expect(estimateTokens(output)).toBeLessThanOrEqual(20);
+  });
+
+  it("does not reveal an oversized button fallback after pruning its child text", () => {
+    const button: OSNode = {
+      tag: "button",
+      id: "B1",
+      attributes: {
+        "aria-label": "Accessible action ".repeat(200),
+        title: "Fallback action ".repeat(200),
+      },
+      children: [makeText("Visible action ".repeat(200))],
+    };
+
+    const output = serialize(pruneToFit([button], { maxTokens: 10 }));
+
+    expect(output).toBe("[B1]");
+    expect(estimateTokens(output)).toBeLessThanOrEqual(10);
+  });
+
+  it("costs optgroup labels and keeps select omissions visible", () => {
+    const select: OSNode = {
+      tag: "select",
+      id: "S1",
+      attributes: {},
+      children: [
+        {
+          tag: "optgroup",
+          attributes: { label: "Large group ".repeat(100) },
+          children: [
+            {
+              tag: "option",
+              attributes: {},
+              children: [makeText("Large option ".repeat(100))],
+            },
+          ],
+        },
+      ],
+    };
+
+    const output = serialize(pruneToFit([select], { maxTokens: 30 }));
+
+    expect(output).toContain("S1:select");
+    expect(output).toContain("[...1 more sections truncated]");
+    expect(estimateTokens(output)).toBeLessThanOrEqual(30);
+  });
+
+  it("accounts for normalized URLs and fixed iframe status text", () => {
+    const unicodeLink: OSNode = {
+      tag: "link",
+      id: "L1",
+      attributes: { href: `https://example.com/${"é".repeat(50)}` },
+      children: [makeText("Go")],
+    };
+    const linkOutput = serialize(pruneToFit([unicodeLink], { maxTokens: 30 }));
+    expect(linkOutput).toBe("[L1] Go");
+    expect(estimateTokens(linkOutput)).toBeLessThanOrEqual(30);
+
+    const inaccessibleFrame: OSNode = {
+      tag: "iframe",
+      attributes: { status: "inaccessible" },
+      children: [],
+    };
+    const frameOutput = serialize(
+      pruneToFit([inaccessibleFrame], { maxTokens: 5 })
+    );
+    expect(frameOutput).toBe("");
+    expect(estimateTokens(frameOutput)).toBeLessThanOrEqual(5);
+  });
+
+  it("accounts for quote escaping and state flags on form controls", () => {
+    const input: OSNode = {
+      tag: "input",
+      id: "I1",
+      attributes: {
+        id: "I1",
+        placeholder: '"'.repeat(30),
+        required: "",
+      },
+      children: [],
+      state: ["disabled", "obscured"],
+    };
+
+    const output = serialize(pruneToFit([input], { maxTokens: 15 }));
+    expect(output).toContain("I1");
+    expect(estimateTokens(output)).toBeLessThanOrEqual(15);
+  });
+
+  it("recurses through any container that protects interactive descendants", () => {
+    const label = makeNode("label", [
+      makeText("Long label ".repeat(100)),
+      makeNode("input", [], { id: "I1" }),
+    ]);
+    expect(serialize(pruneToFit([label], { maxTokens: 20 }))).toContain("I1");
+  });
+
+  it("accounts for indentation in deeply nested structural containers", () => {
+    let nested = makeNode("button", [makeText("Action")], { id: "B1" });
+    for (let depth = 0; depth < 20; depth++) {
+      nested = makeNode("main", [nested]);
+    }
+
+    const serialized = serialize(pruneToFit([nested], { maxTokens: 50 }));
+
+    expect(estimateTokens(serialized)).toBeLessThanOrEqual(50);
+    expect(serialized).toContain("truncated");
+  });
+
+  it("counts indentation for direct text in nested containers", () => {
+    let nested = makeText("<&x ".repeat(200));
+    for (let depth = 0; depth < 12; depth++) {
+      nested = makeNode("section", [nested]);
+    }
+
+    const serialized = serialize(pruneToFit([nested], { maxTokens: 60 }));
+
+    expect(estimateTokens(serialized)).toBeLessThanOrEqual(60);
+  });
+
+  it("propagates fitted text indentation through nested landmarks", () => {
+    const truncated = (count: number): OSNode => ({
+      tag: "truncated",
+      attributes: { count: String(count) },
+      children: [],
+    });
+    const box = (tag: string, children: OSNode[]): OSNode => ({
+      tag,
+      attributes: {},
+      children,
+    });
+    const tree = [
+      box("section", [
+        box("section", [
+          box("nav", [
+            box("main", [
+              makeText("<&x ".repeat(3) + "<..."),
+              box("main", [
+                {
+                  tag: "input",
+                  id: "I98203",
+                  attributes: {},
+                  children: [],
+                  visible: true,
+                },
+                makeText("<&x ".repeat(10) + "<&x..."),
+                makeText("..."),
+              ]),
+              truncated(2),
+            ]),
+            truncated(4),
+          ]),
+          truncated(1),
+        ]),
+        truncated(2),
+      ]),
+      truncated(4),
     ];
 
-    // Should not throw even if structuredClone fails
-    const result = pruneToFit(nodes, { maxTokens: 1000 });
-    expect(result).toBeDefined();
-    expect(result.length).toBeGreaterThan(0);
+    const output = serialize(pruneToFit(tree, { maxTokens: 103 }));
+
+    expect(output.length).toBe(410);
+    expect(estimateTokens(output)).toBe(103);
+  });
+
+  it("stays within budget across deterministic valid page-state shapes", () => {
+    const pageUrl = "https://example.com/current";
+    const fragments = ["plain ", "<&x ", 'quote" ', "🙂 ", "detail "];
+
+    for (let fixture = 0; fixture < 1_000; fixture++) {
+      let state = (0x5eed_0000 + fixture) >>> 0;
+      let nextId = 0;
+      const integer = (limit: number): number => {
+        state = (Math.imul(state, 1_664_525) + 1_013_904_223) >>> 0;
+        return state % limit;
+      };
+      const text = (): string => {
+        const count = 1 + integer(24);
+        let value = "";
+        for (let index = 0; index < count; index++) {
+          value += fragments[integer(fragments.length)];
+        }
+        return value.trimEnd();
+      };
+      const leaf = (): OSNode => {
+        const kind = integer(7);
+        if (kind === 0) return makeText(text());
+        if (kind === 1) {
+          return {
+            tag: "truncated",
+            attributes: { count: String(1 + integer(99)) },
+            children: [],
+          };
+        }
+        if (kind === 2) {
+          const id = `I${++nextId}`;
+          return {
+            tag: "input",
+            id,
+            attributes: {
+              id,
+              placeholder: text(),
+              ...(integer(2) === 0 ? { required: "" } : {}),
+            },
+            children: [],
+            visible: integer(2) === 0,
+          };
+        }
+        if (kind === 3 || kind === 4) {
+          const tag = kind === 3 ? "button" : "link";
+          const id = `${kind === 3 ? "B" : "L"}${++nextId}`;
+          return {
+            tag,
+            id,
+            attributes: {
+              id,
+              "aria-label": text(),
+              ...(tag === "link"
+                ? { href: `https://example.com/${text()}` }
+                : {}),
+            },
+            children: integer(3) === 0 ? [] : [makeText(text())],
+            visible: integer(2) === 0,
+          };
+        }
+        if (kind === 5) {
+          return {
+            tag: "img",
+            attributes: { alt: text() },
+            children: [],
+          };
+        }
+        return {
+          tag: "iframe",
+          attributes: { status: "inaccessible" },
+          children: [],
+        };
+      };
+      const node = (depth: number): OSNode => {
+        if (depth === 0 || integer(4) === 0) return leaf();
+        const tag = ["section", "nav", "main", "article", "aside"][
+          integer(5)
+        ];
+        const childCount = 1 + integer(3);
+        const children = Array.from({ length: childCount }, () =>
+          node(depth - 1)
+        );
+        return {
+          tag,
+          attributes: integer(4) === 0 ? { "aria-label": text() } : {},
+          children,
+          ...(integer(5) === 0 ? { text: text() } : {}),
+          visible: integer(2) === 0,
+        };
+      };
+
+      const nodes = Array.from({ length: 1 + integer(3) }, () => node(4));
+      const maxTokens = 8 + integer(160);
+      const output = serialize(
+        pruneToFit(nodes, { maxTokens, pageUrl }),
+        0,
+        pageUrl
+      );
+      if (output.length > maxTokens * 4) {
+        throw new Error(
+          `Fixture ${fixture} exceeded ${maxTokens * 4} characters with ${output.length}: ${JSON.stringify(nodes)}`
+        );
+      }
+    }
+  });
+
+  it("counts minimal landmark summaries before pruning", () => {
+    const nodes = Array.from({ length: 10 }, (_, index) =>
+      makeNode("nav", [makeText(`Navigation ${index} ${"destination ".repeat(20)}`)])
+    );
+    const serialized = serialize(
+      pruneToFit(filterMinimal(nodes), { maxTokens: 50 })
+    );
+
+    expect(estimateTokens(serialized)).toBeLessThanOrEqual(50);
+    expect(serialized).toContain("truncated");
   });
 });

@@ -45,6 +45,7 @@ export type {
   ScreenshotOptions,
   DownloadResult,
   ScrollPosition,
+  ChromeChannel,
 } from "./types.js";
 
 export type { TabInfo } from "./cdp/tab-manager.js";

@@ -1,6 +1,6 @@
 # Token budget
 
-`maxTokens` caps page output for constrained models and frequent agent loops. TideSurf prunes lower-value content to meet the budget.
+`maxTokens` sets an approximate target for constrained models and frequent agent loops. TideSurf prunes lower-value body content before serialization. The page header, metadata, escaping, and truncation markers can put final output slightly above the target.
 
 ## Setting a budget
 
@@ -10,23 +10,22 @@ Pass the limit to `getState()`:
 const state = await browser.getState({ maxTokens: 500 });
 ```
 
-Output above 500 tokens loses the least important content first.
+Body content above the target loses lower-priority nodes first. The estimator uses four characters per token; it does not run a model-specific tokenizer.
 
 ## How TideSurf prioritizes content
 
-The priority order runs from highest value to lowest:
+The pruning pass ranks sibling subtrees in this order:
 
-1. **Controls:** buttons, links, inputs, selects, and forms
-2. **Visible copy:** headings, paragraphs, and labels
-3. **Structure:** navigation, sections, and articles
-4. **Supporting copy:** descriptions and metadata
-5. **Decoration:** content with no action or information
+1. **Actionable subtrees:** content containing current interaction IDs
+2. **Viewport-marked subtrees:** content with more visible nodes
+3. **Compact content:** shorter text when action and visibility scores tie
+4. **Source order:** earlier siblings when all other scores tie
 
-Earlier elements take precedence within each tier.
+Oversized containers are pruned recursively, so useful children can survive even when their parent does not fit unchanged. Unchanged subtrees retain source order.
 
-## Truncation indicator
+## Truncation indicators
 
-Pruned output ends with a truncation indicator:
+When the target has room for it, pruned output emits an indicator at each sibling list where sections were omitted:
 
 ```
 # Example
@@ -38,7 +37,7 @@ NAV
 [...12 more sections truncated]
 ```
 
-The count reports removed top-level sections. The agent can raise the budget or scroll for another view.
+The count reports removed siblings at that point in the tree. Nested pruning can produce more than one indicator, and controls such as selects retain an indicator when their options are pruned. The agent can raise the target or scroll for another viewport.
 
 ## Choosing the right budget
 

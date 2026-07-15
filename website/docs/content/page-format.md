@@ -29,7 +29,7 @@ TideSurf keeps the meaning and live controls:
 
 ```
 # Example Search
-> example.com/search
+> example.com/search | 0/1200 800vh
 
 NAV
   [L1](/) Home
@@ -74,7 +74,7 @@ The compressor removes presentation and keeps meaning:
 
 **Images** become `[img: alt text]`; `src` stays out of the output.
 
-**Shadow DOM** is pierced automatically. Web-component content appears in the regular tree.
+**Open shadow DOM** is traversed automatically. Closed roots remain inaccessible.
 
 **Cross-origin iframes** remain inaccessible under browser security rules and appear as `[iframe: inaccessible]`.
 
@@ -108,7 +108,7 @@ Unavailable elements use `~~strikethrough~~`. Do not pass their IDs to `click`, 
 ~~[B2] Save~~                # inert (pointer-events:none or HTML inert)
 ```
 
-The marker covers `disabled`, `aria-disabled="true"`, `<fieldset disabled>`, `pointer-events: none`, and `inert`. To the agent, `~~` simply means “leave this alone.”
+The marker covers `disabled`, `aria-disabled="true"`, `<fieldset disabled>`, `pointer-events: none`, and `inert`. `~~` means the control is not actionable.
 
 **Toggle state: `open` / `closed`**
 
@@ -178,4 +178,4 @@ TideSurf checks computed styles before serialization:
 
 This keeps CSS-hidden elements, honeypots, and off-screen traps out of the agent surface.
 
-`getState({ includeHidden: true })` bypasses the filter for debugging hidden menus, lazy content, and off-screen elements.
+`getState({ includeHidden: true })` is a full-DOM debugging override. It includes CSS-hidden, `hidden`, `aria-hidden`, and offscreen nodes, and disables viewport filtering even when `viewport: true` is also supplied.

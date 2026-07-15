@@ -1,0 +1,591 @@
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import {
+  closeSync,
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { spawn } from "node:child_process";
+import { connect as connectSocket } from "node:net";
+import type { ChromeChannel, ToolResult } from "../types.js";
+import { VERSION } from "../version.js";
+
+export const SESSION_PROTOCOL_VERSION = 1;
+const MAX_SESSION_NAME_LENGTH = 64;
+const MAX_RESPONSE_BYTES = 64 * 1024 * 1024;
+
+export interface SessionConfig {
+  browserMode: "launch" | "auto" | "connect";
+  headless: boolean;
+  host?: string;
+  port?: number;
+  browserUrl?: string;
+  chromePath?: string;
+  channel?: ChromeChannel;
+  userDataDir?: string;
+  timeout?: number;
+  readOnly: boolean;
+  allowLocalhost: boolean;
+  allowPrivateHosts: boolean;
+  fileAccessRoots?: string[];
+}
+
+export interface SessionState {
+  protocol: number;
+  version: string;
+  session: string;
+  secret: string;
+  socketPath: string;
+  config: SessionConfig;
+  pid: number;
+  ready: boolean;
+  startupId?: string;
+  startedAt?: string;
+}
+
+export interface SessionPaths {
+  directory: string;
+  stateFile: string;
+  lockFile: string;
+  logFile: string;
+  socketPath: string;
+}
+
+export type SessionRequest =
+  | { method: "ping" }
+  | { method: "start" }
+  | { method: "status" }
+  | { method: "stop" }
+  | { method: "tool"; name: string; input: Record<string, unknown> };
+
+interface WireRequest {
+  protocol: number;
+  id: string;
+  secret: string;
+  request: SessionRequest;
+}
+
+interface WireResponse<T = unknown> {
+  protocol: number;
+  id: string;
+  success: boolean;
+  data?: T;
+  error?: string;
+  errorType?: string;
+}
+
+function parseWireResponse<T>(raw: string, id: string): WireResponse<T> {
+  const value: unknown = JSON.parse(raw);
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new SessionProtocolError("Session returned an invalid response");
+  }
+  const response = value as Record<string, unknown>;
+  if (
+    response["protocol"] !== SESSION_PROTOCOL_VERSION ||
+    response["id"] !== id ||
+    typeof response["success"] !== "boolean"
+  ) {
+    throw new SessionProtocolError(
+      "Session protocol response did not match the request"
+    );
+  }
+  if (
+    response["error"] !== undefined &&
+    typeof response["error"] !== "string"
+  ) {
+    throw new SessionProtocolError("Session returned an invalid error response");
+  }
+  if (
+    response["errorType"] !== undefined &&
+    typeof response["errorType"] !== "string"
+  ) {
+    throw new SessionProtocolError("Session returned an invalid error response");
+  }
+  return response as unknown as WireResponse<T>;
+}
+
+export class SessionProtocolError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SessionProtocolError";
+  }
+}
+
+export class SessionStateError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "SessionStateError";
+  }
+}
+
+export function validateSessionName(name: string): string {
+  if (
+    name.length === 0 ||
+    name.length > MAX_SESSION_NAME_LENGTH ||
+    !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name)
+  ) {
+    throw new SessionProtocolError(
+      "Session names must start with a letter or number and contain at most 64 letters, numbers, dots, dashes, or underscores"
+    );
+  }
+  return name;
+}
+
+function runtimeDirectory(): string {
+  if (process.platform === "win32") {
+    return process.env["LOCALAPPDATA"]
+      ? join(process.env["LOCALAPPDATA"], "TideSurf", "sessions")
+      : join(tmpdir(), "TideSurf", "sessions");
+  }
+
+  const runtime = process.env["XDG_RUNTIME_DIR"];
+  if (runtime) return join(runtime, "tidesurf");
+  const uid = process.getuid?.() ?? createHash("sha256")
+    .update(process.env["HOME"] ?? process.env["USER"] ?? "user")
+    .digest("hex")
+    .slice(0, 12);
+  return join(tmpdir(), `tidesurf-${uid}`);
+}
+
+export function getSessionPaths(sessionName: string): SessionPaths {
+  const session = validateSessionName(sessionName);
+  const directory = runtimeDirectory();
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const stats = lstatSync(directory);
+  if (!stats.isDirectory() || stats.isSymbolicLink()) {
+    throw new SessionProtocolError(`Session runtime path is not a private directory: ${directory}`);
+  }
+  if (process.platform !== "win32") {
+    const uid = process.getuid?.();
+    if (uid !== undefined && stats.uid !== uid) {
+      throw new SessionProtocolError(`Session runtime directory has the wrong owner: ${directory}`);
+    }
+    chmodSync(directory, 0o700);
+  }
+  const key = createHash("sha256")
+    .update(`${directory}\0${session}`)
+    .digest("hex")
+    .slice(0, 20);
+  const socketPath = process.platform === "win32"
+    ? `\\\\.\\pipe\\tidesurf-${key}`
+    : join(directory, `${key}.sock`);
+  return {
+    directory,
+    socketPath,
+    stateFile: join(directory, `${key}.json`),
+    lockFile: join(directory, `${key}.lock`),
+    logFile: join(directory, `${key}.log`),
+  };
+}
+
+export function readSessionState(paths: SessionPaths): SessionState | null {
+  try {
+    const parsed = JSON.parse(readFileSync(paths.stateFile, "utf8")) as SessionState;
+    if (
+      parsed.socketPath !== paths.socketPath ||
+      typeof parsed.secret !== "string" ||
+      typeof parsed.pid !== "number" ||
+      typeof parsed.protocol !== "number" ||
+      typeof parsed.version !== "string" ||
+      typeof parsed.session !== "string" ||
+      typeof parsed.ready !== "boolean" ||
+      !parsed.config
+    ) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export function writeSessionState(paths: SessionPaths, state: SessionState): void {
+  const temporary = `${paths.stateFile}.${process.pid}.${randomUUID()}.tmp`;
+  writeFileSync(temporary, `${JSON.stringify(state)}\n`, { mode: 0o600 });
+  renameSync(temporary, paths.stateFile);
+}
+
+export function removeSessionFiles(paths: SessionPaths, removeLog = false): void {
+  rmSync(paths.stateFile, { force: true });
+  rmSync(paths.lockFile, { force: true });
+  if (process.platform !== "win32") rmSync(paths.socketPath, { force: true });
+  if (removeLog) rmSync(paths.logFile, { force: true });
+}
+
+export function secretsMatch(expected: string, received: string): boolean {
+  const a = Buffer.from(expected);
+  const b = Buffer.from(received);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+export function isProcessRunning(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isStaleEndpointError(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException).code;
+  return code === "ENOENT" || code === "ECONNREFUSED";
+}
+
+export async function sendSessionRequest<T = unknown>(
+  state: SessionState,
+  request: SessionRequest,
+  timeoutMs = 60_000
+): Promise<T> {
+  if (state.protocol !== SESSION_PROTOCOL_VERSION) {
+    throw new SessionProtocolError(
+      `Session ${state.session} uses protocol ${state.protocol}; expected ${SESSION_PROTOCOL_VERSION}`
+    );
+  }
+  const id = randomUUID();
+  const payload: WireRequest = {
+    protocol: SESSION_PROTOCOL_VERSION,
+    id,
+    secret: state.secret,
+    request,
+  };
+
+  return new Promise<T>((resolveRequest, rejectRequest) => {
+    let settled = false;
+    const chunks: string[] = [];
+    let receivedBytes = 0;
+    const socket = connectSocket(state.socketPath);
+    socket.setEncoding("utf8");
+
+    const finish = (error?: Error, value?: T) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      socket.destroy();
+      if (error) rejectRequest(error);
+      else resolveRequest(value as T);
+    };
+
+    const timer = setTimeout(() => {
+      finish(new SessionProtocolError(`Session request timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    timer.unref?.();
+
+    socket.once("connect", () => {
+      socket.write(`${JSON.stringify(payload)}\n`);
+    });
+    socket.on("data", (chunk: string) => {
+      receivedBytes += Buffer.byteLength(chunk);
+      if (receivedBytes > MAX_RESPONSE_BYTES) {
+        finish(new SessionProtocolError("Session response exceeded 64 MiB"));
+        return;
+      }
+      chunks.push(chunk);
+      if (!chunk.includes("\n")) return;
+      const received = chunks.join("");
+      const newline = received.indexOf("\n");
+
+      try {
+        const response = parseWireResponse<T>(received.slice(0, newline), id);
+        if (!response.success) {
+          const error = new SessionProtocolError(response.error ?? "Session request failed");
+          error.name = response.errorType ?? error.name;
+          finish(error);
+          return;
+        }
+        finish(undefined, response.data as T);
+      } catch (error) {
+        finish(error instanceof Error ? error : new SessionProtocolError(String(error)));
+      }
+    });
+    socket.once("error", (error) => finish(error));
+    socket.once("end", () => {
+      if (!settled) finish(new SessionProtocolError("Session closed without a response"));
+    });
+  });
+}
+
+async function waitForReady(
+  paths: SessionPaths,
+  timeoutMs: number
+): Promise<SessionState> {
+  const deadline = Date.now() + timeoutMs;
+  let lastError: unknown;
+  while (Date.now() < deadline) {
+    const state = readSessionState(paths);
+    if (state && state.protocol !== SESSION_PROTOCOL_VERSION) {
+      throw new SessionProtocolError(
+        `Session ${state.session} uses protocol ${state.protocol}; expected ${SESSION_PROTOCOL_VERSION}`
+      );
+    }
+    if (state?.ready && isProcessRunning(state.pid)) {
+      try {
+        await sendSessionRequest(state, { method: "ping" }, 500);
+        return state;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 40));
+  }
+  throw new SessionProtocolError(
+    `Session did not start within ${timeoutMs}ms${
+      lastError instanceof Error ? `: ${lastError.message}` : ""
+    }. Log: ${paths.logFile}`
+  );
+}
+
+function matchesExpectedConfig(
+  current: SessionConfig,
+  expected: Partial<SessionConfig>
+): boolean {
+  return (Object.keys(expected) as Array<keyof SessionConfig>).every(
+    (key) => JSON.stringify(current[key]) === JSON.stringify(expected[key])
+  );
+}
+
+function verifyCompatibleSession(
+  state: SessionState,
+  options: EnsureSessionOptions
+): SessionState {
+  if (state.protocol !== SESSION_PROTOCOL_VERSION) {
+    throw new SessionProtocolError(
+      `Session ${options.session} uses protocol ${state.protocol}; expected ${SESSION_PROTOCOL_VERSION}`
+    );
+  }
+  if (state.version !== VERSION) {
+    throw new SessionStateError(
+      `Session ${options.session} uses TideSurf ${state.version}; stop it before using ${VERSION}`
+    );
+  }
+  const expected = options.expectedConfig;
+  if (expected && !matchesExpectedConfig(state.config, expected)) {
+    throw new SessionStateError(
+      `Session ${options.session} is already running with different startup options; stop it or choose another --session`
+    );
+  }
+  return state;
+}
+
+interface StartupLock {
+  pid: number;
+  startupId: string;
+  createdAt: number;
+}
+
+function readStartupLock(paths: SessionPaths): StartupLock | null {
+  try {
+    const value = JSON.parse(readFileSync(paths.lockFile, "utf8")) as StartupLock;
+    return Number.isInteger(value.pid) &&
+      typeof value.startupId === "string" &&
+      Number.isFinite(value.createdAt)
+      ? value
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export interface EnsureSessionOptions {
+  session: string;
+  config: SessionConfig;
+  entryPath?: string;
+  timeoutMs?: number;
+  expectedConfig?: Partial<SessionConfig>;
+}
+
+export async function ensureSession(
+  options: EnsureSessionOptions
+): Promise<SessionState> {
+  const paths = getSessionPaths(options.session);
+  const timeoutMs = options.timeoutMs ?? 10_000;
+  let current = readSessionState(paths);
+
+  if (
+    current &&
+    current.protocol !== SESSION_PROTOCOL_VERSION &&
+    isProcessRunning(current.pid)
+  ) {
+    throw new SessionProtocolError(
+      `Session ${options.session} uses protocol ${current.protocol}; stop that process before using protocol ${SESSION_PROTOCOL_VERSION}`
+    );
+  }
+
+  if (current?.ready && isProcessRunning(current.pid)) {
+    try {
+      await sendSessionRequest(current, { method: "ping" }, 500);
+      return verifyCompatibleSession(current, options);
+    } catch (error) {
+      if (isProcessRunning(current.pid) && !isStaleEndpointError(error)) throw error;
+      removeSessionFiles(paths, true);
+    }
+  }
+
+  if (current && !current.ready && isProcessRunning(current.pid)) {
+    const lock = readStartupLock(paths);
+    if (
+      lock &&
+      lock.startupId === current.startupId &&
+      Date.now() - lock.createdAt < timeoutMs
+    ) {
+      return verifyCompatibleSession(await waitForReady(paths, timeoutMs), options);
+    }
+    const latest = readSessionState(paths);
+    if (latest?.ready && isProcessRunning(latest.pid)) {
+      await sendSessionRequest(latest, { method: "ping" }, 500);
+      return verifyCompatibleSession(latest, options);
+    }
+    removeSessionFiles(paths, true);
+  }
+  if (current?.ready && !isProcessRunning(current.pid)) {
+    removeSessionFiles(paths, true);
+  }
+
+  let ownsLock = false;
+  const startupId = randomUUID();
+  try {
+    const lockDeadline = Date.now() + timeoutMs;
+    while (!ownsLock && Date.now() < lockDeadline) {
+      try {
+        writeFileSync(paths.lockFile, `${JSON.stringify({
+          pid: process.pid,
+          startupId,
+          createdAt: Date.now(),
+        } satisfies StartupLock)}\n`, {
+          flag: "wx",
+          mode: 0o600,
+        });
+        ownsLock = true;
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code !== "EEXIST") throw error;
+        const lock = readStartupLock(paths);
+        current = readSessionState(paths);
+        if (current?.ready && isProcessRunning(current.pid)) {
+          return verifyCompatibleSession(current, options);
+        }
+        if (
+          lock &&
+          current?.startupId === lock.startupId &&
+          !current.ready &&
+          Date.now() - lock.createdAt < timeoutMs
+        ) {
+          return verifyCompatibleSession(
+            await waitForReady(paths, Math.max(1, lockDeadline - Date.now())),
+            options
+          );
+        }
+        if (
+          lock &&
+          isProcessRunning(lock.pid) &&
+          Date.now() - lock.createdAt < timeoutMs
+        ) {
+          await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
+          continue;
+        }
+        removeSessionFiles(paths, true);
+      }
+    }
+    if (!ownsLock) throw new SessionProtocolError("Could not acquire the session startup lock");
+
+    const secret = randomBytes(32).toString("hex");
+    const pending: SessionState = {
+      protocol: SESSION_PROTOCOL_VERSION,
+      version: VERSION,
+      session: options.session,
+      secret,
+      socketPath: paths.socketPath,
+      config: options.config,
+      pid: process.pid,
+      ready: false,
+      startupId,
+    };
+    writeSessionState(paths, pending);
+
+    const entryPath = resolve(options.entryPath ?? process.argv[1]);
+    if (!existsSync(entryPath)) {
+      throw new SessionProtocolError(`Cannot locate TideSurf CLI entrypoint: ${entryPath}`);
+    }
+
+    const logFd = openSync(paths.logFile, "a", 0o600);
+    if (process.platform !== "win32") chmodSync(paths.logFile, 0o600);
+    try {
+      const child = spawn(
+        process.execPath,
+        [entryPath, "__daemon", "--state-file", paths.stateFile],
+        {
+          detached: true,
+          stdio: ["ignore", logFd, logFd],
+          windowsHide: true,
+          env: process.env,
+        }
+      );
+      child.unref();
+    } finally {
+      closeSync(logFd);
+    }
+
+    return verifyCompatibleSession(await waitForReady(paths, timeoutMs), options);
+  } catch (error) {
+    const state = readSessionState(paths);
+    if (
+      !state ||
+      !isProcessRunning(state.pid) ||
+      (state.startupId === startupId && state.pid === process.pid)
+    ) {
+      removeSessionFiles(paths);
+    }
+    throw error;
+  } finally {
+    if (ownsLock) rmSync(paths.lockFile, { force: true });
+  }
+}
+
+export async function getLiveSession(session: string): Promise<SessionState | null> {
+  const paths = getSessionPaths(session);
+  const state = readSessionState(paths);
+  if (
+    state &&
+    state.protocol !== SESSION_PROTOCOL_VERSION &&
+    isProcessRunning(state.pid)
+  ) {
+    throw new SessionProtocolError(
+      `Session ${session} uses protocol ${state.protocol}; expected ${SESSION_PROTOCOL_VERSION}`
+    );
+  }
+  if (!state?.ready || !isProcessRunning(state.pid)) {
+    if (state && !isProcessRunning(state.pid)) removeSessionFiles(paths);
+    return null;
+  }
+  try {
+    await sendSessionRequest(state, { method: "ping" }, 500);
+    return state;
+  } catch (error) {
+    if (!isProcessRunning(state.pid) || isStaleEndpointError(error)) {
+      removeSessionFiles(paths);
+    }
+    if (isProcessRunning(state.pid) && !isStaleEndpointError(error)) throw error;
+    return null;
+  }
+}
+
+export function toToolResult(value: unknown): ToolResult {
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "success" in value &&
+    typeof (value as { success: unknown }).success === "boolean"
+  ) {
+    return value as ToolResult;
+  }
+  return { success: true, data: value };
+}

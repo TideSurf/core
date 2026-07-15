@@ -2,62 +2,58 @@
 
 TideSurf compresses the live DOM into model-readable text. Deep nesting, SVGs, and generated CSS usually produce the largest reductions.
 
-## Live-site results
+## Reproducible fixture results
 
-`scripts/benchmark-live.ts` loads real sites in headless Chrome and compares the rendered DOM with TideSurf output.
+`bun run test:bench` serves fixed local fixtures and runs the production parser in headless Chrome. The current representative results are:
 
-| Site | Raw HTML | TideSurf | Reduction | Ratio | Parse time |
-|------|----------|----------|-----------|-------|------------|
-| GitHub | 84,236 tokens | 2,593 tokens | 97% | **32x** | 22ms |
-| Wikipedia | 123,623 tokens | 12,097 tokens | 90% | **10x** | 63ms |
-| MDN Docs | 24,925 tokens | 1,793 tokens | 93% | **14x** | 18ms |
-| Hacker News | 8,706 tokens | 1,038 tokens | 88% | **8.4x** | 14ms |
+| Fixture | Source HTML | Rendered DOM | TideSurf | Source reduction | Ratio |
+|---|---:|---:|---:|---:|---:|
+| E-commerce | 5,348 tokens | 5,336 tokens | 446 tokens | 92% | 12.0x |
+| News | 4,807 tokens | 4,807 tokens | 395 tokens | 92% | 12.2x |
 
-**Average: 92% reduction, ~29ms parse time.**
+The token-budget regression also reduces the 446-token e-commerce state to 274 tokens with a 300-token target while retaining actionable IDs and visible omission markers.
 
 ## Understanding the numbers
 
 Compression follows page structure:
 
-- **10–32x:** GitHub and Wikipedia carry deep trees, inline SVG, generated classes, wrappers, and embedded scripts or styles.
-- **8–14x:** MDN and Hacker News carry less structural overhead, but text truncation, URL compression, and the compact format still remove substantial weight.
+- Deep trees, inline SVG, generated classes, wrappers, and embedded scripts or styles produce larger reductions.
+- Text-heavy, shallow pages retain more source content and produce smaller reductions.
 
 The DOM walker removes scripts, styles, CSS classes, layout wrappers, decorative SVG, hidden elements, comments, and processing instructions. It keeps controls with short IDs, visible copy, semantic containers, tables, and enough hierarchy to understand the page.
 
 ## Cost impact
 
-Token costs at typical LLM pricing ($5/M input tokens):
+At an illustrative $5 per million input tokens, cost follows this formula:
 
-| Site | Raw HTML cost | TideSurf cost | Savings per page |
-|------|---------------|---------------|------------------|
-| GitHub | $0.42 | $0.01 | $0.41 |
-| Wikipedia | $0.62 | $0.06 | $0.56 |
-| MDN Docs | $0.12 | $0.009 | $0.12 |
+```text
+estimated cost = input tokens / 1,000,000 × price per million tokens
+```
 
-A 100-page session can reduce input cost by **88–97%**.
+Use the measured ratio for your pages and the current price of your selected model. TideSurf does not claim one reduction for every site.
 
 ## Context window impact
 
-Across a 128K–200K context window, the raw GitHub page uses **42–66%**. TideSurf output uses **1–2%**, leaving room for instructions, conversation history, and more pages.
+Compact state leaves more room for instructions, conversation history, and additional pages. The exact share depends on the selected model, page, viewport mode, and token budget.
 
 ## Running benchmarks yourself
 
 ```bash
-# Live-site benchmark (requires Chrome)
+# Volatile live-site diagnostic (requires Chrome and network access)
 bun scripts/benchmark-live.ts
 
 # Unit-level compression benchmarks
 bun run test:bench
 ```
 
-The live benchmark covers eight sites by default. Add targets through the `SITES` array. Unit benchmarks use trusted local HTTP fixtures under the normal navigation policy.
+The live diagnostic covers eight sites by default. It uses `viewport: false` so both sides represent the complete page. A sample is skipped when it is an interstitial or bot challenge, has fewer than 1,000 rendered tokens, has fewer than 100 TideSurf tokens, or has fewer than 3 action IDs. The summary divides total rendered tokens by total TideSurf tokens; it does not average per-site ratios. Live numbers change with page content and bot policy, so do not copy them into release claims without a dated rerun. Unit benchmarks use trusted local HTTP fixtures under the normal navigation policy.
 
 ## Methodology
 
 - **Browser:** Headless Chrome via CDP (same as production usage)
 - **Token estimation:** `cl100k_base`-approximate character-based estimator (4 chars ≈ 1 token)
 - **Raw HTML:** `document.documentElement.outerHTML` after full page load
-- **TideSurf output:** `getState().content` with default settings (no token budget limit)
+- **TideSurf output:** `getState({ viewport: false }).content` with no token budget limit for the live full-DOM comparison; local acceptance tests exercise the production viewport default separately
 - **Parse time:** Wall-clock time for `getState()` call only (excludes navigation)
 
-Results vary with live page content, especially on dynamic sites such as Reddit and Hacker News.
+Fixture results are deterministic for a given parser revision. Live results vary with content, geography, authentication, experiments, and anti-automation pages.

@@ -1,261 +1,477 @@
 import type { OSNode } from "../types.js";
-import { serialize } from "./serializer.js";
+import { validatePositiveNumber } from "../validation.js";
+import { formatTruncation, truncateGraphemes } from "./truncation.js";
+import { compressUrl } from "./url-compressor.js";
 
-/**
- * MED-007: Fallback deep copy when structuredClone fails.
- */
-function deepCopyNodes(nodes: OSNode[]): OSNode[] {
-  return nodes.map(node => ({
-    tag: node.tag,
-    id: node.id,
-    attributes: { ...node.attributes },
-    children: deepCopyNodes(node.children),
-    text: node.text,
-    visible: node.visible,
-    state: node.state ? [...node.state] : undefined,
-  }));
-}
-
-/**
- * Estimate the number of tokens in a serialized string.
- * Uses a simple heuristic of ~4 characters per token.
- */
-export function estimateTokens(xml: string, charsPerToken: number = 4): number {
-  return Math.ceil(xml.length / charsPerToken);
-}
-
-/**
- * Estimate token size for a single OSNode without full serialization.
- * This is O(1) per node vs O(n) for full serialization.
- */
-function estimateNodeTokens(node: OSNode, charsPerToken: number = 4): number {
-  let size = node.tag.length + 2; // Tag name + brackets
-  if (node.id) size += node.id.length + 3; // [id]
-  for (const [k, v] of Object.entries(node.attributes)) {
-    size += k.length + (v?.length ?? 0) + 3; // key=value
-  }
-  if (node.text) size += node.text.length;
-  // Rough estimate for serialization overhead (indentation, newlines)
-  size += 10;
-  return Math.ceil(size / charsPerToken);
-}
-
-/**
- * Pre-calculate token sizes for all nodes in a list.
- * Returns a map of node reference to estimated token count.
- */
-function preCalculateTokenSizes(
-  nodes: OSNode[],
-  charsPerToken: number = 4
-): Map<OSNode, number> {
-  const cache = new Map<OSNode, number>();
-  
-  function calculateSubtreeSize(node: OSNode): number {
-    if (cache.has(node)) return cache.get(node)!;
-    
-    let size = estimateNodeTokens(node, charsPerToken);
-    for (const child of node.children) {
-      size += calculateSubtreeSize(child);
-    }
-    
-    cache.set(node, size);
-    return size;
-  }
-  
-  for (const node of nodes) {
-    calculateSubtreeSize(node);
-  }
-  
-  return cache;
+export function estimateTokens(text: string, charsPerToken: number = 4): number {
+  validatePositiveNumber(charsPerToken, "charsPerToken");
+  return Math.ceil(text.length / charsPerToken);
 }
 
 interface PruneOptions {
   maxTokens: number;
   charsPerToken?: number;
+  pageUrl?: string;
 }
 
-/**
- * Score a subtree for priority-based pruning.
- * Interactive nodes (with IDs) get highest priority,
- * visible nodes get medium, the rest get low.
- */
-function scoreSubtree(node: OSNode): number {
-  if (node.tag === "#text") return 1;
-  let score = 0;
-  if (node.id) score += 100;
-  if (node.visible) score += 50;
-  if (node.text) score += 10;
-  for (const child of node.children) {
-    score += scoreSubtree(child);
+interface NodeMetrics {
+  ownSize: number;
+  totalSize: number;
+  interactiveCount: number;
+  visibleCount: number;
+  textLength: number;
+  hasNonInteractiveText: boolean;
+}
+
+interface FittedNode {
+  node: OSNode;
+  size: number;
+  hasNonInteractiveText: boolean;
+}
+
+interface FittedList {
+  nodes: OSNode[];
+  size: number;
+  collectibleText: boolean;
+}
+
+const STRUCTURAL_CONTAINERS = new Set([
+  "form",
+  "nav",
+  "table",
+  "main",
+  "header",
+  "footer",
+  "section",
+  "article",
+  "aside",
+  "dialog",
+]);
+
+function stateSize(node: OSNode): number {
+  let size = 0;
+  const struck =
+    node.attributes["disabled"] !== undefined ||
+    node.attributes["aria-disabled"] === "true" ||
+    node.state?.includes("disabled") ||
+    node.state?.includes("inert");
+  if (struck) size += 4;
+  else if (node.state?.includes("obscured")) size += 9;
+  if (node.attributes["aria-expanded"] === "true") size += 5;
+  else if (node.attributes["aria-expanded"] === "false") size += 7;
+  return size;
+}
+
+function escapedQuoteSize(text: string): number {
+  let size = 0;
+  for (const character of text) {
+    size += character === '"' ? 2 : character.length;
   }
-  return score || 1;
+  return size;
 }
 
-/**
- * Prune children of a single container node to fit a budget.
- * Used when top-level pruning can't help because the page is
- * dominated by one large container (e.g. a single <main>).
- * 
- * Uses pre-calculated token sizes for O(n log n) complexity instead of O(n²).
- */
-function pruneChildren(
+function escapedTextSize(text: string | undefined): number {
+  let size = 0;
+  for (const character of text ?? "") {
+    if (character === "&") size += 5;
+    else if (character === "<" || character === ">") size += 4;
+    else if (character === '"') size += 6;
+    else size += character.length;
+  }
+  return size;
+}
+
+/** Estimate only the characters contributed by this node, excluding children. */
+function estimateOwnSize(
   node: OSNode,
-  maxTokens: number,
-  charsPerToken: number
-): OSNode {
-  if (node.children.length === 0) return node;
+  depth = 0,
+  pageUrl?: string,
+  hasNonInteractiveText = Boolean(node.text?.trim())
+): number {
+  const idSize = node.id?.length ?? 0;
+  const attributes = node.attributes;
+  const indentation = node.tag === "list" ? 0 : depth * 2;
 
-  interface Scored {
-    node: OSNode;
-    score: number;
-    originalIndex: number;
-    tokenSize: number;
+  if (node.tag === "#text") return indentation + escapedTextSize(node.text) + 1;
+  if (node.tag === "truncated") {
+    return indentation + formatTruncation(attributes["count"] ?? "?").length + 1;
   }
-
-  // Pre-calculate token sizes for O(1) lookup
-  const tokenSizeMap = preCalculateTokenSizes(node.children, charsPerToken);
-
-  const scored: Scored[] = node.children.map((child, i) => ({
-    node: child,
-    score: scoreSubtree(child),
-    originalIndex: i,
-    tokenSize: tokenSizeMap.get(child) ?? estimateNodeTokens(child, charsPerToken),
-  }));
-
-  scored.sort((a, b) => b.score - a.score);
-
-  const kept: Scored[] = [];
-  let removedCount = 0;
-  let currentTokens = estimateNodeTokens(node, charsPerToken); // Base size of parent node
-
-  for (const item of scored) {
-    const tentativeSize = currentTokens + item.tokenSize;
-
-    if (tentativeSize <= maxTokens) {
-      kept.push(item);
-      currentTokens = tentativeSize;
-    } else {
-      removedCount++;
+  if (node.tag === "link") {
+    const href = attributes["href"];
+    const hrefSize = href ? compressUrl(href, pageUrl).length : 0;
+    const fallbackSize = hasNonInteractiveText
+      ? 0
+      : escapedTextSize(attributes["aria-label"] ?? attributes["title"]);
+    const targetSize = href && attributes["target"] === "_blank" ? 2 : 0;
+    return indentation + idSize + hrefSize + escapedTextSize(node.text) +
+      fallbackSize + targetSize + stateSize(node) + 8;
+  }
+  if (node.tag === "button") {
+    const fallbackSize = hasNonInteractiveText
+      ? 0
+      : escapedTextSize(attributes["aria-label"] ?? attributes["title"]);
+    return indentation + idSize + escapedTextSize(node.text) + fallbackSize +
+      stateSize(node) + 5;
+  }
+  if (node.tag === "input") {
+    let size = indentation + idSize + stateSize(node) + 2;
+    const type = attributes["type"];
+    const placeholder = attributes["placeholder"];
+    const value = attributes["value"];
+    if (type && type !== "text") size += type.length + 1;
+    if (placeholder) size += escapedQuoteSize(placeholder) + 2;
+    if (value) size += escapedQuoteSize(value) + 4;
+    for (const key of ["min", "max", "step", "pattern"]) {
+      const attribute = attributes[key];
+      if (attribute !== undefined) size += key.length + attribute.length + 2;
     }
+    for (const key of ["readonly", "required", "checked"]) {
+      if (attributes[key] !== undefined) size += key.length + 1;
+    }
+    return size;
   }
-
-  kept.sort((a, b) => a.originalIndex - b.originalIndex);
-  const children = kept.map((s) => s.node);
-
-  if (removedCount > 0) {
-    children.push({
-      tag: "truncated",
-      attributes: { count: String(removedCount) },
-      children: [],
-    });
+  if (node.tag === "select") {
+    return indentation + idSize + stateSize(node) + 10 +
+      (attributes["required"] !== undefined ? 9 : 0) +
+      (attributes["multiple"] !== undefined ? 9 : 0);
   }
-
-  return { ...node, children };
+  if (node.tag === "img") return indentation + (attributes["alt"]?.length ?? 0) + 8;
+  if (node.tag === "iframe") {
+    const src = attributes["src"];
+    const srcSize = src ? compressUrl(src, pageUrl).length + 14 : 0;
+    const emptySize = attributes["status"] === "inaccessible" ? 23 : 18;
+    return indentation + Math.max(srcSize, emptySize);
+  }
+  if (/^h[1-6]$/.test(node.tag) || node.tag === "heading") {
+    return indentation + escapedTextSize(node.text) + 5;
+  }
+  if (node.tag === "above" || node.tag === "below") {
+    return indentation + node.tag.length + (node.text?.length ?? 0) + 4;
+  }
+  if (STRUCTURAL_CONTAINERS.has(node.tag)) {
+    const ariaLabel = attributes["aria-label"];
+    const summary = node.text?.trim();
+    const descriptions = [ariaLabel, summary].filter(
+      (value, index, values): value is string =>
+        Boolean(value) && values.indexOf(value) === index
+    );
+    const descriptionSize = descriptions.length === 0
+      ? 0
+      : 2 + descriptions.reduce(
+        (size, description) => size + escapedTextSize(description),
+        0
+      ) + (descriptions.length - 1) * 3;
+    return indentation + node.tag.length + (idSize > 0 ? idSize + 1 : 0) +
+      descriptionSize + 1;
+  }
+  if (node.tag === "optgroup") {
+    const label = attributes["aria-label"] || attributes["label"];
+    return indentation + (label ? label.length + 2 : 0) +
+      escapedTextSize(node.text);
+  }
+  if (node.tag === "item") {
+    return indentation + escapedTextSize(node.text) +
+      (node.id ? idSize + 3 : 0) + 4;
+  }
+  if (node.tag === "option") {
+    const selected = attributes["selected"] !== undefined ||
+      attributes["aria-selected"] === "true";
+    return indentation + escapedTextSize(node.text) + (selected ? 2 : 0) + 4;
+  }
+  if (["list", "row", "cell", "label"].includes(node.tag)) {
+    return indentation + (node.text?.length ?? 0) + 4;
+  }
+  return indentation + escapedTextSize(node.text) + 1;
 }
 
-/**
- * Prune a list of OSNodes to fit within a token budget.
- * Removes lowest-priority top-level subtrees first,
- * then recurses into large containers if needed.
- * Returns a new array (does not mutate input).
- * 
- * Uses pre-calculated token sizes for O(n log n) complexity instead of O(n²).
- */
-export function pruneToFit(
-  nodes: OSNode[],
-  options: PruneOptions
-): OSNode[] {
-  const { maxTokens, charsPerToken = 4 } = options;
+function childDepth(node: OSNode, depth: number): number {
+  return STRUCTURAL_CONTAINERS.has(node.tag) ||
+    node.tag === "iframe" ||
+    node.tag === "select" ||
+    node.tag === "row" ||
+    node.tag === "cell" ||
+    node.tag === "label" ||
+    node.tag === "link" ||
+    node.tag === "button"
+    ? depth + 1
+    : depth;
+}
 
-  // Pre-calculate token sizes for O(1) lookup instead of O(n) serialization
-  const tokenSizeMap = preCalculateTokenSizes(nodes, charsPerToken);
-  
-  // Check if already under budget using pre-calculated sizes
-  const totalSize = nodes.reduce((sum, node) => sum + (tokenSizeMap.get(node) ?? 0), 0);
-  if (totalSize <= maxTokens) {
-    return nodes;
-  }
+function measureTree(nodes: OSNode[], pageUrl?: string): Map<OSNode, NodeMetrics> {
+  const metrics = new Map<OSNode, NodeMetrics>();
 
-  // Deep clone so we don't mutate input
-  // MED-007: Use fallback if structuredClone fails on complex objects
-  let remaining: OSNode[];
-  try {
-    remaining = structuredClone(nodes);
-  } catch {
-    remaining = deepCopyNodes(nodes);
-  }
-  const remainingTokenSizeMap = preCalculateTokenSizes(remaining, charsPerToken);
+  const measure = (node: OSNode, depth: number): NodeMetrics => {
+    let totalSize = 0;
+    let interactiveCount = node.id ? 1 : 0;
+    let visibleCount = node.visible ? 1 : 0;
+    let textLength = node.text?.length ?? 0;
+    let hasNonInteractiveText = node.tag === "truncated" ||
+      Boolean(node.text?.trim());
 
-  // Score each top-level subtree and attach pre-calculated token sizes
-  interface Scored {
-    node: OSNode;
-    score: number;
-    originalIndex: number;
-    tokenSize: number;
-  }
-
-  const scored: Scored[] = remaining.map((node, i) => ({
-    node,
-    score: scoreSubtree(node),
-    originalIndex: i,
-    tokenSize: remainingTokenSizeMap.get(node) ?? estimateNodeTokens(node, charsPerToken),
-  }));
-
-  // Sort by score descending — keep highest priority first
-  scored.sort((a, b) => b.score - a.score);
-
-  // Greedily add nodes until budget is exceeded (O(n) instead of O(n²))
-  const kept: Scored[] = [];
-  let removedCount = 0;
-  let currentTokens = 0;
-
-  for (const item of scored) {
-    const tentativeSize = currentTokens + item.tokenSize;
-
-    if (tentativeSize <= maxTokens) {
-      kept.push(item);
-      currentTokens = tentativeSize;
-    } else {
-      removedCount++;
-    }
-  }
-
-  // Restore original order
-  kept.sort((a, b) => a.originalIndex - b.originalIndex);
-  let result = kept.map((s) => s.node);
-
-  if (removedCount > 0) {
-    result.push({
-      tag: "truncated",
-      attributes: { count: String(removedCount) },
-      children: [],
-    });
-  }
-
-  // If still over budget after top-level pruning (e.g. one dominant container),
-  // recurse into the largest remaining container's children
-  const resultSize = result.reduce((sum, node) => {
-    const size = remainingTokenSizeMap.get(node) ?? estimateNodeTokens(node, charsPerToken);
-    return sum + size;
-  }, 0);
-  
-  if (resultSize > maxTokens) {
-    // Find the container with the most children to prune into
-    let largestIdx = -1;
-    let largestChildCount = 0;
-    for (let i = 0; i < result.length; i++) {
-      if (result[i].children.length > largestChildCount) {
-        largestChildCount = result[i].children.length;
-        largestIdx = i;
+    const nextDepth = childDepth(node, depth);
+    for (const child of node.children) {
+      const childMetrics = measure(child, nextDepth);
+      totalSize += childMetrics.totalSize;
+      interactiveCount += childMetrics.interactiveCount;
+      visibleCount += childMetrics.visibleCount;
+      textLength += childMetrics.textLength;
+      if (!child.id && childMetrics.hasNonInteractiveText) {
+        hasNonInteractiveText = true;
       }
     }
 
-    if (largestIdx >= 0 && largestChildCount > 1) {
-      result = result.map((node, i) =>
-        i === largestIdx ? pruneChildren(node, maxTokens, charsPerToken) : node
-      );
+    const ownSize = estimateOwnSize(node, depth, pageUrl, hasNonInteractiveText);
+    totalSize += ownSize;
+
+    const result = {
+      ownSize,
+      totalSize,
+      interactiveCount,
+      visibleCount,
+      textLength,
+      hasNonInteractiveText,
+    };
+    metrics.set(node, result);
+    return result;
+  };
+
+  for (const node of nodes) measure(node, 0);
+  return metrics;
+}
+
+function comparePriority(
+  left: { node: OSNode; index: number },
+  right: { node: OSNode; index: number },
+  metrics: Map<OSNode, NodeMetrics>
+): number {
+  const a = metrics.get(left.node)!;
+  const b = metrics.get(right.node)!;
+  const aInteractive = a.interactiveCount > 0 ? 1 : 0;
+  const bInteractive = b.interactiveCount > 0 ? 1 : 0;
+  if (aInteractive !== bInteractive) return bInteractive - aInteractive;
+
+  const aVisible = a.visibleCount > 0 ? 1 : 0;
+  const bVisible = b.visibleCount > 0 ? 1 : 0;
+  if (aVisible !== bVisible) return bVisible - aVisible;
+  if (a.interactiveCount !== b.interactiveCount) {
+    return b.interactiveCount - a.interactiveCount;
+  }
+  if (a.visibleCount !== b.visibleCount) return b.visibleCount - a.visibleCount;
+  if (a.textLength !== b.textLength) return a.textLength - b.textLength;
+  return left.index - right.index;
+}
+
+function truncationNode(count: number): OSNode {
+  return {
+    tag: "truncated",
+    attributes: { count: String(count) },
+    children: [],
+  };
+}
+
+function withoutFallbackLabels(node: OSNode): OSNode {
+  if (node.tag !== "link" && node.tag !== "button") return node;
+  const attributes = { ...node.attributes };
+  delete attributes["aria-label"];
+  delete attributes["title"];
+  return { ...node, attributes };
+}
+
+function fitInteractiveShell(
+  node: OSNode,
+  budget: number,
+  depth: number,
+  pageUrl?: string
+): FittedNode | undefined {
+  const usefulShell = withoutFallbackLabels({
+    ...node,
+    children: [],
+    text: undefined,
+  });
+  const usefulShellSize = estimateOwnSize(usefulShell, depth, pageUrl, false);
+  if (usefulShellSize <= budget) {
+    return {
+      node: usefulShell,
+      size: usefulShellSize,
+      hasNonInteractiveText: false,
+    };
+  }
+
+  const bareShell = { ...node, attributes: {}, children: [], text: undefined };
+  const bareShellSize = estimateOwnSize(bareShell, depth, pageUrl, false);
+  return bareShellSize <= budget
+    ? { node: bareShell, size: bareShellSize, hasNonInteractiveText: false }
+    : undefined;
+}
+
+function fitNode(
+  node: OSNode,
+  budget: number,
+  metrics: Map<OSNode, NodeMetrics>,
+  depth: number,
+  pageUrl?: string
+): FittedNode | undefined {
+  const measured = metrics.get(node)!;
+  if (measured.totalSize <= budget) {
+    return {
+      node,
+      size: measured.totalSize,
+      hasNonInteractiveText: measured.hasNonInteractiveText,
+    };
+  }
+  if (node.tag === "#text") {
+    const text = node.text ?? "";
+    const minimumSize = depth * 2 + escapedTextSize("...") + 1;
+    if (budget < minimumSize) return undefined;
+    const shortened = truncateGraphemes(text, budget, {
+      suffix: "...",
+      measure: escapedTextSize,
+      reservedSize: minimumSize,
+    });
+    const shortenedNode = { ...node, text: shortened };
+    return {
+      node: shortenedNode,
+      size: estimateOwnSize(shortenedNode, depth, pageUrl, true),
+      hasNonInteractiveText: Boolean(shortened.trim()),
+    };
+  }
+  if (node.children.length === 0) {
+    if (node.id) return fitInteractiveShell(node, budget, depth, pageUrl);
+    return undefined;
+  }
+
+  let base = node;
+  let ownSize = measured.ownSize;
+  if (ownSize > budget) {
+    base = withoutFallbackLabels({
+      ...node,
+      children: [],
+      text: undefined,
+    });
+    ownSize = estimateOwnSize(base, depth, pageUrl, false);
+    if (ownSize > budget) {
+      base = { ...node, attributes: {}, children: [], text: undefined };
+      ownSize = estimateOwnSize(base, depth, pageUrl, false);
+      if (ownSize > budget) return undefined;
     }
   }
 
-  return result;
+  const childResult = fitList(
+    node.children,
+    budget - ownSize,
+    metrics,
+    childDepth(node, depth),
+    pageUrl
+  );
+  if (childResult.nodes.length === 0) {
+    return node.id ? fitInteractiveShell(node, budget, depth, pageUrl) : undefined;
+  }
+
+  const hasNonInteractiveText = Boolean(base.text?.trim()) ||
+    childResult.collectibleText;
+  let fittedNode = { ...base, children: childResult.nodes };
+  ownSize = estimateOwnSize(
+    fittedNode,
+    depth,
+    pageUrl,
+    hasNonInteractiveText
+  );
+
+  if (ownSize + childResult.size > budget && !hasNonInteractiveText) {
+    fittedNode = withoutFallbackLabels(fittedNode);
+    ownSize = estimateOwnSize(fittedNode, depth, pageUrl, false);
+  }
+
+  return ownSize + childResult.size <= budget
+    ? {
+        node: fittedNode,
+        size: ownSize + childResult.size,
+        hasNonInteractiveText,
+      }
+    : node.id
+      ? fitInteractiveShell(node, budget, depth, pageUrl)
+      : undefined;
+}
+
+function fitList(
+  nodes: OSNode[],
+  budget: number,
+  metrics: Map<OSNode, NodeMetrics>,
+  depth: number,
+  pageUrl?: string
+): FittedList {
+  const totalSize = nodes.reduce(
+    (total, node) => total + metrics.get(node)!.totalSize,
+    0
+  );
+  if (totalSize <= budget) {
+    return {
+      nodes,
+      size: totalSize,
+      collectibleText: nodes.some(
+        (node) => !node.id && metrics.get(node)!.hasNonInteractiveText
+      ),
+    };
+  }
+
+  const largestMarker = truncationNode(nodes.length);
+  const markerSize = estimateOwnSize(largestMarker, depth, pageUrl, true);
+  const contentBudget = Math.max(0, budget - markerSize);
+  const candidates = nodes
+    .map((node, index) => ({ node, index }))
+    .sort((left, right) => comparePriority(left, right, metrics));
+  const kept: Array<{ index: number; fitted: FittedNode }> = [];
+  let usedSize = 0;
+  let removedCount = 0;
+
+  for (const candidate of candidates) {
+    const remaining = contentBudget - usedSize;
+    const measured = metrics.get(candidate.node)!;
+    let fitted: FittedNode | undefined;
+
+    if (measured.totalSize <= remaining) {
+      fitted = {
+        node: candidate.node,
+        size: measured.totalSize,
+        hasNonInteractiveText: measured.hasNonInteractiveText,
+      };
+    } else if (remaining > 0) {
+      fitted = fitNode(candidate.node, remaining, metrics, depth, pageUrl);
+    }
+
+    if (fitted) {
+      kept.push({ index: candidate.index, fitted });
+      usedSize += fitted.size;
+    } else {
+      removedCount++;
+    }
+  }
+
+  kept.sort((left, right) => left.index - right.index);
+  const result = kept.map(({ fitted }) => fitted.node);
+  let markerAdded = false;
+  if (removedCount > 0 && markerSize <= budget - usedSize) {
+    result.push(truncationNode(removedCount));
+    usedSize += markerSize;
+    markerAdded = true;
+  }
+  return {
+    nodes: result,
+    size: usedSize,
+    collectibleText: kept.some(
+      ({ fitted }) => !fitted.node.id && fitted.hasNonInteractiveText
+    ) || markerAdded,
+  };
+}
+
+/**
+ * Fit a tree to a token budget without mutating it. Unchanged subtrees retain
+ * their identity; only containers whose children are pruned are copied.
+ */
+export function pruneToFit(nodes: OSNode[], options: PruneOptions): OSNode[] {
+  const { maxTokens, charsPerToken = 4, pageUrl } = options;
+  validatePositiveNumber(maxTokens, "maxTokens");
+  validatePositiveNumber(charsPerToken, "charsPerToken");
+  const metrics = measureTree(nodes, pageUrl);
+  return fitList(nodes, maxTokens * charsPerToken, metrics, 0, pageUrl).nodes;
 }

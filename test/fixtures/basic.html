@@ -2,7 +2,10 @@
 <html>
 <head>
   <title>Test Page</title>
-  <style>body { font-family: sans-serif; }</style>
+  <style>
+    body { font-family: sans-serif; }
+    .computed-hidden { display: none; }
+  </style>
 </head>
 <body>
   <nav>
@@ -38,6 +41,9 @@
     <div aria-hidden="true">
       <span>Hidden content</span>
     </div>
+    <button class="computed-hidden">Computed hidden</button>
+    <button style="visibility: hidden">Inline hidden</button>
+    <button hidden>HTML hidden</button>
     <script>console.log('should be discarded');</script>
   </main>
 </body>

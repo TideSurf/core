@@ -10,16 +10,16 @@
         <title>TideSurf | Live pages as text for browser agents</title>
         <meta
             name="description"
-            content="TideSurf turns rendered Chromium pages into compact text with stable action IDs and local CDP control for LLM browser agents."
+            content="TideSurf gives agents a stateful Chromium CLI, compact page text, and snapshot-scoped action IDs."
         />
         <meta property="og:title" content="TideSurf | Live pages as text for browser agents" />
-        <meta property="og:description" content="Compact DOM text, stable action IDs, and local CDP control for LLM browser agents." />
+        <meta property="og:description" content="Stateful Chromium sessions, compact DOM text, and current action IDs for browser agents." />
         <meta property="og:image" content="https://tidesurf.org/og.png" />
         <meta property="og:url" content="https://tidesurf.org" />
         <meta property="og:type" content="website" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="TideSurf | Live pages as text for browser agents" />
-        <meta name="twitter:description" content="Compact DOM text, stable action IDs, and local CDP control for LLM browser agents." />
+        <meta name="twitter:description" content="Stateful Chromium sessions, compact DOM text, and current action IDs for browser agents." />
         <meta name="twitter:image" content="https://tidesurf.org/og.png" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -52,12 +52,12 @@
         <main id="main" class="page">
             <section class="hero" aria-labelledby="hero-title">
                 <h1 id="hero-title">The live page.<br /><span>Agents surfing.</span></h1>
-                <p class="hero-lede">TideSurf turns live Chromium into compact, model-readable text. Each usable element keeps a short handle tied to the real page.</p>
+                <p class="hero-lede">Run browser tools from the shell. TideSurf keeps Chromium state between commands and turns the live DOM into compact text with current action handles.</p>
                 <div class="hero-actions" aria-label="Primary actions">
                     <div class="install">
                         <span class="prompt" aria-hidden="true">$</span>
-                        <code id="install-command-text">bun add @tidesurf/core</code>
-                        <button type="button" class="copy-btn patch-control" id="install-copy-btn" data-copy="bun add @tidesurf/core" aria-label="Copy install command">
+                        <code id="install-command-text">bunx @tidesurf/core navigate https://example.com</code>
+                        <button type="button" class="copy-btn patch-control" id="install-copy-btn" data-copy="bunx @tidesurf/core navigate https://example.com" aria-label="Copy CLI command">
                             <svg class="icon-copy" viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M3.5 10.5H3a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1h6.5a1 1 0 0 1 1 1v.5"/></svg>
                             <svg class="icon-check" viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6.5"/></svg>
                         </button>
@@ -95,10 +95,10 @@
                     </div>
 
                     <div class="specimen-shift" aria-label="Compression evidence">
-                        <span class="tokens-before">84,236</span>
-                        <span class="shift-word">tokens become</span>
-                        <strong>2,593</strong>
-                        <small>on a real GitHub issues page</small>
+                        <span class="tokens-before">5,348</span>
+                        <span class="shift-word">fixture tokens become</span>
+                        <strong>446</strong>
+                        <small>in the deterministic e-commerce benchmark</small>
                     </div>
 
                     <div class="specimen-pane output-pane">
@@ -107,7 +107,8 @@
                             <span>after</span>
                         </div>
                         <pre><code># Example Search
-&gt; example.com/search
+&gt; example.com/search | 0/1200 800vh
+
 NAV
   <span class="handle">[L1]</span>(/) Home
   <span class="handle">[L2]</span>(/about) About
@@ -163,7 +164,7 @@ FORM F1
                     </div>
                     <div>
                         <dt><span style="--row-color: var(--c-rust)">act</span></dt>
-                        <dd>Click, type, select, scroll, upload, download, and evaluate through stable IDs.</dd>
+                        <dd>Current IDs drive click, type, select, upload, and download. Scroll and page JavaScript stay explicit.</dd>
                     </div>
                     <div>
                         <dt><span style="--row-color: var(--c-green)">guard</span></dt>
@@ -171,7 +172,7 @@ FORM F1
                     </div>
                     <div>
                         <dt><span style="--row-color: var(--c-gold)">connect</span></dt>
-                        <dd>Launch Chromium, attach to a live session, or serve the runtime through MCP.</dd>
+                        <dd>Run 18 CLI tools in named sessions, launch Chromium, attach to an endpoint, or use MCP.</dd>
                     </div>
                 </dl>
             </section>

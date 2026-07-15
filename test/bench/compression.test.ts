@@ -31,7 +31,33 @@ interface BenchResult {
   interactiveElements: number;
 }
 
+interface CompressionExpectations {
+  schemaVersion: number;
+  fixtures: Array<{
+    name: "ecommerce" | "news";
+    label: string;
+    sourceHtmlTokens: number;
+    renderedDomTokens: number;
+    tideSurfTokens: number;
+  }>;
+  tokenBudget: {
+    fixture: "ecommerce" | "news";
+    maxTokens: number;
+    fullTokens: number;
+    budgetedTokens: number;
+  };
+}
+
 const results: BenchResult[] = [];
+const expectations = JSON.parse(
+  await readFile(join(fixturesDir, "compression-expectations.json"), "utf8")
+) as CompressionExpectations;
+if (expectations.schemaVersion !== 1) {
+  throw new Error(`Unsupported compression snapshot schema: ${expectations.schemaVersion}`);
+}
+const expectedFixtures = new Map(
+  expectations.fixtures.map((fixture) => [fixture.name, fixture])
+);
 
 function countInteractiveIds(content: string): number {
   const matches = content.match(/\b[LBISTFD]\d+\b/g);
@@ -41,9 +67,10 @@ function countInteractiveIds(content: string): number {
 async function canLaunchBrowser(): Promise<boolean> {
   let browser: TideSurf | null = null;
   try {
-    browser = await TideSurf.launch({ headless: true, port: 9554 });
+    browser = await TideSurf.launch({ headless: true });
     return true;
-  } catch {
+  } catch (error) {
+    if (process.env["CHROME_PATH"]) throw error;
     return false;
   } finally {
     await browser?.close().catch(() => {});
@@ -212,6 +239,15 @@ describeBench("Compression benchmarks", () => {
       // Assertions
       expect(sourceHtmlTokens / osTokens).toBeGreaterThan(1);
       expect(interactiveElements).toBeGreaterThan(0);
+      if (page.name === "ecommerce" || page.name === "news") {
+        const expected = expectedFixtures.get(page.name);
+        if (!expected) throw new Error(`Missing benchmark expectation: ${page.name}`);
+        expect({ sourceHtmlTokens, renderedDomTokens, tideSurfTokens: osTokens }).toEqual({
+          sourceHtmlTokens: expected.sourceHtmlTokens,
+          renderedDomTokens: expected.renderedDomTokens,
+          tideSurfTokens: expected.tideSurfTokens,
+        });
+      }
 
       // Verify no data/style/script noise leaked
       expect(state.content).not.toContain("data-tracking");
@@ -223,23 +259,28 @@ describeBench("Compression benchmarks", () => {
     }, 15000);
   }
 
-  it("token budget: ecommerce within 300 tokens", async () => {
-    await surfing.navigate(fixtureUrls["bench-ecommerce.html"]);
+  it("token budget matches the deterministic snapshot", async () => {
+    const expected = expectations.tokenBudget;
+    const fixture = pages.find((page) => page.name === expected.fixture);
+    if (!fixture) throw new Error(`Missing benchmark fixture: ${expected.fixture}`);
+    await surfing.navigate(fixtureUrls[fixture.file]);
 
     const full = await surfing.getState();
-    const budgeted = await surfing.getState({ maxTokens: 300 });
+    const budgeted = await surfing.getState({ maxTokens: expected.maxTokens });
 
     const fullTokens = estimateTokens(full.content);
     const budgetedTokens = estimateTokens(budgeted.content);
 
     console.log(
-      `\n  Token budget: ${fullTokens} tok → ${budgetedTokens} tok (budget: 300)`
+      `\n  Token budget: ${fullTokens} tok → ${budgetedTokens} tok (budget: ${expected.maxTokens})`
     );
 
-    expect(budgetedTokens).toBeLessThanOrEqual(350); // approximate
+    expect({ fullTokens, budgetedTokens }).toEqual({
+      fullTokens: expected.fullTokens,
+      budgetedTokens: expected.budgetedTokens,
+    });
     expect(budgeted.content).toContain("# ");
     expect(countInteractiveIds(budgeted.content)).toBeGreaterThan(0);
-    // Should have truncated indicator
     expect(budgeted.content).toContain("truncated");
   }, 15000);
 

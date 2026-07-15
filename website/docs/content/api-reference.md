@@ -1,8 +1,6 @@
 # API reference
 
-## TideSurf
-
-Manages browser lifecycle, tabs, state, and page operations.
+## TideSurf lifecycle
 
 ### `TideSurf.launch(options?)`
 
@@ -10,20 +8,23 @@ Manages browser lifecycle, tabs, state, and page operations.
 static launch(options?: TideSurfOptions): Promise<TideSurf>
 ```
 
-Launches Chrome, connects through CDP, and returns a ready `TideSurf` instance. Connection failures retry up to 3 times.
-
-**Options:**
+Starts Chromium, connects through CDP, and returns a ready instance. TideSurf owns the process and cleans it up in `close()`. The default temporary profile is isolated; `userDataDir` selects another profile. Launch never attaches to an existing browser.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `headless` | `boolean` | `true` | Run Chrome in headless mode |
-| `chromePath` | `string` | auto-detect | Path to Chrome executable |
-| `port` | `number` | `9222` | Chrome DevTools Protocol port |
-| `userDataDir` | `string` | temp profile | Override the Chrome user data directory |
-| `defaultViewport` | `{ width: number; height: number }` | browser default | Viewport size to apply to the connected tab |
-| `timeout` | `number` | `10000` | CDP connection timeout in milliseconds |
-| `readOnly` | `boolean` | `false` | Disable mutating and sensitive tools, including `evaluate` and `clipboard_read` |
-| `fileAccessRoots` | `string[]` | `[cwd, tmpdir]` | Allowed host filesystem roots for `upload` and `download` |
+| `headless` | `boolean` | `true` | Use headless Chromium |
+| `chromePath` | `string` | auto-detect | Explicit executable path |
+| `channel` | `ChromeChannel` | first found | Select stable, Beta, Dev, Canary, or Chromium |
+| `port` | `number` | ephemeral | Fixed CDP port; explicit collisions fail |
+| `userDataDir` | `string` | temporary | Browser profile directory |
+| `defaultViewport` | `{ width; height }` | browser default | Apply a viewport to connected tabs |
+| `timeout` | `number` | operation default | Override startup and CDP timeouts in milliseconds |
+| `readOnly` | `boolean` | `false` | Reject navigation, interaction, evaluation, clipboard, upload/download, and tab creation/closure |
+| `fileAccessRoots` | `string[]` | working directory and OS temp | Allowed upload/download roots; `[]` disables file access |
+| `allowLocalhost` | `boolean` | `false` | Permit loopback URLs |
+| `allowPrivateHosts` | `boolean` | `false` | Permit private and link-local URLs, including loopback |
+
+Executable resolution checks `chromePath`, `CHROME_PATH`, `PATH`, then platform install locations. The default channel order is stable, Beta, Dev, Canary, Chromium.
 
 ### `TideSurf.connect(options?)`
 
@@ -31,22 +32,28 @@ Launches Chrome, connects through CDP, and returns a ready `TideSurf` instance. 
 static connect(options?: TideSurfConnectOptions): Promise<TideSurf>
 ```
 
-Connects to a running Chrome instance through CDP. TideSurf does not own that process; `close()` only disconnects.
-
-Requires Chrome to have remote debugging enabled (Chrome 144+: `chrome://inspect#remote-debugging`, or launch with `--remote-debugging-port`).
-
-**Options:**
+Attaches to an existing CDP endpoint. Connect never launches a browser. `close()` disconnects without stopping the external process.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `port` | `number` | `9222` | CDP port to connect to |
-| `host` | `string` | `"localhost"` | CDP host to connect to |
-| `timeout` | `number` | `10000` | Connection timeout in milliseconds |
-| `defaultViewport` | `{ width: number; height: number }` | browser default | Viewport size to apply to the connected tab |
-| `readOnly` | `boolean` | `false` | Disable mutating and sensitive tools, including `evaluate` and `clipboard_read` |
-| `fileAccessRoots` | `string[]` | `[cwd, tmpdir]` | Allowed host filesystem roots for `upload` and `download` |
+| `host` | `string` | `"localhost"` | CDP host |
+| `port` | `number` | `9222` | CDP port |
+| `defaultViewport` | `{ width; height }` | browser default | Apply a viewport to connected tabs |
+| `timeout` | `number` | operation default | Override connection and CDP timeouts in milliseconds |
+| `readOnly` | `boolean` | `false` | Enforce the read-only policy |
+| `fileAccessRoots` | `string[]` | working directory and OS temp | Allowed upload/download roots; `[]` disables file access |
+| `allowLocalhost` | `boolean` | `false` | Permit loopback URLs |
+| `allowPrivateHosts` | `boolean` | `false` | Permit private and link-local URLs |
 
-**Throws:** `CDPConnectionError` for a missing Chrome instance on the target port, with remote-debugging setup guidance.
+### `close()`
+
+```typescript
+close(): Promise<void>
+```
+
+Closes CDP sessions and, for launched instances, waits for the owned browser to exit before removing its temporary profile. Concurrent and repeated calls share one shutdown operation.
+
+## Browser state
 
 ### `navigate(url)`
 
@@ -54,7 +61,7 @@ Requires Chrome to have remote debugging enabled (Chrome 144+: `chrome://inspect
 navigate(url: string): Promise<void>
 ```
 
-Navigates the active tab and waits for load. An unreachable URL throws `NavigationError`; an invalid URL throws `ValidationError`.
+Navigates the active tab and waits for load. URL policy applies before navigation. Read-only instances throw `ReadOnlyError`.
 
 ### `getState(options?)`
 
@@ -62,112 +69,16 @@ Navigates the active tab and waits for load. An unreachable URL throws `Navigati
 getState(options?: GetStateOptions): Promise<PageState>
 ```
 
-Returns the compressed text representation of the active tab's DOM. The returned `PageState` object contains a `content` property with the compressed page content (`.xml` is a deprecated alias).
-
-**Options:**
+Returns compact text and the matching in-memory ID map.
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `maxTokens` | `number` | unlimited | Maximum token budget for the output |
-| `viewport` | `boolean` | `true` | Only include elements visible in the current viewport |
-| `mode` | `"full" \| "minimal" \| "interactive"` | `"full"` | Output filtering mode |
-| `includeHidden` | `boolean` | `false` | Include elements hidden by CSS (opacity:0, visibility:hidden, display:none). Useful for debugging. |
+| `maxTokens` | `number` | unlimited | Prune lower-value content to a token estimate |
+| `viewport` | `boolean` | `true` | Limit normal output to the current viewport |
+| `mode` | `"full" \| "minimal" \| "interactive"` | `"full"` | Select detail level |
+| `includeHidden` | `boolean` | `false` | Include hidden nodes and disable viewport filtering |
 
-Modes compose. `getState({ viewport: true, mode: "interactive", maxTokens: 200 })` keeps visible controls within 200 tokens.
-
-Each internal `OSNode` carries runtime state such as `disabled`, `inert`, `obscured`, `checked`, `required`, `readonly`, and `aria-expanded`. Serialization turns these into `~~strikethrough~~`, `open`, `closed`, and other inline markers described in [Page format](#page-format).
-
-## Types
-
-### `PageState`
-
-```typescript
-interface PageState {
-  url: string;           // Current page URL
-  title: string;         // Page title
-  content: string;       // Compressed DOM representation (primary field)
-  xml: string;          // @deprecated Alias for content
-  nodeMap: Map<string, number>;  // Maps TideSurf IDs to CDP backendNodeIds
-}
-```
-
-### `GetStateOptions`
-
-```typescript
-interface GetStateOptions {
-  maxTokens?: number;                    // Token budget for output
-  viewport?: boolean;                     // Only include visible elements (default: true)
-  mode?: "full" | "minimal" | "interactive";  // Output filtering mode
-  includeHidden?: boolean;                // Include CSS-hidden elements
-}
-```
-
-### `TabInfo`
-
-```typescript
-interface TabInfo {
-  id: string;     // CDP target ID
-  url: string;    // Tab URL
-  title: string;  // Tab title
-  type: string;   // Always "page" for regular tabs
-}
-```
-
-### `ScrollPosition`
-
-```typescript
-interface ScrollPosition {
-  scrollY: number;         // Current vertical scroll position
-  scrollHeight: number;   // Total scrollable height
-  viewportHeight: number; // Visible viewport height
-}
-```
-
-### `SearchResult`
-
-```typescript
-interface SearchResult {
-  text: string;       // Surrounding text context
-  tag: string;        // HTML tag name
-  index: number;      // Match index (1-based)
-  elementId?: string; // Nearest interactive TideSurf ID
-}
-```
-
-### `DownloadResult`
-
-```typescript
-interface DownloadResult {
-  filePath: string;   // Absolute path to downloaded file
-  fileName: string;   // Original file name
-  totalBytes: number; // File size in bytes
-}
-```
-
-## Tool response formats
-
-The executor and MCP wrap tool responses; direct SDK methods return these values:
-
-| Tool | Return Type | Description |
-|------|-------------|-------------|
-| `get_state` | `PageState` | Full page state with content, url, title, nodeMap |
-| `navigate` | `void` | Throws on failure, use `get_state` after to see result |
-| `click` | `void` | Throws on failure, page may navigate or update |
-| `type` | `void` | Throws on failure |
-| `select` | `void` | Throws on failure |
-| `scroll` | `void` | Throws on failure |
-| `extract` | `string` | Extracted text content |
-| `evaluate` | `unknown` | JavaScript evaluation result (serialized to string in MCP) |
-| `list_tabs` | `TabInfo[]` | Array of tab information |
-| `new_tab` | `TabInfo` | Created tab information |
-| `switch_tab` | `void` | Throws on failure |
-| `close_tab` | `void` | Throws on failure |
-| `search` | `SearchResult[]` | Array of search matches |
-| `screenshot` | `string` | Base64-encoded PNG image |
-| `upload` | `void` | Throws on failure |
-| `clipboard_read` | `string` | Clipboard text content |
-| `clipboard_write` | `void` | Throws on failure |
-| `download` | `DownloadResult` | Download file information |
+`includeHidden: true` is a full-DOM debugging override. It wins over `viewport: true`.
 
 ### `getPage()`
 
@@ -175,15 +86,17 @@ The executor and MCP wrap tool responses; direct SDK methods return these values
 getPage(): SurfingPage
 ```
 
-Returns the active tab's `SurfingPage` for element-level actions.
+Returns the active page API. The returned page inherits URL, filesystem, and read-only policy. It cannot bypass `readOnly`.
 
 ### `getToolExecutor()`
 
 ```typescript
-getToolExecutor(): (tool: { name: string; input: Record<string, unknown> }) => Promise<ToolResult>
+getToolExecutor(): (
+  call: { name: string; input: Record<string, unknown> }
+) => Promise<ToolResult>
 ```
 
-Returns a named-tool executor for LLM agent loops.
+Returns the executor generated from the canonical tool registry.
 
 ### `getToolDefinitions()`
 
@@ -191,21 +104,38 @@ Returns a named-tool executor for LLM agent loops.
 getToolDefinitions(): ToolDefinition[]
 ```
 
-Returns 18 function-calling schemas for the model's tool parameter.
+Returns definitions allowed by this instance. Read-only instances return only the six observation tools. The package-level `getToolDefinitions({ readOnly? })` returns definitions without creating a browser.
 
-### Tab management
+### `isReadOnly()`
 
 ```typescript
-listTabs(): Promise<TabInfo[]>          // List all open tabs
-newTab(url?: string): Promise<TabInfo>  // Open a new tab
-switchTab(tabId: string): Promise<void> // Switch active tab
-closeTab(tabId: string): Promise<void>  // Close a tab
-close(): Promise<void>                  // Shut down browser
+isReadOnly(): boolean
 ```
+
+Reports the immutable instance policy.
+
+## Tab management
+
+```typescript
+listTabs(): Promise<TabInfo[]>
+newTab(url?: string): Promise<TabInfo>
+switchTab(tabId: string): Promise<void>
+closeTab(tabId: string): Promise<void>
+```
+
+Each tab keeps its own page connection and ID map. `newTab()` activates the created tab. `switchTab()` remains available in read-only mode. `newTab()` and `closeTab()` throw `ReadOnlyError` there.
 
 ## SurfingPage
 
-Provides page-level actions through `browser.getPage()`.
+Every mutating method enforces read-only policy before CDP execution.
+
+### `getState(options?)`
+
+```typescript
+getState(options?: GetStateOptions): Promise<PageState>
+```
+
+Reads this page with the same viewport, mode, hidden-node, and token-target options as `TideSurf.getState()`.
 
 ### `click(id)`
 
@@ -213,7 +143,7 @@ Provides page-level actions through `browser.getPage()`.
 click(id: string): Promise<void>
 ```
 
-Clicks a TideSurf ID such as `"B1"` or `"L3"`. A missing current-DOM ID throws `ElementNotFoundError`.
+Resolves one current TideSurf ID and clicks it. A stale or missing ID throws `ElementNotFoundError`. Other CDP failures keep their original error type.
 
 ### `type(id, text, clear?)`
 
@@ -221,7 +151,7 @@ Clicks a TideSurf ID such as `"B1"` or `"L3"`. A missing current-DOM ID throws `
 type(id: string, text: string, clear?: boolean): Promise<void>
 ```
 
-Types into an input or textarea. `clear: true` replaces its value; the default appends.
+Types into a text-editable input, textarea, or contenteditable element. `clear: true` replaces the current value.
 
 ### `select(id, value)`
 
@@ -229,7 +159,7 @@ Types into an input or textarea. `clear: true` replaces its value; the default a
 select(id: string, value: string): Promise<void>
 ```
 
-Selects an option in a dropdown (`<select>`) element by its value attribute.
+Selects an option by its value.
 
 ### `scroll(direction, amount?)`
 
@@ -237,7 +167,15 @@ Selects an option in a dropdown (`<select>`) element by its value attribute.
 scroll(direction: "up" | "down", amount?: number): Promise<void>
 ```
 
-Scrolls the page in the given direction. The `amount` parameter is measured in pixels (defaults to `500`).
+Scrolls by pixels. The default amount is `500`.
+
+### `waitForStable(timeout?)`
+
+```typescript
+waitForStable(timeout?: number): Promise<void>
+```
+
+Waits for this page to reach its DOM-mutation quiet window or hard deadline. Concurrent calls use independent observers.
 
 ### `extract(selector)`
 
@@ -245,7 +183,7 @@ Scrolls the page in the given direction. The `amount` parameter is measured in p
 extract(selector: string): Promise<string>
 ```
 
-Extracts text from elements matching a CSS selector, including content outside compressed state.
+Returns text from the first element matching a CSS selector. This observation method remains available in read-only mode.
 
 ### `navigate(url)`
 
@@ -253,7 +191,7 @@ Extracts text from elements matching a CSS selector, including content outside c
 navigate(url: string): Promise<void>
 ```
 
-Navigates the current page to a new URL. Equivalent to calling `browser.navigate()` but scoped to this page instance.
+Navigates this page under the instance URL policy.
 
 ### `evaluate(expression)`
 
@@ -261,7 +199,7 @@ Navigates the current page to a new URL. Equivalent to calling `browser.navigate
 evaluate(expression: string): Promise<unknown>
 ```
 
-Executes JavaScript in the page context and returns its result. This bypasses TideSurf's structured interaction model and needs DevTools-level caution. Read-only sessions omit `evaluate`.
+Runs arbitrary JavaScript in the page context. TideSurf validates the input type and size. It does not sandbox JavaScript or restrict page capabilities. CDP `unserializableValue` results such as `NaN`, infinity, negative zero, and bigint are returned as JSON-safe strings. Read-only mode rejects this method.
 
 ### `search(query, maxResults?)`
 
@@ -269,7 +207,7 @@ Executes JavaScript in the page context and returns its result. This bypasses Ti
 search(query: string, maxResults?: number): Promise<SearchResult[]>
 ```
 
-Finds text case-insensitively. Returns up to `maxResults` matches (default 10), surrounding context, and an available nearest interactive ID.
+Finds case-insensitive page text and returns snippets with a nearby current interactive ID when one exists.
 
 ### `screenshot(options?)`
 
@@ -277,7 +215,7 @@ Finds text case-insensitively. Returns up to `maxResults` matches (default 10), 
 screenshot(options?: ScreenshotOptions): Promise<string>
 ```
 
-Captures a PNG screenshot. Returns a base64-encoded string. Options: `elementId` to capture a specific element, `fullPage` to capture the entire scrollable page.
+Returns base64 PNG. `elementId` captures one element; `fullPage` captures the scrollable page; the default captures the viewport.
 
 ### `upload(id, filePaths)`
 
@@ -285,57 +223,140 @@ Captures a PNG screenshot. Returns a base64-encoded string. Options: `elementId`
 upload(id: string, filePaths: string[]): Promise<void>
 ```
 
-Sets files on a `<input type="file">` element via CDP. The tool wrapper version accepts a single `filePath` string and passes it through to this method. Uploads are confined to `fileAccessRoots`, which default to the current working directory and the OS temp directory.
+Sets files on a file input. Every path must resolve inside `fileAccessRoots`.
 
-### `clipboardRead()`
+Omitting `fileAccessRoots` allows the working directory and OS temporary directory. Passing `fileAccessRoots: []` disables SDK uploads and downloads.
+
+### Clipboard
 
 ```typescript
 clipboardRead(): Promise<string>
-```
-
-Reads the current clipboard text content.
-
-Read-only sessions do not expose this method.
-
-### `clipboardWrite(text)`
-
-```typescript
 clipboardWrite(text: string): Promise<void>
 ```
 
-Writes text to the system clipboard.
+Reads or writes clipboard text. Both operations are unavailable in read-only mode.
 
 ### `download(id, options?)`
 
 ```typescript
-download(id: string, options?: { downloadDir?: string; timeout?: number }): Promise<DownloadResult>
+download(
+  id: string,
+  options?: { downloadDir?: string; timeout?: number }
+): Promise<DownloadResult>
 ```
 
-Clicks a download link/button and waits for the file to download. Returns the file path, name, and size. Custom `downloadDir` paths must stay inside `fileAccessRoots`, which default to the current working directory and the OS temp directory.
+Clicks one current element and waits for its file. The destination must resolve inside `fileAccessRoots`. A page accepts one active download operation at a time.
 
-## Tool definitions
+### `close()`
 
-`getToolDefinitions()` returns 18 provider-neutral tools mapped to the methods above.
+```typescript
+close(): Promise<void>
+```
 
-The `get_state` tool description informs the LLM that elements in `~~strikethrough~~` are disabled or inert and should not be passed to interaction tools like `click`, `type`, or `select`.
+Disconnects this page CDP client. Normal callers should close the owning `TideSurf` instance instead.
 
-| Tool | Parameters | Description |
-|---|---|---|
-| `get_state` | `maxTokens?`, `viewport?`, `mode?`, `includeHidden?` | Get the compressed page state |
-| `navigate` | `url` | Navigate to a URL |
-| `click` | `id` | Click an element by its TideSurf ID |
-| `type` | `id`, `text`, `clear?` | Type text into an input field |
-| `select` | `id`, `value` | Select an option from a dropdown |
-| `scroll` | `direction`, `amount?` | Scroll the page up or down |
-| `extract` | `selector` | Extract text content via CSS selector |
-| `evaluate` | `expression` | Execute JavaScript in the page |
-| `list_tabs` | none | List all open browser tabs |
-| `new_tab` | `url?` | Open a new tab |
-| `switch_tab` | `tabId` | Switch to a different tab |
-| `close_tab` | `tabId` | Close a tab |
-| `search` | `query`, `maxResults?` | Find text snippets on the page with nearest interactive IDs |
-| `screenshot` | `elementId?`, `fullPage?` | Capture a PNG screenshot |
-| `upload` | `id`, `filePath` | Set a file on a file input |
-| `clipboard_read` | none | Read clipboard text |
-| `clipboard_write` | `text` | Write text to clipboard |
-| `download` | `id`, `downloadDir?`, `timeout?` | Download a file |
+## Public types
+
+### `ChromeChannel`
+
+```typescript
+type ChromeChannel = "stable" | "beta" | "dev" | "canary" | "chromium";
+```
+
+### `PageState`
+
+```typescript
+interface PageState {
+  url: string;
+  title: string;
+  content: string;
+  /** @deprecated Use content. */
+  xml: string;
+  nodeMap: Map<string, number>;
+}
+```
+
+### `TabInfo`
+
+```typescript
+interface TabInfo {
+  id: string;
+  url: string;
+  title: string;
+  type: string;
+}
+```
+
+### `SearchResult`
+
+```typescript
+interface SearchResult {
+  text: string;
+  tag: string;
+  index: number;
+  elementId?: string;
+}
+```
+
+### `DownloadResult`
+
+```typescript
+interface DownloadResult {
+  filePath: string;
+  fileName: string;
+  totalBytes: number;
+}
+```
+
+### `ToolResult`
+
+```typescript
+interface ToolResult {
+  success: boolean;
+  data?: unknown;
+  error?: string;
+  errorType?: string;
+  stack?: string;
+}
+```
+
+## Canonical tools
+
+One registry supplies SDK definitions, executor dispatch, CLI parsing/help, MCP registration, read-only gating, and unknown-tool messages.
+
+| Tool | Input | CLI | Read-only |
+|---|---|---|---|
+| `get_state` | `maxTokens?`, `viewport?`, `mode?`, `includeHidden?` | `get-state` | yes |
+| `navigate` | `url` | `navigate` | no |
+| `click` | `id` | `click` | no |
+| `type` | `id`, `text`, `clear?` | `type` | no |
+| `select` | `id`, `value` | `select` | no |
+| `scroll` | `direction`, `amount?` | `scroll` | no |
+| `extract` | `selector` | `extract` | yes |
+| `evaluate` | `expression` | `evaluate` | no |
+| `list_tabs` | none | `list-tabs` | yes |
+| `new_tab` | `url?` | `new-tab` | no |
+| `switch_tab` | `tabId` | `switch-tab` | yes |
+| `close_tab` | `tabId` | `close-tab` | no |
+| `search` | `query`, `maxResults?` | `search` | yes |
+| `screenshot` | `elementId?`, `fullPage?` | `screenshot` | yes |
+| `upload` | `id`, `filePath` | `upload` | no |
+| `clipboard_read` | none | `clipboard-read` | no |
+| `clipboard_write` | `text` | `clipboard-write` | no |
+| `download` | `id`, `downloadDir?`, `timeout?` | `download` | no |
+
+CLI underscore aliases match tool names. MCP also registers `launch_browser` as a compatibility lifecycle tool; it is not one of the 18 registry tools.
+
+The executor returns page text for state-oriented actions, formatted values for structured tools, and base64 PNG for `screenshot`. The CLI and MCP adapters convert those values for their transports.
+
+## Public helpers
+
+The package also exports:
+
+- `discoverBrowser(options?)` for strict discovery of an existing CDP page target
+- `validateUrl`, `validateSelector`, `validateExpression`, `validateElementId`, `validatePort`, and `validateFilePath`
+- `withTimeout` for bounded operations and `withRetry` as an exported retry utility
+- `estimateTokens(text, charsPerToken?)` and `pruneToFit(nodes, options)` for parser integrations
+- `TabManager` for low-level CDP tab management
+
+These are library helpers, not CLI or MCP tools. `discoverBrowser()` does not launch Chromium.

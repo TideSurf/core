@@ -1,23 +1,64 @@
 # Getting started
 
-TideSurf connects Chromium to LLM agents. It turns the live DOM into compact, model-readable text and sends model actions back through the Chrome DevTools Protocol. Thanks to [SaltyAom](https://github.com/SaltyAom) and [ElysiaJS](https://elysiajs.com).
+TideSurf gives agents a stateful Chromium CLI and a compact view of the live DOM. It also exposes the same 18 tools through the SDK executor and MCP.
 
-## Prerequisites
+## Requirements
 
-Install a Chromium-based browser and use Bun or Node.js 18+. TideSurf finds common Chrome and Chromium installs automatically. Set `CHROME_PATH` or pass `chromePath` to use another binary.
+Use Node.js 18+ or Bun 1+. Install Chrome stable, Beta, Dev, Canary, or Chromium. TideSurf finds supported installs automatically and never downloads a browser.
 
-## Installation
+## Start with the CLI
+
+Run a tool command through the package binary:
+
+```bash
+bunx @tidesurf/core navigate https://example.com
+bunx @tidesurf/core get-state
+```
+
+The first command starts a private local session and a managed headless browser. The second command connects to that session. The latest snapshot ID map, open tabs, and active tab stay in memory between shell calls. Read fresh state after the page changes.
+
+Act with an ID from `get-state`:
+
+```bash
+bunx @tidesurf/core click L1
+bunx @tidesurf/core get-state --mode interactive --max-tokens 500
+bunx @tidesurf/core stop
+```
+
+The default session is named `default`. Use a name to isolate work:
+
+```bash
+bunx @tidesurf/core --session checkout navigate https://example.com/shop
+bunx @tidesurf/core --session checkout get-state
+```
+
+`stop` is idempotent. Sessions do not stop while idle. [CLI](#cli) covers every command, startup policy, output mode, and exit code.
+
+## Read page output
+
+TideSurf removes scripts, styles, presentational wrappers, and decorative DOM. It keeps visible copy, semantic structure, control state, and actionable IDs:
+
+```text
+# Example Search
+> example.com/search | 0/1200 800vh
+
+NAV
+  [L1](/) Home
+FORM F1
+  I1 ~Search... ="TideSurf"
+  [B1] Search
+```
+
+`B1` identifies the current Search button. Read fresh state after a navigation or dynamic update. Do not guess a new ID when an old one becomes stale. [Page format](#page-format) documents the representation.
+
+Viewport filtering is active by default. Use `--full-page` for all visible page content. Use `--include-hidden` only for full-DOM debugging; it includes hidden nodes and disables viewport filtering.
+
+## Install the SDK
 
 ```bash
 bun add @tidesurf/core
 # or: npm install @tidesurf/core
-# or: yarn add @tidesurf/core
-# or: pnpm add @tidesurf/core
 ```
-
-Chrome 144+ also needs remote debugging approval. Open `chrome://inspect#remote-debugging` and enable **Allow remote debugging for this browser instance**.
-
-## Quick start
 
 Launch, navigate, read, and act:
 
@@ -30,120 +71,81 @@ await browser.navigate("https://example.com");
 const state = await browser.getState();
 console.log(state.content);
 
-const page = browser.getPage();
-await page.click("B1");
-await page.type("I1", "hello world");
-
+await browser.getPage().click("B1");
 await browser.close();
 ```
 
-Send `state.content` to the model. TideSurf removes styles, scripts, and wrapper markup while keeping visible copy, structure, and usable controls. Short IDs such as `B1`, `L3`, and `I2` remain tied to the live page. Disabled or inert controls appear in `~~strikethrough~~`. [Page format](#page-format) documents the full representation.
+`TideSurf.launch()` always starts and owns Chromium. It uses an isolated temporary profile and an ephemeral debugging port unless options override them.
 
-## Connecting to an existing browser
-
-Attach to an open Chrome session to reuse cookies, extensions, login state, and the page already under inspection:
-
-```typescript
-import { TideSurf } from "@tidesurf/core";
-
-const browser = await TideSurf.connect();
-const state = await browser.getState();
-const page = browser.getPage();
-await page.click("B1");
-
-// Disconnects CDP without closing your Chrome process.
-await browser.close();
-```
-
-Chrome must expose a remote debugging port. Chrome 144+ uses `chrome://inspect#remote-debugging`; any supported Chrome can launch with `--remote-debugging-port=9222`. Custom hosts, ports, and timeouts are explicit:
+Attach explicitly when another process already exposes CDP:
 
 ```typescript
 const browser = await TideSurf.connect({
-  port: 9333,
   host: "localhost",
-  timeout: 15000,
+  port: 9222,
 });
 ```
 
+`TideSurf.connect()` never launches a browser. `close()` disconnects an attached browser without stopping its process.
+
+## Select a browser
+
+Managed launch resolves a browser in this order:
+
+1. `chromePath` or CLI `--chrome-path`
+2. `CHROME_PATH`
+3. supported executable on `PATH`
+4. platform install locations
+
+The default channel order is stable, Beta, Dev, Canary, Chromium. Pass `channel: "canary"` or `--channel canary` to select one. Edge and Brave require an explicit executable path.
+
+The CLI uses managed launch by default. `--auto-connect` tries an endpoint or discoverable Chrome profile before local launch. `--connect-only` fails instead of launching.
+
+## Fix session policy
+
+Startup and security options become immutable when a named session starts. A later command may omit them or repeat matching standalone values such as `--read-only`, but it cannot change an explicit value. Stop the session or choose a new name for another policy.
+
 ```bash
-tidesurf inspect https://example.com --auto-connect --port 9333
-tidesurf mcp --auto-connect
+bunx @tidesurf/core --session audit --read-only get-state
+bunx @tidesurf/core --session audit status
 ```
 
-## Read-only mode
+Read-only sessions allow `get-state`, `extract`, `list-tabs`, `switch-tab`, `search`, and `screenshot`. Navigation, page interaction, JavaScript, clipboard, upload/download, and tab creation or closure fail in the CLI, registry, SDK, and `getPage()` surface.
 
-Read-only sessions expose observation tools only: `get_state`, `extract`, `list_tabs`, `switch_tab`, `search`, and `screenshot`. Mutation, clipboard, evaluation, file, and tab-creation tools stay unavailable.
+## Use tool schemas
 
-```typescript
-const browser = await TideSurf.launch({ readOnly: true });
-// or: await TideSurf.connect({ readOnly: true })
-```
-
-```bash
-tidesurf mcp --read-only
-tidesurf mcp --auto-connect --read-only
-```
-
-## Filesystem access
-
-Uploads and custom download paths stay inside the current working directory and OS temp directory by default. Expand the boundary explicitly:
-
-```typescript
-const browser = await TideSurf.launch({
-  fileAccessRoots: [process.cwd(), "/absolute/shared-fixtures"],
-});
-```
-
-## Integrating with an LLM agent
-
-`getToolDefinitions()` returns 18 provider-neutral function schemas. The executor accepts the model's selected tool call:
+The registry returns 18 provider-neutral definitions and one executor:
 
 ```typescript
 import { TideSurf, getToolDefinitions } from "@tidesurf/core";
 
 const browser = await TideSurf.launch();
 const tools = getToolDefinitions();
-const executor = browser.getToolExecutor();
+const execute = browser.getToolExecutor();
 
-const result = await executor({
+const result = await execute({
   name: "navigate",
   input: { url: "https://example.com" },
 });
 ```
 
-The schemas work with Anthropic, OpenAI, and other providers that support function calling.
+## Run MCP
 
-## Using as an MCP server
-
-Add TideSurf to an MCP client:
+Add the packaged adapter to an MCP client:
 
 ```json
 {
   "mcpServers": {
     "tidesurf": {
       "command": "bunx",
-      "args": ["tidesurf", "mcp", "--auto-connect"]
+      "args": ["@tidesurf/core", "mcp"]
     }
   }
 }
 ```
 
-Remove `--auto-connect` to launch a separate headless browser.
+The adapter uses the shared registry and executor. It adds `launch_browser` for MCP compatibility, converts screenshots to image blocks, and marks failed calls with `isError`.
 
-## Output modes
+## Next
 
-Choose the amount of page detail needed for the next action:
-
-```typescript
-const full = await browser.getState();
-const interactive = await browser.getState({ mode: "interactive" });
-const minimal = await browser.getState({ mode: "minimal" });
-const fullPage = await browser.getState({ viewport: false });
-const bounded = await browser.getState({ maxTokens: 500 });
-```
-
-Viewport filtering is on by default. Modes compose with `viewport` and `maxTokens`.
-
-## What to read next
-
-[Page format](#page-format) explains the text and IDs. [Token budget](#token-budget) covers output limits. [Security](#security) defines the trust boundary. [API reference](#api-reference) lists every method and tool. [Migration](#migration) tracks breaking changes.
+[CLI](#cli) lists all commands. [Token budget](#token-budget) explains pruning. [Security](#security) defines trust boundaries. [API reference](#api-reference) covers the SDK and tool schemas.

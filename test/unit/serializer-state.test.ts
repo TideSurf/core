@@ -322,7 +322,7 @@ describe("serializer — input state enhancements", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Tests: Link aria-expanded flags (FIX 5)
+// Link aria-expanded flags
 // ---------------------------------------------------------------------------
 
 describe("serializer — link aria-expanded flags", () => {
@@ -342,7 +342,7 @@ describe("serializer — link aria-expanded flags", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Tests: Select with optgroup children (FIX 6)
+// Select with optgroup children
 // ---------------------------------------------------------------------------
 
 describe("serializer — select with optgroup", () => {
@@ -379,7 +379,7 @@ describe("serializer — select with optgroup", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Tests: Serializer reads node.state for state flag output (FIX 8)
+// Serializer reads node.state for state flag output
 // ---------------------------------------------------------------------------
 
 describe("serializer — node.state flag output", () => {

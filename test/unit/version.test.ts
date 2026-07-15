@@ -11,11 +11,6 @@ describe("VERSION", () => {
     const pkg = JSON.parse(await readFile(join(rootDir, "package.json"), "utf-8")) as {
       version: string;
     };
-    const mcpPkg = JSON.parse(await readFile(join(rootDir, "mcp", "package.json"), "utf-8")) as {
-      version: string;
-    };
-
     expect(VERSION).toBe(pkg.version);
-    expect(VERSION).toBe(mcpPkg.version);
   });
 });

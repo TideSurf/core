@@ -1,6 +1,6 @@
 /**
- * TideSurf REPL — reads JSON tool commands from stdin, prints results to stdout.
- * Designed to be driven by Claude Code's /surf skill.
+ * TideSurf SDK stream example. For normal shell use, prefer
+ * `tidesurf call <tool> --input <json|->`, which keeps a named session alive.
  *
  * Usage:
  *   echo '{"name":"navigate","input":{"url":"https://example.com"}}' | bun examples/surf-repl.ts

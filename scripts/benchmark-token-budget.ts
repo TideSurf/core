@@ -65,7 +65,7 @@ function countNodes(nodes: OSNode[]): number {
 
 // Run benchmarks
 console.log("\n" + "=".repeat(60));
-console.log("  TOKEN BUDGET PERFORMANCE BENCHMARK (CRIT-003)");
+console.log("  TOKEN BUDGET PERFORMANCE BENCHMARK");
 console.log("=".repeat(60));
 console.log("\nTesting O(n²) → O(n log n) optimization\n");
 

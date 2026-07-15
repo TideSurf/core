@@ -1,66 +1,103 @@
 # Architecture
 
-TideSurf connects an LLM agent to Chromium. It compresses the live DOM into agent-readable text and resolves tool calls back to browser actions through CDP.
+TideSurf has one browser core, one tool registry, and thin transport adapters. The CLI adds a local session process so browser state survives separate shell invocations.
 
-## System overview
+## Runtime layout
 
-```
-                                                    ┌──────────────────┐
-                                              ┌───► │ Chrome (launched) │
-┌─────────┐     tool calls      ┌──────────┐ │     └──────────────────┘
-│  Agent   │ ◄────────────────► │ TideSurf │─┤ CDP
-│ (any LLM)│   standard tools   │          │ │     ┌──────────────────┐
-└─────────┘                     └──────────┘ └───► │ Chrome (running) │
-                                  launch()          └──────────────────┘
-                                  connect()   ▲ auto-connect
-```
-
-Two connection modes share the same API:
-
-- **`TideSurf.launch()`** starts, owns, and cleans up a Chrome process.
-- **`TideSurf.connect()`** attaches to Chrome with remote debugging enabled; `close()` only disconnects CDP.
-
-## Data flow
-
-Data moves in two directions:
-
-**Browser → agent:** TideSurf fetches the live DOM, removes presentation, checks computed visibility and control state, collapses redundant nesting, assigns action IDs, and emits compact text. Tens of thousands of DOM tokens commonly become 100–800.
-
-```
-Raw web page → Chromium renders → Live DOM → Computed visibility check → State detection → TideSurf compresses → Agent-ready text
+```text
+shell command ── local socket / named pipe ── session daemon ──┐
+                                                               │
+SDK caller ────────────────────────────────────────────────────┤
+                                                               ├─ TideSurf ─ CDP ─ Chromium
+MCP client ── stdio ── MCP adapter ────────────────────────────┘
+                              │
+                    canonical tool registry
 ```
 
-**Agent → browser:** A call such as `click("B1")` or `type("I1", "hello")` resolves through the node map to a live DOM node, followed by the corresponding CDP command.
+All 18 tools have one `ToolSpec`. Each spec holds its JSON schema, read-only eligibility, CLI argument metadata, output kind, validation, and handler. The registry generates SDK definitions, executor dispatch, CLI help, MCP registration, and unknown-tool messages.
 
+MCP adds only transport behavior: stdio registration, schema conversion, PNG image blocks, `isError`, and the compatibility `launch_browser` tool.
+
+## Stateful CLI sessions
+
+Each session name maps to one background process. The default name is `default`.
+
+```text
+tidesurf navigate … ─┐
+tidesurf get-state ──┼─ session "default" ─ one TideSurf instance ─ one browser
+tidesurf click B1 ───┘
 ```
-Agent tool call → TideSurf resolves ID → CDP command → Browser executes action
+
+The daemon keeps the `TideSurf` instance in memory. This preserves:
+
+- active tab
+- open tab connections
+- exact ID-to-DOM maps
+- immutable URL, filesystem, browser, and read-only policy
+
+Browser startup, tools, and stop requests enter one serialized queue. Concurrent clients cannot interleave browser mutations or downloads. Health and status requests bypass that queue so a long tool cannot make a live session appear dead.
+
+The transport uses a Unix domain socket on Unix and a named pipe on Windows. Session metadata lives in a private runtime directory. Each session receives a random handshake secret and protocol version. Atomic state files, a startup lock, PID checks, and socket probes handle simultaneous starts and stale files.
+
+Sessions have no idle timeout. `stop` ends the daemon and its browser relationship.
+
+This state-preserving background-process model follows the [Chrome DevTools CLI session design](https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/main/docs/cli.md).
+
+## Browser ownership
+
+Two SDK methods have strict roles:
+
+- `TideSurf.launch()` starts a process, owns it, and removes its temporary profile after exit.
+- `TideSurf.connect()` attaches to an existing CDP endpoint and only disconnects in `close()`.
+
+The CLI defaults to managed launch. `--auto-connect` adds ordered discovery before launch. `--connect-only` uses discovery without fallback.
+
+Managed launch uses an isolated profile by default and `--remote-debugging-port=0` unless a port is explicit. Chrome writes the selected port and browser WebSocket path to `DevToolsActivePort`. TideSurf connects to that endpoint instead of fabricating a WebSocket URL.
+
+Browser setup is transactional. A failed stage closes any partial CDP client or target, terminates an owned process, drains its pipes, and removes an owned temporary profile. Startup retries only transient readiness failures.
+
+Shutdown is idempotent. It disconnects unique pages in parallel, waits for an owned process to exit, escalates termination when required, then removes the profile.
+
+## Executable and endpoint discovery
+
+Executable resolution follows one path:
+
+1. explicit `chromePath`
+2. `CHROME_PATH`
+3. supported names on `PATH`
+4. platform install locations
+
+Channel priority is stable, Beta, Dev, Canary, Chromium. Platform locations include macOS user applications and Windows `LOCALAPPDATA`. Edge and Brave do not enter automatic resolution.
+
+Auto-connect checks an explicit endpoint, a supported Chrome profile `DevToolsActivePort`, then a conventional local endpoint. It never converts a failed remote connection into a local launch.
+
+## Browser-to-agent data flow
+
+```text
+rendered DOM
+  → marker cleanup and computed state
+  → DOM walk and semantic classification
+  → viewport/full-DOM selection
+  → mode filter
+  → token pruning
+  → text serialization and ID map
 ```
 
-## Key components
+Visibility and page metadata are calculated before marker attributes mutate the DOM. Normal viewport mode removes offscreen descendants even when a visible structural container spans the page. `includeHidden: true` skips both hidden-node and viewport filtering for full-DOM debugging.
 
-**DOM compressor**
+Interactive and minimal filters use post-order traversal. Serialization shares text memoization. Token pruning retains useful children inside oversized containers, clones only changed paths, and keeps source order.
 
-The DOM compressor is a recursive tree walker. It retains usable controls, semantic containers, and visible text; classes, inline styles, wrappers, scripts, hidden nodes, and other presentational noise drop away. A computed-style pass checks `display`, `visibility`, `opacity`, `clip-path`, and `pointer-events`. The serializer encodes surviving control state through `~~strikethrough~~` and short keyword suffixes.
+## Agent-to-browser data flow
 
-`maxTokens` adds a second pass that favors controls over passive copy and prunes lower-priority content to fit.
+```text
+tool call → registry validation → read-only gate → handler
+          → resolve one current ID → CDP action → release handle
+```
 
-**Node map**
+Element actions resolve once through a timed resolve/use/release boundary. Missing current IDs become `ElementNotFoundError`; unrelated CDP failures keep their original type.
 
-An in-memory node map links IDs such as `B1`, `L3`, and `I2` to CDP object references. Each `getState()` rebuilds it against the current page. `click("B1")` uses that map to find the live node.
+Stability waits use independent page observers with quiet and hard deadlines. Concurrent waits do not share page-global timer state.
 
-**CDP connector**
+## Read-only boundary
 
-The connector owns the CDP WebSocket lifecycle, transient reconnection, and commands across tabs. Every tab has an independent CDP session.
-
-Auto-connect uses `discoverBrowser()` and `CDP.List()` to confirm a reachable Chrome instance with an open page tab.
-
-**Tool layer**
-
-The tool layer exposes 18 provider-neutral function schemas. It validates calls, dispatches the matching method, and returns structured results.
-
-## Design principles
-
-- **Useful context first:** presentation drops out so the agent can choose its next action.
-- **Predictable IDs:** short handles such as `B1` and `L3` are clearer than brittle selectors or XPath.
-- **Provider-neutral tools:** the same schemas work across function-calling models.
-- **Read-only surface:** observation sessions omit write tools from both definitions and execution.
+Read-only policy is enforced in the registry, executor, TideSurf lifecycle and tab methods, and every relevant `SurfingPage` method. `getPage()` does not create a bypass. `switch_tab` stays readable because it changes the observation target without changing page content.

@@ -5,17 +5,20 @@ Small, reusable patterns for TideSurf agent loops.
 ## Basic agent loop
 
 Read state → send it to the model → execute the selected tool → repeat.
+Set `ANTHROPIC_MODEL` to a model available to your account instead of pinning a dated model ID in source.
 
 ```typescript
 import Anthropic from "@anthropic-ai/sdk";
-import { TideSurf, getToolDefinitions } from "@tidesurf/core";
+import { TideSurf } from "@tidesurf/core";
 
 const client = new Anthropic();
+const model = process.env["ANTHROPIC_MODEL"];
+if (!model) throw new Error("Set ANTHROPIC_MODEL to a model available to your account");
 const browser = await TideSurf.launch();
 const executor = browser.getToolExecutor();
 
 // Adapt TideSurf tools to Anthropic format.
-const tools = getToolDefinitions().map(t => ({
+const tools = browser.getToolDefinitions().map(t => ({
   name: t.name,
   description: t.description,
   input_schema: t.input_schema,
@@ -27,7 +30,7 @@ const messages: Anthropic.MessageParam[] = [
 
 while (true) {
   const response = await client.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model,
     max_tokens: 1024,
     tools,
     messages,
@@ -51,7 +54,7 @@ while (true) {
     toolResults.push({
       type: "tool_result",
       tool_use_id: block.id,
-      content: result.success ? String(result.data) : `Error: ${result.error}`,
+      content: JSON.stringify(result),
     });
   }
 
@@ -90,6 +93,8 @@ const state = await browser.getState();
 Long sessions can request only the context needed next:
 
 ```typescript
+const page = browser.getPage();
+
 // Begin with controls.
 const overview = await browser.getState({ mode: "interactive", maxTokens: 200 });
 

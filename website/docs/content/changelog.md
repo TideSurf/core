@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Stateful agent CLI** — Added direct commands for all 18 tools, named sessions, automatic browser startup, generated help, raw JSON tool calls, structured output, screenshot files/streams, and stable exit codes.
+- **Managed browser discovery** — Added Chrome stable, Beta, Dev, Canary, and Chromium resolution through explicit paths, environment, PATH, and platform installs. Managed launches use dynamic ports; attach-only and ordered auto-connect modes keep launch policy explicit.
+- **Session runtime** — Added authenticated Unix-socket and Windows named-pipe daemons with immutable policy, serialized calls, race-safe startup, stale-state recovery, and exact tab/ID-map persistence.
+
+### Changed
+
+- **One tool registry** — SDK definitions, executor dispatch, CLI metadata/help, MCP registration, read-only gating, and error discovery now share one canonical registry.
+- **MCP adapter** — Removed the standalone repository MCP package. The packaged adapter keeps `launch_browser`, emits screenshot image blocks, and marks failed calls with `isError`.
+- **Lifecycle and policy** — Browser setup and shutdown now clean partial resources transactionally. Read-only policy also covers direct `SurfingPage` calls, while `switch_tab` stays available for observation.
+- **CDP action errors** — Page-side `Runtime.callFunctionOn` exceptions now fail their action instead of returning false success.
+- **Page processing** — Corrected viewport and hidden-node filtering, made `includeHidden` a full-DOM override, retained useful children and visible omission markers during bounded token pruning, and removed repeated parser work.
+- **JavaScript evaluation** — `evaluate` now validates input shape and size without claiming to sandbox arbitrary page JavaScript, and preserves CDP unserializable values in JSON-safe form.
+- **Documentation and release checks** — Rewrote CLI, API, architecture, security, and troubleshooting guidance. Release verification now runs executable benchmarks and the packaged MCP/CLI path.
+
+### Removed
+
+- **Stale demo command** — Removed the TideTravel server and prompt after their referenced web assets were retired.
+
 ## 0.5.4 (2026-04-26)
 
 ### Fixed

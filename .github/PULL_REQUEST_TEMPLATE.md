@@ -9,7 +9,9 @@
 ## How to test
 
 - [ ] `bun run typecheck` passes
-- [ ] `bun test` passes
+- [ ] `bun run test` passes
+- [ ] `bun run check:docs` passes for documentation or public-interface changes
+- [ ] Relevant integration or benchmark tests pass
 - [ ] Manual testing (if applicable)
 
 ## Checklist
