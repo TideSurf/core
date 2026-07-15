@@ -22,8 +22,7 @@ interface BrowserStatus {
   port?: number;
 }
 
-function isLocalHost(host: string | undefined): boolean {
-  if (!host) return true;
+function isLocalHost(host: string): boolean {
   const normalized = host.toLowerCase().replace(/^\[|\]$/g, "");
   return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1";
 }
@@ -213,8 +212,7 @@ export class BrowserController {
 
     if (
       !explicitEndpoint ||
-      explicitEndpoint.port !== 9222 ||
-      !isLocalHost(explicitEndpoint.host)
+      explicitEndpoint.port !== 9222
     ) {
       try {
         return await this.attach("127.0.0.1", 9222, undefined, remaining(1_500));
@@ -250,9 +248,7 @@ export class BrowserController {
       this.browser = null;
       this.source = undefined;
       if (browser) await browser.close();
-    })().finally(() => {
-      this.closing = null;
-    });
+    })();
     return this.closing;
   }
 }

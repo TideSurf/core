@@ -8,11 +8,16 @@ import type {
   ScreenshotOptions,
   DownloadResult,
   OSNode,
+  CDPNode,
 } from "../types.js";
 import * as cdp from "./connection.js";
 import { walkDOM } from "../parser/dom-walker.js";
 import { serialize, wrapPage } from "../parser/serializer.js";
-import { clearInspectionMarkers, inspectPage } from "./viewport.js";
+import {
+  clearInspectionMarkers,
+  inspectPage,
+  type PageInspection,
+} from "./viewport.js";
 import { pruneToFit } from "../parser/token-budget.js";
 import { filterViewportOnly } from "../parser/viewport-filter.js";
 import { filterInteractive, filterMinimal } from "../parser/mode-filter.js";
@@ -40,13 +45,15 @@ import {
 import { downloadFromAction } from "./download-manager.js";
 import { withTimeout } from "./timeout.js";
 
-function collectIds(nodes: OSNode[]): Set<string> {
-  const ids = new Set<string>();
-
+function retainNodeMap(nodes: OSNode[], nodeMap: NodeMap): NodeMap {
+  const retained: NodeMap = new Map();
   const visit = (list: OSNode[]) => {
     for (const node of list) {
       if (node.id) {
-        ids.add(node.id);
+        const backendNodeId = nodeMap.get(node.id);
+        if (backendNodeId !== undefined) {
+          retained.set(node.id, backendNodeId);
+        }
       }
       if (node.children.length > 0) {
         visit(node.children);
@@ -55,19 +62,19 @@ function collectIds(nodes: OSNode[]): Set<string> {
   };
 
   visit(nodes);
-  return ids;
+  return retained;
 }
 
 /**
  * SurfingPage — high-level page interaction built on CDP
  */
 export class SurfingPage {
-  private conn: CDPConnection;
+  private readonly conn: CDPConnection;
   private lastNodeMap: NodeMap = new Map();
-  private fileAccessRoots: string[];
-  private urlValidationOptions: UrlValidationOptions;
-  private readOnly: boolean;
-  private timeout?: number;
+  private readonly fileAccessRoots: string[];
+  private readonly urlValidationOptions: UrlValidationOptions;
+  private readonly readOnly: boolean;
+  private readonly timeout?: number;
   private inspectionTail: Promise<void> = Promise.resolve();
   private closePromise: Promise<void> | null = null;
 
@@ -88,7 +95,7 @@ export class SurfingPage {
   /**
    * Get compressed page state + nodeMap.
    * @param options - Optional settings (maxTokens for token budgeting)
-   * @returns PageState with url, title, xml, and nodeMap
+   * @returns PageState with URL, title, compressed content, and node map
    */
   async getState(options?: GetStateOptions): Promise<PageState> {
     this.assertOpen();
@@ -120,22 +127,7 @@ export class SurfingPage {
       };
     }
 
-    let root;
-    try {
-      root = await cdp.getFullDOM(
-        this.conn,
-        this.timeout,
-        pageInfo.elementCount
-      );
-    } finally {
-      if (pageInfo.elementCount <= cdp.MAX_DOM_NODES) {
-        await clearInspectionMarkers(
-          this.conn,
-          pageInfo.markerAttributes,
-          this.timeout
-        ).catch(() => undefined);
-      }
-    }
+    const root = await this.readInspectedDOM(pageInfo);
     let { nodes, nodeMap } = walkDOM(root, {
       includeHidden,
       markerAttributes: pageInfo.markerAttributes,
@@ -169,15 +161,7 @@ export class SurfingPage {
     const body = serialize(nodes, 0, url);
     const content = wrapPage(body, url, title, scrollPosition);
 
-    const visibleIds = collectIds(nodes);
-    const filteredNodeMap: NodeMap = new Map();
-    for (const id of visibleIds) {
-      const backendNodeId = nodeMap.get(id);
-      if (backendNodeId !== undefined) {
-        filteredNodeMap.set(id, backendNodeId);
-      }
-    }
-
+    const filteredNodeMap = retainNodeMap(nodes, nodeMap);
     this.lastNodeMap = filteredNodeMap;
 
     return {
@@ -327,22 +311,7 @@ export class SurfingPage {
       { markViewport: false, markHidden: true },
       this.timeout
     );
-    let root;
-    try {
-      root = await cdp.getFullDOM(
-        this.conn,
-        this.timeout,
-        inspection.elementCount
-      );
-    } finally {
-      if (inspection.elementCount <= cdp.MAX_DOM_NODES) {
-        await clearInspectionMarkers(
-          this.conn,
-          inspection.markerAttributes,
-          this.timeout
-        ).catch(() => undefined);
-      }
-    }
+    const root = await this.readInspectedDOM(inspection);
     const { nodes, nodeMap: freshNodeMap } = walkDOM(root, {
       truncate: false,
       markerAttributes: inspection.markerAttributes,
@@ -416,14 +385,12 @@ export class SurfingPage {
       validateElementId(options.elementId);
       const backendNodeId = this.getBackendNodeId(options.elementId);
 
-      // Get box model for the element to create a clip region
       const { model } = await withTimeout(
         this.conn.DOM.getBoxModel({ backendNodeId }),
         this.timeout ?? 5_000,
         "screenshot:getBoxModel"
       );
       const content = model.content;
-      // content is [x1,y1, x2,y2, x3,y3, x4,y4] — use bounding box
       const x = Math.min(content[0], content[2], content[4], content[6]);
       const y = Math.min(content[1], content[3], content[5], content[7]);
       const maxX = Math.max(content[0], content[2], content[4], content[6]);
@@ -441,7 +408,6 @@ export class SurfingPage {
     }
 
     if (options?.fullPage) {
-      // Get full document dimensions for the clip region
       const dims = (await cdp.evaluate(
         this.conn,
         "({ width: document.documentElement.scrollWidth, height: document.documentElement.scrollHeight })",
@@ -553,6 +519,34 @@ export class SurfingPage {
   private assertOpen(): void {
     if (this.closePromise) {
       throw new CDPConnectionError("SurfingPage is closed");
+    }
+  }
+
+  private async readInspectedDOM(
+    inspection: Pick<PageInspection, "elementCount" | "markerAttributes">
+  ): Promise<CDPNode> {
+    let operationFailed = false;
+    try {
+      return await cdp.getFullDOM(
+        this.conn,
+        this.timeout,
+        inspection.elementCount
+      );
+    } catch (error) {
+      operationFailed = true;
+      throw error;
+    } finally {
+      if (inspection.elementCount <= cdp.MAX_DOM_NODES) {
+        try {
+          await clearInspectionMarkers(
+            this.conn,
+            inspection.markerAttributes,
+            this.timeout
+          );
+        } catch (error) {
+          if (!operationFailed) throw error;
+        }
+      }
     }
   }
 

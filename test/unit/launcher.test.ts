@@ -249,15 +249,9 @@ describe("Chrome executable resolution", () => {
       expect(() => resolveChromeExecutable({ chromePath: join(root, "directory") })).toThrow(
         ChromeLaunchError
       );
-      if (process.platform !== "win32") {
-        expect(() => resolveChromeExecutable({ chromePath: file })).toThrow(
-          ChromeLaunchError
-        );
-      } else {
-        expect(() => resolveChromeExecutable({ chromePath: file })).toThrow(
-          ChromeLaunchError
-        );
-      }
+      expect(() => resolveChromeExecutable({ chromePath: file })).toThrow(
+        ChromeLaunchError
+      );
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -377,6 +371,76 @@ describe("CDP discovery", () => {
 });
 
 describe("managed launch failures", () => {
+  it("keeps an active profile marker when the endpoint has no page target", async () => {
+    const server = createServer((_request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end("[]");
+    });
+    const port = await listen(server, "localhost");
+    const root = mkdtempSync(join(tmpdir(), "tidesurf-active-empty-profile-"));
+    const profile = join(root, "profile");
+    const sentinel = join(root, "launched");
+    const fakeChrome = join(
+      root,
+      process.platform === "win32" ? "chrome.exe" : "chrome"
+    );
+    mkdirSync(profile);
+    writeFileSync(
+      join(profile, "DevToolsActivePort"),
+      `${port}\n/devtools/browser/active\n`
+    );
+    writeFileSync(fakeChrome, `#!/bin/sh\ntouch ${JSON.stringify(sentinel)}\n`, {
+      mode: 0o755,
+    });
+    chmodSync(fakeChrome, 0o755);
+
+    try {
+      await expect(
+        launchChrome({ chromePath: fakeChrome, userDataDir: profile })
+      ).rejects.toThrow("profile is already active");
+      expect(existsSync(sentinel)).toBe(false);
+      expect(existsSync(join(profile, "DevToolsActivePort"))).toBe(true);
+    } finally {
+      await closeServer(server);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps a profile marker when its endpoint fails non-connectivity checks", async () => {
+    const server = createServer((_request, response) => {
+      response.writeHead(503, { "content-type": "text/plain" });
+      response.end("unavailable");
+    });
+    const port = await listen(server, "localhost");
+    const root = mkdtempSync(join(tmpdir(), "tidesurf-unverified-profile-"));
+    const profile = join(root, "profile");
+    const sentinel = join(root, "launched");
+    const fakeChrome = join(
+      root,
+      process.platform === "win32" ? "chrome.exe" : "chrome"
+    );
+    mkdirSync(profile);
+    writeFileSync(
+      join(profile, "DevToolsActivePort"),
+      `${port}\n/devtools/browser/unverified\n`
+    );
+    writeFileSync(fakeChrome, `#!/bin/sh\ntouch ${JSON.stringify(sentinel)}\n`, {
+      mode: 0o755,
+    });
+    chmodSync(fakeChrome, 0o755);
+
+    try {
+      await expect(
+        launchChrome({ chromePath: fakeChrome, userDataDir: profile })
+      ).rejects.toThrow("Could not verify whether the Chrome profile is active");
+      expect(existsSync(sentinel)).toBe(false);
+      expect(existsSync(join(profile, "DevToolsActivePort"))).toBe(true);
+    } finally {
+      await closeServer(server);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("retries a transiently partial marker written by a starting browser", async () => {
     if (process.platform === "win32") return;
     const server = createServer((_request, response) => {

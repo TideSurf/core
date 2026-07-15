@@ -65,7 +65,7 @@ describe("createToolExecutor", () => {
   });
 
   describe("error type preservation", () => {
-    it("should include errorType in error response", async () => {
+    it("preserves generic failure messages and error types", async () => {
       const page = {
         click: jest.fn().mockRejectedValue(new Error("Element not found")),
       };
@@ -81,7 +81,7 @@ describe("createToolExecutor", () => {
 
       expect(result.success).toBe(false);
       expect(result.errorType).toBe("Error");
-      expect(result.error).toContain("Element not found");
+      expect(result.error).toBe("Element not found");
     });
 
     it("should include stack trace in development mode", async () => {
@@ -133,7 +133,7 @@ describe("createToolExecutor", () => {
       process.env.NODE_ENV = originalEnv;
     });
 
-    it("should preserve ElementNotFoundError type", async () => {
+    it("preserves ElementNotFoundError and its SDK guidance", async () => {
       const page = {
         click: jest.fn().mockRejectedValue(new ElementNotFoundError("B1")),
       };
@@ -149,6 +149,9 @@ describe("createToolExecutor", () => {
 
       expect(result.success).toBe(false);
       expect(result.errorType).toBe("ElementNotFoundError");
+      expect(result.error).toBe(
+        'Element "B1" not found. Call getState() first to refresh the node map.'
+      );
     });
   });
 

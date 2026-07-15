@@ -5,9 +5,6 @@ import { truncateGraphemes } from "./truncation.js";
 
 const KNOWN_STATE_FLAGS = new Set(["disabled", "inert", "obscured"]);
 
-/**
- * Attributes worth preserving in output
- */
 const PASS_THROUGH_ATTRS = new Set([
   "href",
   "src",
@@ -81,6 +78,25 @@ function walkAttributes(
   if (state !== undefined) values["data-os-state"] = state;
   if (text !== undefined) values["data-os-text"] = text;
   return values;
+}
+
+function outputAttributes(
+  attributes: Record<string, string>,
+  id?: string
+): Record<string, string> {
+  const result: Record<string, string> = {};
+  if (id) result["id"] = id;
+  for (const [key, value] of Object.entries(attributes)) {
+    if (PASS_THROUGH_ATTRS.has(key)) result[key] = value;
+  }
+  return result;
+}
+
+function markerState(attributes: Record<string, string>): string[] | undefined {
+  const value = attributes["data-os-state"];
+  if (!value) return undefined;
+  const state = value.split(",").filter((flag) => KNOWN_STATE_FLAGS.has(flag));
+  return state.length > 0 ? state : undefined;
 }
 
 interface WalkContext {
@@ -172,7 +188,7 @@ function walkNode(
   doTruncate: boolean,
   includeHidden: boolean,
   markerContext: MarkerContext,
-  depth: number = 0
+  depth: number
 ): OSNode[] {
   // Prevent stack overflow on deeply nested DOM
   if (depth > MAX_DEPTH) {
@@ -188,7 +204,6 @@ function walkNode(
     return [truncated];
   }
 
-  // Text nodes
   if (node.nodeType === 3) {
     let text = (node.nodeValue ?? "").trim();
     if (!text) return [];
@@ -205,7 +220,6 @@ function walkNode(
     return [textNode];
   }
 
-  // Only process element nodes
   if (node.nodeType !== 1) return [];
 
   const attrs = walkAttributes(node.attributes, markerContext);
@@ -260,7 +274,6 @@ function walkNode(
   if (result.action === "DISCARD") return [];
 
   if (result.action === "COLLAPSE") {
-    // Promote children
     const promoted = walkChildren(
       children,
       assigner,
@@ -272,7 +285,6 @@ function walkNode(
       depth + 1,
       directTextVisibility
     );
-    // Also walk shadow roots if present
     if (node.shadowRoots) {
       for (const shadowRoot of node.shadowRoots) {
         appendNodes(
@@ -294,22 +306,14 @@ function walkNode(
     return promoted;
   }
 
-  // KEEP
   const tag = result.mappedTag!;
+  const visible = attrs["data-os-visible"] === "1" ? true : undefined;
+  const state = markerState(attrs);
 
-  // Special handling for IFRAME
   if (tag === "iframe") {
-    const visible = attrs["data-os-visible"] === "1" ? true : undefined;
-    const stateAttr = attrs["data-os-state"];
-    const rawState = stateAttr ? stateAttr.split(",").filter(f => KNOWN_STATE_FLAGS.has(f)) : undefined;
-    const state = rawState && rawState.length > 0 ? rawState : undefined;
-    const filteredAttrs: Record<string, string> = {};
-    for (const [key, value] of Object.entries(attrs)) {
-      if (PASS_THROUGH_ATTRS.has(key)) filteredAttrs[key] = value;
-    }
+    const filteredAttrs = outputAttributes(attrs);
 
     if (node.contentDocument) {
-      // Same-origin iframe — walk into its content
       const iframeChildren = walkChildren(
         node.contentDocument.children ?? [],
         assigner,
@@ -330,18 +334,16 @@ function walkNode(
           state,
         },
       ];
-    } else {
-      // Cross-origin iframe — emit inaccessible marker
-      return [
-        {
-          tag: "iframe",
-          attributes: { ...filteredAttrs, status: "inaccessible" },
-          children: [],
-          visible,
-          state,
-        },
-      ];
     }
+    return [
+      {
+        tag: "iframe",
+        attributes: { ...filteredAttrs, status: "inaccessible" },
+        children: [],
+        visible,
+        state,
+      },
+    ];
   }
 
   const id = assigner.assign(tag);
@@ -350,13 +352,7 @@ function walkNode(
     nodeMap.set(id, node.backendNodeId);
   }
 
-  // Build filtered attributes
-  const filteredAttrs: Record<string, string> = {};
-  if (id) filteredAttrs["id"] = id;
-
-  for (const [key, value] of Object.entries(attrs)) {
-    if (PASS_THROUGH_ATTRS.has(key)) filteredAttrs[key] = value;
-  }
+  const filteredAttrs = outputAttributes(attrs, id);
 
   // Elide default/redundant attributes
   if (tag === "input" && filteredAttrs["type"] === "text") {
@@ -373,14 +369,12 @@ function walkNode(
     delete filteredAttrs["aria-label"];
   }
 
-  // Build child context
   const childCtx: WalkContext = {
     insideInteractive: elementCtx.insideInteractive || !!id,
     insideHeading: elementCtx.insideHeading || HEADING_TAGS.has(tag),
     viewportVisible: elementCtx.viewportVisible,
   };
 
-  // Walk regular children
   const osChildren = walkChildren(
     children,
     assigner,
@@ -393,7 +387,6 @@ function walkNode(
     directTextVisibility
   );
 
-  // Walk shadow roots and merge shadow children into host's children
   if (node.shadowRoots) {
     for (const shadowRoot of node.shadowRoots) {
       appendNodes(
@@ -412,12 +405,6 @@ function walkNode(
       );
     }
   }
-
-  // Check for visibility attribute (set by viewport marking)
-  const visible = attrs["data-os-visible"] === "1" ? true : undefined;
-  const stateAttr = attrs["data-os-state"];
-  const rawState = stateAttr ? stateAttr.split(",").filter(f => KNOWN_STATE_FLAGS.has(f)) : undefined;
-  const state = rawState && rawState.length > 0 ? rawState : undefined;
 
   const osNode: OSNode = {
     tag,
@@ -439,7 +426,7 @@ function walkChildren(
   doTruncate: boolean,
   includeHidden: boolean,
   markerContext: MarkerContext,
-  depth: number = 0,
+  depth: number,
   directTextVisibility?: ReadonlySet<number>
 ): OSNode[] {
   const result: OSNode[] = [];

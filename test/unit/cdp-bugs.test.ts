@@ -25,7 +25,7 @@ function connection(overrides: Partial<CDPConnection> = {}): CDPConnection {
     } as unknown as CDPConnection["DOM"],
     Page: {
       navigate: mock(async () => ({})),
-      loadEventFired: mock(async () => ({})),
+      loadEventFired: mock(() => () => {}),
       on: mock(() => () => {}),
     } as unknown as CDPConnection["Page"],
     Runtime: {
@@ -77,6 +77,18 @@ function connectionForPageObject(
       insertText: mock(async ({ text }: { text: string }) => insertText(text)),
     } as unknown as CDPConnection["Input"],
   });
+}
+
+function emptyDocumentRoot() {
+  return {
+    nodeId: 1,
+    backendNodeId: 1,
+    nodeType: 9,
+    nodeName: "#document",
+    localName: "",
+    nodeValue: "",
+    children: [],
+  };
 }
 
 describe("CDP operations", () => {
@@ -229,6 +241,75 @@ describe("CDP operations", () => {
     expect(getDocument).not.toHaveBeenCalled();
   });
 
+  it("reports marker cleanup failure after a successful DOM read", async () => {
+    const cleanupError = new Error("marker cleanup failed");
+    const runtimeEvaluate = mock(async ({ expression }: { expression: string }) => {
+      if (expression.includes("const page =")) {
+        return {
+          result: {
+            value: {
+              url: "https://example.com/",
+              title: "Example",
+              scrollY: 0,
+              scrollHeight: 100,
+              viewportHeight: 100,
+              elementCount: 0,
+            },
+          },
+        };
+      }
+      if (expression.includes("const names =")) throw cleanupError;
+      return { result: { value: undefined } };
+    });
+    const conn = connection({
+      DOM: {
+        getDocument: mock(async () => ({ root: emptyDocumentRoot() })),
+      } as unknown as CDPConnection["DOM"],
+      Runtime: {
+        evaluate: runtimeEvaluate,
+      } as unknown as CDPConnection["Runtime"],
+    });
+
+    await expect(
+      new SurfingPage(conn).getState({ includeHidden: true })
+    ).rejects.toBe(cleanupError);
+  });
+
+  it("keeps a DOM read failure primary when marker cleanup also fails", async () => {
+    const readError = new Error("DOM read failed");
+    const runtimeEvaluate = mock(async ({ expression }: { expression: string }) => {
+      if (expression.includes("const page =")) {
+        return {
+          result: {
+            value: {
+              url: "https://example.com/",
+              title: "Example",
+              scrollY: 0,
+              scrollHeight: 100,
+              viewportHeight: 100,
+              elementCount: 0,
+            },
+          },
+        };
+      }
+      throw new Error("marker cleanup failed");
+    });
+    const conn = connection({
+      DOM: {
+        getDocument: mock(async () => {
+          throw readError;
+        }),
+      } as unknown as CDPConnection["DOM"],
+      Runtime: {
+        evaluate: runtimeEvaluate,
+      } as unknown as CDPConnection["Runtime"],
+    });
+
+    await expect(
+      new SurfingPage(conn).getState({ includeHidden: true })
+    ).rejects.toBe(readError);
+  });
+
   it("resolves an action node once and always releases it", async () => {
     const resolveNode = mock(async () => ({ object: { objectId: "remote-7" } }));
     const releaseObject = mock(async () => ({}));
@@ -250,6 +331,53 @@ describe("CDP operations", () => {
     expect(resolveNode).toHaveBeenCalledTimes(1);
     expect(callFunctionOn).toHaveBeenCalledTimes(2);
     expect(releaseObject).toHaveBeenCalledWith({ objectId: "remote-7" });
+  });
+
+  it("reports a remote-object release failure after a successful action", async () => {
+    const releaseError = new Error("release failed");
+    const conn = connection({
+      Runtime: {
+        callFunctionOn: mock(async () => ({ result: { value: true } })),
+        releaseObject: mock(async () => {
+          throw releaseError;
+        }),
+      } as unknown as CDPConnection["Runtime"],
+    });
+
+    await expect(clickNode(conn, 7)).rejects.toBe(releaseError);
+  });
+
+  it("accepts a successful navigating click after its remote context is gone", async () => {
+    const conn = connection({
+      Runtime: {
+        callFunctionOn: mock(async () => ({ result: { value: true } })),
+        releaseObject: mock(async () => {
+          throw new Error("Cannot find context with specified id");
+        }),
+      } as unknown as CDPConnection["Runtime"],
+    });
+
+    await expect(clickNode(conn, 7)).resolves.toBeUndefined();
+  });
+
+  it("keeps an action failure primary when object release also fails", async () => {
+    const actionError = new Error("click failed");
+    const callFunctionOn = mock(async () => {
+      if (callFunctionOn.mock.calls.length === 1) {
+        return { result: { value: true } };
+      }
+      throw actionError;
+    });
+    const conn = connection({
+      Runtime: {
+        callFunctionOn,
+        releaseObject: mock(async () => {
+          throw new Error("release failed");
+        }),
+      } as unknown as CDPConnection["Runtime"],
+    });
+
+    await expect(clickNode(conn, 7)).rejects.toBe(actionError);
   });
 
   it("clears and types into contenteditable textboxes", async () => {
@@ -380,9 +508,9 @@ describe("CDP operations", () => {
     const order: string[] = [];
     const conn = connection({
       Page: {
-        loadEventFired: mock(async () => {
+        loadEventFired: mock(() => {
           order.push("listen");
-          return {};
+          return () => {};
         }),
         navigate: mock(async () => {
           order.push("navigate");
@@ -448,7 +576,7 @@ describe("CDP operations", () => {
   it("wraps browser navigation errors", async () => {
     const conn = connection({
       Page: {
-        loadEventFired: mock(async () => ({})),
+        loadEventFired: mock(() => () => {}),
         navigate: mock(async () => ({ errorText: "blocked" })),
       } as unknown as CDPConnection["Page"],
     });

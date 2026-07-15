@@ -4,10 +4,6 @@ import { filterViewportOnly } from "../../src/parser/viewport-filter.js";
 import { filterInteractive } from "../../src/parser/mode-filter.js";
 import type { CDPNode, OSNode } from "../../src/types.js";
 
-// ---------------------------------------------------------------------------
-// Helpers — Build CDPNode trees that simulate real DOM structures
-// ---------------------------------------------------------------------------
-
 function makeElement(
   nodeName: string,
   backendNodeId: number,
@@ -89,10 +85,6 @@ describe("pipeline — interactive headings", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Integration: CDPNode → walkDOM → serialize for disabled buttons
-// ---------------------------------------------------------------------------
-
 describe("pipeline — disabled button", () => {
   it("button with disabled attribute serializes with ~~strikethrough~~", () => {
     const result = pipeline([
@@ -101,8 +93,6 @@ describe("pipeline — disabled button", () => {
         "",
       ]),
     ]);
-    // Disabled elements are wrapped in ~~strikethrough~~
-    // This tests the full CDPNode → OSNode → text pipeline
     expect(result).toContain("Submit");
     expect(result).toContain("~~");
   });
@@ -116,10 +106,6 @@ describe("pipeline — disabled button", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Integration: CDPNode → walkDOM → serialize for aria-expanded
-// ---------------------------------------------------------------------------
-
 describe("pipeline — aria-expanded button", () => {
   it("button with aria-expanded='true' serializes with open flag", () => {
     const result = pipeline([
@@ -129,7 +115,6 @@ describe("pipeline — aria-expanded button", () => {
       ]),
     ]);
     expect(result).toContain("Menu");
-    // aria-expanded="true" → "open" flag
     expect(result).toContain("open");
   });
 
@@ -141,14 +126,9 @@ describe("pipeline — aria-expanded button", () => {
       ]),
     ]);
     expect(result).toContain("Menu");
-    // aria-expanded="false" → "closed" flag
     expect(result).toContain("closed");
   });
 });
-
-// ---------------------------------------------------------------------------
-// Integration: CDPNode → walkDOM → serialize for select with selected option
-// ---------------------------------------------------------------------------
 
 describe("pipeline — select with selected option", () => {
   it("select with selected option child gets marker in output", () => {
@@ -160,14 +140,9 @@ describe("pipeline — select with selected option", () => {
       ]),
     ]);
     expect(result).toContain("S1:select");
-    // New feature: selected option marked with ">"
     expect(result).toContain("> Banana");
   });
 });
-
-// ---------------------------------------------------------------------------
-// Integration: CDPNode → walkDOM for display:none elements
-// ---------------------------------------------------------------------------
 
 describe("pipeline — inline style display:none", () => {
   it("element with inline style display:none is discarded", () => {
@@ -178,7 +153,6 @@ describe("pipeline — inline style display:none", () => {
       ]),
       makeElement("BUTTON", 12, [makeText("Visible", 13)]),
     ]);
-    // The classifier already discards display:none elements
     expect(result).not.toContain("Hidden content");
     expect(result).toContain("Visible");
   });
@@ -196,10 +170,6 @@ describe("pipeline — inline style display:none", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Integration: CDPNode → walkDOM for visibility:hidden elements
-// ---------------------------------------------------------------------------
-
 describe("pipeline — inline style visibility:hidden", () => {
   it("element with visibility:hidden is discarded", () => {
     const result = pipeline([
@@ -213,10 +183,6 @@ describe("pipeline — inline style visibility:hidden", () => {
     expect(result).toContain("Visible");
   });
 });
-
-// ---------------------------------------------------------------------------
-// Integration: CDPNode → walkDOM for aria-hidden subtrees
-// ---------------------------------------------------------------------------
 
 describe("pipeline — aria-hidden subtrees", () => {
   it("aria-hidden='true' subtree is discarded entirely", () => {
@@ -275,10 +241,6 @@ describe("pipeline — hidden debugging override", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Integration: CDPNode → walkDOM → serialize for data-os-state
-// ---------------------------------------------------------------------------
-
 describe("pipeline — data-os-state propagation", () => {
   it("button with data-os-state='disabled' has state field populated", () => {
     const nodes = walk([
@@ -290,9 +252,7 @@ describe("pipeline — data-os-state propagation", () => {
 
     const btn = nodes.find((n) => n.tag === "button");
     expect(btn).toBeDefined();
-    // New feature: state field on OSNode
     expect((btn as OSNode & { state?: string[] }).state).toEqual(["disabled"]);
-    // data-os-state should not be in serialized attributes
     expect(btn!.attributes["data-os-state"]).toBeUndefined();
   });
 
@@ -314,10 +274,6 @@ describe("pipeline — data-os-state propagation", () => {
     ]);
   });
 });
-
-// ---------------------------------------------------------------------------
-// Integration: Combined features — disabled button + data-os-visible
-// ---------------------------------------------------------------------------
 
 describe("pipeline — combined viewport visibility and state", () => {
   it("button marked visible with disabled attribute", () => {
@@ -351,10 +307,6 @@ describe("pipeline — combined viewport visibility and state", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Integration: Input attributes pass through pipeline
-// ---------------------------------------------------------------------------
-
 describe("pipeline — input attributes", () => {
   it("input with min/max passes through walker and serializer", () => {
     const result = pipeline([
@@ -367,7 +319,6 @@ describe("pipeline — input attributes", () => {
         "100",
       ]),
     ]);
-    // New feature: min/max serialized in output
     expect(result).toContain("I1");
     expect(result).toContain("number");
     expect(result).toContain("min=0");
@@ -412,10 +363,6 @@ describe("pipeline — input attributes", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Integration: Link with target="_blank" passes through pipeline
-// ---------------------------------------------------------------------------
-
 describe("pipeline — link target=_blank", () => {
   it("link with target=_blank gets arrow in serialized output", () => {
     const result = pipeline([
@@ -426,7 +373,6 @@ describe("pipeline — link target=_blank", () => {
         "_blank",
       ]),
     ]);
-    // New feature: target="_blank" → arrow marker in output
     expect(result).toContain("External");
     expect(result).toContain("other.com");
     expect(result).toContain("→");
@@ -443,10 +389,6 @@ describe("pipeline — link target=_blank", () => {
     expect(result).not.toContain("→");
   });
 });
-
-// ---------------------------------------------------------------------------
-// Integration: Form with multiple interactive elements
-// ---------------------------------------------------------------------------
 
 describe("pipeline — complex form", () => {
   it("form with disabled input, required select, and submit button", () => {
@@ -480,10 +422,6 @@ describe("pipeline — complex form", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Verify nodeMap integrity through the pipeline
-// ---------------------------------------------------------------------------
-
 describe("pipeline — nodeMap integrity with state attributes", () => {
   it("nodeMap maps IDs to correct backendNodeIds with state attrs present", () => {
     const root = makeElement("BODY", 1, [
@@ -513,23 +451,17 @@ describe("pipeline — nodeMap integrity with state attributes", () => {
 
     const { nodes, nodeMap } = walkDOM(root);
 
-    // All interactive elements should have IDs mapped
     expect(nodeMap.get("B1")).toBe(100);
     expect(nodeMap.get("L1")).toBe(200);
     expect(nodeMap.get("I1")).toBe(300);
     expect(nodeMap.get("S1")).toBe(400);
 
-    // Verify nodes were actually created
     expect(nodes.some((n) => n.tag === "button")).toBe(true);
     expect(nodes.some((n) => n.tag === "link")).toBe(true);
     expect(nodes.some((n) => n.tag === "input")).toBe(true);
     expect(nodes.some((n) => n.tag === "select")).toBe(true);
   });
 });
-
-// ---------------------------------------------------------------------------
-// State survives through filters
-// ---------------------------------------------------------------------------
 
 describe("pipeline — state survives filterViewportOnly", () => {
   it("node with state and visible: true keeps its state", () => {

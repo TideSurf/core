@@ -602,7 +602,7 @@ export function getToolSpecs(options?: { readOnly?: boolean }): ToolSpec[] {
     : [...TOOL_REGISTRY];
 }
 
-export function getToolNames(options?: { readOnly?: boolean }): string[] {
+function getToolNames(options?: { readOnly?: boolean }): string[] {
   return getToolSpecs(options).map((tool) => tool.name);
 }
 
@@ -683,21 +683,6 @@ function failure(error: unknown): ToolResult {
     process.env.NODE_ENV === "development" && error instanceof Error
       ? error.stack
       : undefined;
-
-  if (
-    errorType === "ElementNotFoundError" ||
-    /element.*not found|no element/i.test(message)
-  ) {
-    const normalized = message.replace(/[.\s]+$/, "");
-    return {
-      success: false,
-      error: /get[_ ]?state|node map|retry/i.test(normalized)
-        ? `${normalized}.`
-        : `${normalized}. Run get_state and retry with a current element ID.`,
-      errorType,
-      stack,
-    };
-  }
 
   return { success: false, error: message, errorType, stack };
 }

@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   closeSync,
   chmodSync,
@@ -179,24 +179,44 @@ export function getSessionPaths(sessionName: string): SessionPaths {
   };
 }
 
+function isMissingOrMalformedJson(error: unknown): boolean {
+  return error instanceof SyntaxError || (
+    typeof error === "object" &&
+    error !== null &&
+    (error as NodeJS.ErrnoException).code === "ENOENT"
+  );
+}
+
 export function readSessionState(paths: SessionPaths): SessionState | null {
   try {
-    const parsed = JSON.parse(readFileSync(paths.stateFile, "utf8")) as SessionState;
+    const parsed: unknown = JSON.parse(readFileSync(paths.stateFile, "utf8"));
     if (
-      parsed.socketPath !== paths.socketPath ||
-      typeof parsed.secret !== "string" ||
-      typeof parsed.pid !== "number" ||
-      typeof parsed.protocol !== "number" ||
-      typeof parsed.version !== "string" ||
-      typeof parsed.session !== "string" ||
-      typeof parsed.ready !== "boolean" ||
-      !parsed.config
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed)
     ) {
       return null;
     }
-    return parsed;
-  } catch {
-    return null;
+    const state = parsed as Record<string, unknown>;
+    if (
+      state["socketPath"] !== paths.socketPath ||
+      typeof state["secret"] !== "string" ||
+      !Number.isInteger(state["pid"]) ||
+      (state["pid"] as number) <= 0 ||
+      typeof state["protocol"] !== "number" ||
+      typeof state["version"] !== "string" ||
+      typeof state["session"] !== "string" ||
+      typeof state["ready"] !== "boolean" ||
+      typeof state["config"] !== "object" ||
+      state["config"] === null ||
+      Array.isArray(state["config"])
+    ) {
+      return null;
+    }
+    return parsed as SessionState;
+  } catch (error) {
+    if (isMissingOrMalformedJson(error)) return null;
+    throw error;
   }
 }
 
@@ -213,32 +233,31 @@ export function removeSessionFiles(paths: SessionPaths, removeLog = false): void
   if (removeLog) rmSync(paths.logFile, { force: true });
 }
 
-export function secretsMatch(
-  expected: string | Uint8Array,
-  received: string
-): boolean {
-  const a = typeof expected === "string" ? Buffer.from(expected) : expected;
-  const b = Buffer.from(received);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
-
 export function isProcessRunning(pid: number): boolean {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try {
     process.kill(pid, 0);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    const code = typeof error === "object" && error !== null
+      ? (error as NodeJS.ErrnoException).code
+      : undefined;
+    if (code === "EPERM") return true;
+    if (code === "ESRCH") return false;
+    throw error;
   }
 }
 
 function isStaleEndpointError(error: unknown): boolean {
-  const code = (error as NodeJS.ErrnoException).code;
-  return !(
-    typeof error === "object" &&
-    error !== null &&
+  if (
+    typeof error !== "object" ||
+    error === null ||
     SENT_REQUEST_ERRORS.has(error)
-  ) && (code === "ENOENT" || code === "ECONNREFUSED");
+  ) {
+    return false;
+  }
+  const code = (error as NodeJS.ErrnoException).code;
+  return code === "ENOENT" || code === "ECONNREFUSED";
 }
 
 export async function sendSessionRequest<T = unknown>(
@@ -401,14 +420,22 @@ interface StartupLock {
 
 function readStartupLock(paths: SessionPaths): StartupLock | null {
   try {
-    const value = JSON.parse(readFileSync(paths.lockFile, "utf8")) as StartupLock;
-    return Number.isInteger(value.pid) &&
-      typeof value.startupId === "string" &&
-      Number.isFinite(value.createdAt)
-      ? value
+    const parsed: unknown = JSON.parse(readFileSync(paths.lockFile, "utf8"));
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      return null;
+    }
+    const value = parsed as Record<string, unknown>;
+    const pid = value["pid"];
+    const startupId = value["startupId"];
+    const createdAt = value["createdAt"];
+    return Number.isInteger(pid) &&
+      typeof startupId === "string" &&
+      Number.isFinite(createdAt)
+      ? { pid: pid as number, startupId, createdAt: createdAt as number }
       : null;
-  } catch {
-    return null;
+  } catch (error) {
+    if (isMissingOrMalformedJson(error)) return null;
+    throw error;
   }
 }
 
@@ -636,10 +663,6 @@ export async function sendLiveSessionRequest<T>(
     removeSessionFiles(paths);
     return null;
   }
-}
-
-export async function getLiveSession(session: string): Promise<SessionState | null> {
-  return (await sendLiveSessionRequest(session, { method: "ping" }, 500))?.state ?? null;
 }
 
 export function toToolResult(value: unknown): ToolResult {

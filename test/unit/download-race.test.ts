@@ -2,13 +2,15 @@ import { describe, expect, it, mock } from "bun:test";
 import { downloadFromAction } from "../../src/cdp/download-manager.js";
 import type { CDPConnection } from "../../src/cdp/connection.js";
 
-function harness() {
+function harness(restoreError?: Error) {
   const handlers = new Map<string, (params: never) => void>();
   const events: string[] = [];
   const conn = {
     client: { send: mock(async () => ({})) },
     Page: {
-      setDownloadBehavior: mock(async () => ({})),
+      setDownloadBehavior: mock(async ({ behavior }: { behavior: string }) => {
+        if (behavior === "default" && restoreError) throw restoreError;
+      }),
       on: mock((event: string, handler: (params: never) => void) => {
         events.push(`subscribe:${event}`);
         handlers.set(event, handler);
@@ -108,5 +110,41 @@ describe("download event races", () => {
     );
 
     await expect(download).rejects.toThrow("Download canceled");
+  });
+
+  it("reports a download-policy restore failure after completion", async () => {
+    const restoreError = new Error("restore failed");
+    const { conn, handlers } = harness(restoreError);
+    const download = downloadFromAction(
+      conn,
+      { downloadDir: "/tmp/downloads", timeout: 100 },
+      async () => {
+        handlers.get("downloadWillBegin")?.({
+          guid: "complete",
+          suggestedFilename: "complete.txt",
+        } as never);
+        handlers.get("downloadProgress")?.({
+          guid: "complete",
+          state: "completed",
+        } as never);
+      }
+    );
+
+    await expect(download).rejects.toBe(restoreError);
+  });
+
+  it("keeps a trigger failure primary when policy restore also fails", async () => {
+    const triggerError = new Error("trigger failed");
+    const { conn } = harness(new Error("restore failed"));
+
+    await expect(
+      downloadFromAction(
+        conn,
+        { downloadDir: "/tmp/downloads", timeout: 100 },
+        async () => {
+          throw triggerError;
+        }
+      )
+    ).rejects.toBe(triggerError);
   });
 });

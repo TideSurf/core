@@ -39,8 +39,10 @@ declare module "chrome-remote-interface" {
     };
     Page: {
       enable(): Promise<void>;
-      navigate(params: { url: string }): Promise<unknown>;
-      loadEventFired(): Promise<unknown>;
+      navigate(params: { url: string }): Promise<{
+        errorText?: string;
+        loaderId?: string;
+      }>;
       loadEventFired(callback: () => void): () => void;
       captureScreenshot(params: {
         format?: string;
@@ -100,11 +102,7 @@ declare module "chrome-remote-interface" {
       releaseObject(params: { objectId: string }): Promise<void>;
     };
     Input: {
-      dispatchKeyEvent(params: {
-        type: string;
-        text?: string;
-        key?: string;
-      }): Promise<void>;
+      insertText(params: { text: string }): Promise<void>;
     };
     Emulation: {
       setDeviceMetricsOverride(params: {
@@ -124,6 +122,7 @@ declare module "chrome-remote-interface" {
     function List(options?: { host?: string; port?: number; useHostName?: boolean }): Promise<Target[]>;
     function New(options?: { host?: string; port?: number; url?: string; useHostName?: boolean }): Promise<Target>;
     function Close(options?: { host?: string; port?: number; id: string; useHostName?: boolean }): Promise<void>;
+    function Version(options?: { host?: string; port?: number }): Promise<unknown>;
   }
 
   export default CDP;

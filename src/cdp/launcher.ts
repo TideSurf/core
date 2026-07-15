@@ -384,6 +384,17 @@ function processExited(proc: ChildProcess): boolean {
   return proc.exitCode !== null || proc.signalCode !== null;
 }
 
+function isConnectionRefused(error: unknown): boolean {
+  if ((error as NodeJS.ErrnoException | undefined)?.code === "ECONNREFUSED") {
+    return true;
+  }
+  return (
+    error instanceof AggregateError &&
+    error.errors.length > 0 &&
+    error.errors.every(isConnectionRefused)
+  );
+}
+
 function waitForProcessExit(proc: ChildProcess, timeout: number): Promise<boolean> {
   if (processExited(proc)) return Promise.resolve(true);
   return new Promise((resolve) => {
@@ -463,7 +474,7 @@ async function waitForLaunchedBrowser(
           Math.min(500, Math.max(1, deadline - Date.now())),
           "Chrome readiness"
         );
-        const page = (targets as Array<{ id: string; type: string }>).find(
+        const page = targets.find(
           (target) => target.type === "page"
         );
         if (page) return { port, host: "localhost", targetId: page.id };
@@ -502,20 +513,28 @@ export async function launchChrome(options: LaunchOptions = {}): Promise<LaunchR
   const activePortFile = join(userDataDir, "DevToolsActivePort");
   const active = readDevToolsActivePort(userDataDir);
   if (active) {
-    let stale = false;
+    let reachable = false;
+    let probeError: unknown;
     try {
-      await discoverBrowser({ port: active.port, timeout: 250 });
+      await withTimeout(
+        CDP.List({ port: active.port, host: "localhost", useHostName: true }),
+        250,
+        "active Chrome profile"
+      );
+      reachable = true;
     } catch (error) {
-      if (!(error instanceof CDPConnectionError)) throw error;
-      stale = true;
+      probeError = error;
     }
-    if (stale) {
-      rmSync(activePortFile, { force: true });
-    } else {
+    if (reachable) {
+      throw new ChromeLaunchError(`The Chrome profile is already active: ${userDataDir}`);
+    }
+    if (!isConnectionRefused(probeError)) {
       throw new ChromeLaunchError(
-        `The Chrome profile is already active: ${userDataDir}`
+        `Could not verify whether the Chrome profile is active: ${userDataDir}`,
+        { cause: probeError instanceof Error ? probeError : undefined }
       );
     }
+    rmSync(activePortFile, { force: true });
   }
 
   const args = buildChromeArgs({
@@ -553,12 +572,34 @@ export async function launchChrome(options: LaunchOptions = {}): Promise<LaunchR
     };
   } catch (error) {
     const exited = await terminateChromeProcess(proc);
-    if (ownsTempDir && exited) rmSync(userDataDir, { recursive: true, force: true });
-    if (error instanceof ChromeLaunchError) throw error;
-    throw new ChromeLaunchError(
-      `Failed to launch Chrome: ${error instanceof Error ? error.message : String(error)}`,
-      { cause: error instanceof Error ? error : undefined }
-    );
+    const launchError = error instanceof ChromeLaunchError
+      ? error
+      : new ChromeLaunchError(
+        `Failed to launch Chrome: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error instanceof Error ? error : undefined }
+      );
+    if (!exited) {
+      throw new ChromeLaunchError(
+        `${launchError.message}; failed to stop the Chrome process`,
+        { cause: launchError }
+      );
+    }
+    if (ownsTempDir) {
+      try {
+        rmSync(userDataDir, { recursive: true, force: true });
+      } catch (cleanupError) {
+        throw new ChromeLaunchError(
+          `${launchError.message}; failed to remove temporary profile ${userDataDir}`,
+          {
+            cause: new AggregateError(
+              [launchError, cleanupError],
+              "Chrome launch and profile cleanup failed"
+            ),
+          }
+        );
+      }
+    }
+    throw launchError;
   }
 }
 
@@ -577,7 +618,7 @@ export async function discoverBrowser(
       timeout,
       "discoverBrowser"
     );
-    const page = (targets as Array<{ id: string; type: string }>).find(
+    const page = targets.find(
       (target) => target.type === "page"
     );
     if (!page) {

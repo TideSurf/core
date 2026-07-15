@@ -46,6 +46,30 @@ function validateRuntimeOptions(options: {
   }
 }
 
+async function rollbackCDP(
+  primaryError: unknown,
+  message: string,
+  operations: readonly (() => unknown | Promise<unknown>)[]
+): Promise<never> {
+  const cleanupErrors: unknown[] = [];
+  for (const operation of operations) {
+    try {
+      await operation();
+    } catch (error) {
+      cleanupErrors.push(error);
+    }
+  }
+  if (cleanupErrors.length > 0) {
+    throw new CDPConnectionError(message, {
+      cause: new AggregateError(
+        [primaryError, ...cleanupErrors],
+        "CDP operation and rollback failed"
+      ),
+    });
+  }
+  throw primaryError;
+}
+
 export function getTideSurfConnectionInfo(
   instance: TideSurf
 ): { host: string; port: number } | undefined {
@@ -63,29 +87,26 @@ export function connectToDiscoveredBrowser(
   } as TideSurfConnectOptions);
 }
 
-/**
- * Main entry point for TideSurf.
- * Launches Chrome, connects via CDP, and provides page interaction + tool execution.
- */
+/** Owns a managed or attached browser session and its stateful page tools. */
 export class TideSurf {
   private chromeProcess: ChildProcess | null;
   private activePage: SurfingPage;
-  private pages: Map<string, SurfingPage> = new Map();
-  private tabManager: TabManager;
-  private executor: (tool: {
+  private readonly pages: Map<string, SurfingPage> = new Map();
+  private readonly tabManager: TabManager;
+  private readonly executor: (tool: {
     name: string;
     input: Record<string, unknown>;
   }) => Promise<ToolResult>;
-  private userDataDir: string;
-  private ownsTempDir: boolean;
-  private readOnly: boolean;
-  private defaultViewport?: TideSurfOptions["defaultViewport"];
-  private fileAccessRoots: string[];
-  private urlValidationOptions: UrlValidationOptions;
+  private readonly userDataDir: string;
+  private readonly ownsTempDir: boolean;
+  private readonly readOnly: boolean;
+  private readonly defaultViewport?: TideSurfOptions["defaultViewport"];
+  private readonly fileAccessRoots: string[];
+  private readonly urlValidationOptions: UrlValidationOptions;
   private exitHandler: (() => void) | null = null;
   private activeTabId: string | null;
   private closePromise: Promise<void> | null = null;
-  private timeout?: number;
+  private readonly timeout?: number;
 
   private constructor(
     chromeProcess: ChildProcess | null,
@@ -93,14 +114,14 @@ export class TideSurf {
     tabManager: TabManager,
     userDataDir: string,
     ownsTempDir: boolean,
-    readOnly: boolean = false,
-    activeTabId: string | null = null,
-    defaultViewport?: TideSurfOptions["defaultViewport"],
-    fileAccessRoots: string[] = resolveFileAccessRoots(),
-    urlValidationOptions: UrlValidationOptions = {},
-    timeout: number | undefined = undefined,
-    connectionHost: string = "127.0.0.1",
-    connectionPort: number = 9222
+    readOnly: boolean,
+    activeTabId: string | null,
+    defaultViewport: TideSurfOptions["defaultViewport"] | undefined,
+    fileAccessRoots: string[],
+    urlValidationOptions: UrlValidationOptions,
+    timeout: number | undefined,
+    connectionHost: string,
+    connectionPort: number
   ) {
     this.chromeProcess = chromeProcess;
     this.activePage = page;
@@ -120,15 +141,9 @@ export class TideSurf {
       this.pages.set(activeTabId, page);
     }
 
-    // Register exit handler to kill Chrome if parent dies (only if we own the process)
     if (chromeProcess) {
-      this.exitHandler = () => {
-        try {
-          this.chromeProcess?.kill();
-        } catch {
-          // ignore
-        }
-      };
+      const ownedProcess = chromeProcess;
+      this.exitHandler = () => void ownedProcess.kill();
       process.on("exit", this.exitHandler);
     }
   }
@@ -194,12 +209,37 @@ export class TideSurf {
         port
       );
     } catch (err) {
+      const cleanupErrors: unknown[] = [];
       if (conn) {
-        await disconnect(conn).catch(() => {});
+        try {
+          await disconnect(conn);
+        } catch (error) {
+          cleanupErrors.push(error);
+        }
       }
       const exited = await terminateChromeProcess(proc);
+      if (!exited) {
+        cleanupErrors.push(
+          new ChromeLaunchError("Owned Chrome did not stop during setup rollback")
+        );
+      }
       if (ownsTempDir && exited) {
-        rmSync(userDataDir, { recursive: true, force: true });
+        try {
+          rmSync(userDataDir, { recursive: true, force: true });
+        } catch (error) {
+          cleanupErrors.push(error);
+        }
+      }
+      if (cleanupErrors.length > 0) {
+        throw new ChromeLaunchError(
+          "Browser setup failed and rollback did not complete",
+          {
+            cause: new AggregateError(
+              [err, ...cleanupErrors],
+              "Browser setup and rollback failed"
+            ),
+          }
+        );
       }
       throw err;
     }
@@ -264,8 +304,11 @@ export class TideSurf {
         port
       );
     } catch (error) {
-      await disconnect(conn).catch(() => {});
-      throw error;
+      return rollbackCDP(
+        error,
+        "Browser setup failed and CDP rollback did not complete",
+        [() => disconnect(conn)]
+      );
     }
   }
 
@@ -327,8 +370,6 @@ export class TideSurf {
     return { ...this.urlValidationOptions };
   }
 
-  // --- Tab management ---
-
   /**
    * List all open tabs.
    */
@@ -377,9 +418,18 @@ export class TideSurf {
       this.assertOpen();
       return { tab, page };
     } catch (error) {
-      if (conn) await disconnect(conn).catch(() => {});
-      await this.tabManager.closeTab(tab.id, this.timeout).catch(() => {});
-      throw error;
+      const cleanup: Array<() => Promise<unknown>> = [
+        () => this.tabManager.closeTab(tab.id, this.timeout),
+      ];
+      if (conn) {
+        const connected = conn;
+        cleanup.unshift(() => disconnect(connected));
+      }
+      return rollbackCDP(
+        error,
+        `Tab ${tab.id} setup failed and rollback did not complete`,
+        cleanup
+      );
     }
   }
 
@@ -391,7 +441,7 @@ export class TideSurf {
     this.assertOpen();
     let page = this.pages.get(tabId);
     if (!page) {
-      let conn;
+      let conn: CDPConnection | undefined;
       try {
         conn = await this.tabManager.connectToTab(tabId, this.timeout);
         if (this.defaultViewport) {
@@ -407,10 +457,16 @@ export class TideSurf {
         this.assertOpen();
         this.pages.set(tabId, page);
       } catch (err) {
+        const cleanup: Array<() => Promise<unknown>> = [];
         if (conn) {
-          await disconnect(conn).catch(() => {});
+          const connected = conn;
+          cleanup.push(() => disconnect(connected));
         }
-        throw err;
+        return rollbackCDP(
+          err,
+          `Tab ${tabId} setup failed and CDP rollback did not complete`,
+          cleanup
+        );
       }
     }
     this.activePage = page;
@@ -441,38 +497,63 @@ export class TideSurf {
       await this.tabManager.closeTab(tabId, this.timeout);
       this.assertOpen();
     } catch (error) {
-      if (replacement) {
-        await replacement.page.close().catch(() => {});
-        await this.tabManager
-          .closeTab(replacement.tab.id, this.timeout)
-          .catch(() => {});
-      }
-      throw error;
+      return rollbackCDP(
+        error,
+        "Tab close failed and replacement rollback did not complete",
+        replacement
+          ? [
+            () => replacement.page.close(),
+            () => this.tabManager.closeTab(replacement.tab.id, this.timeout),
+          ]
+          : []
+      );
     }
 
     this.pages.delete(tabId);
-    if (page) await page.close().catch(() => {});
+    let pageDisconnectFailed = false;
+    let pageDisconnectError: unknown;
+    if (page) {
+      try {
+        await page.close();
+      } catch (error) {
+        pageDisconnectFailed = true;
+        pageDisconnectError = error;
+      }
+    }
 
-    if (!isActiveTab) return;
-    if (replacement) {
-      this.pages.set(replacement.tab.id, replacement.page);
-      this.activePage = replacement.page;
-      this.activeTabId = replacement.tab.id;
-      return;
+    if (isActiveTab) {
+      if (replacement) {
+        this.pages.set(replacement.tab.id, replacement.page);
+        this.activePage = replacement.page;
+        this.activeTabId = replacement.tab.id;
+      } else {
+        const remainingTabs = await this.tabManager.listTabs(this.timeout);
+        this.assertOpen();
+        const nextTab =
+          remainingTabs.find((tab) => this.pages.has(tab.id)) ?? remainingTabs[0];
+        if (!nextTab) {
+          throw new CDPConnectionError(
+            "No browser tab remains after closing the active tab"
+          );
+        }
+        await this.switchTab(nextTab.id);
+      }
     }
-    const remainingTabs = await this.tabManager.listTabs(this.timeout);
-    this.assertOpen();
-    const nextTab = remainingTabs.find((tab) => this.pages.has(tab.id)) ?? remainingTabs[0];
-    if (!nextTab) {
-      throw new CDPConnectionError("No browser tab remains after closing the active tab");
+
+    if (pageDisconnectFailed) {
+      throw new CDPConnectionError(
+        `Tab ${tabId} closed, but its CDP connection did not close cleanly`,
+        {
+          cause:
+            pageDisconnectError instanceof Error
+              ? pageDisconnectError
+              : undefined,
+        }
+      );
     }
-    await this.switchTab(nextTab.id);
   }
 
-  /**
-   * Gracefully close Chrome and clean up resources.
-   * SIGTERM → wait 5s → SIGKILL, then cleanup temp dir.
-   */
+  /** Disconnect pages, stop owned Chrome, and remove its temporary profile. */
   async close(): Promise<void> {
     this.closePromise ??= this.closeResources();
     return this.closePromise;
@@ -499,11 +580,12 @@ export class TideSurf {
     this.chromeProcess = null;
     const exited = proc ? await terminateChromeProcess(proc) : true;
 
+    let profileCleanup: { error: unknown } | undefined;
     if (this.ownsTempDir && exited) {
       try {
         rmSync(this.userDataDir, { recursive: true, force: true });
-      } catch {
-        // The browser is gone; a locked profile can be removed by the OS later.
+      } catch (error) {
+        profileCleanup = { error };
       }
     }
 
@@ -520,6 +602,13 @@ export class TideSurf {
             ? disconnectFailure.reason
             : undefined,
       });
+    }
+
+    if (profileCleanup) {
+      throw new ChromeLaunchError(
+        `Failed to remove temporary Chrome profile ${this.userDataDir}`,
+        { cause: profileCleanup.error }
+      );
     }
   }
 

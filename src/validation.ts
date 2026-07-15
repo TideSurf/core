@@ -24,9 +24,7 @@ function unmapIPv4FromIPv6(host: string): string | null {
   if (hex) {
     const high = parseInt(hex[1], 16);
     const low = parseInt(hex[2], 16);
-    if (Number.isFinite(high) && Number.isFinite(low)) {
-      return `${(high >> 8) & 0xff}.${high & 0xff}.${(low >> 8) & 0xff}.${low & 0xff}`;
-    }
+    return `${(high >> 8) & 0xff}.${high & 0xff}.${(low >> 8) & 0xff}.${low & 0xff}`;
   }
   return null;
 }
@@ -116,7 +114,6 @@ export function validateUrl(url: string, options: UrlValidationOptions = {}): vo
       `Invalid URL: "${url}". Punycode hostnames are not allowed (possible homograph attack)`
     );
   }
-  // Check for mixed scripts in the hostname
   if (hostname && /\p{Script=Latin}/u.test(hostname)) {
     if (NON_LATIN_HOST_SCRIPTS.test(hostname)) {
       throw new ValidationError(

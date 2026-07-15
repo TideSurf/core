@@ -277,7 +277,6 @@ describe("DOM walker — data-os-state coexists with data-os-visible", () => {
     const buttonNode = nodes.find((n) => n.tag === "button");
     expect(buttonNode).toBeDefined();
     expect(buttonNode!.visible).toBe(true);
-    // state should also be populated (new feature)
     expect((buttonNode as OSNode & { state?: string[] }).state).toEqual([
       "disabled",
     ]);

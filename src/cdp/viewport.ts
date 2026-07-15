@@ -113,7 +113,7 @@ export async function clearInspectionMarkers(
     const root = stack.pop();
     const elements = root.nodeType === Node.DOCUMENT_NODE
       ? (root.documentElement ? [root.documentElement] : [])
-      : Array.from(root.children || []);
+      : Array.from(root.children);
     for (const first of elements) {
       const pending = [first];
       while (pending.length > 0) {
@@ -226,7 +226,7 @@ export async function inspectPage(
   const composedParent = el => {
     if (el.assignedSlot) return el.assignedSlot;
     if (el.parentElement) return el.parentElement;
-    const root = el.getRootNode ? el.getRootNode() : null;
+    const root = el.getRootNode();
     return root && root.host ? root.host : null;
   };
 
@@ -323,14 +323,10 @@ export async function inspectPage(
     if (clipX || clipY || clipsToBounds) {
       const bounds = ancestor.getBoundingClientRect();
       if (clipX || clipY) {
-        const clientLeft = bounds.left + (ancestor.clientLeft || 0);
-        const clientTop = bounds.top + (ancestor.clientTop || 0);
-        const clientWidth = Number.isFinite(ancestor.clientWidth)
-          ? ancestor.clientWidth
-          : bounds.width;
-        const clientHeight = Number.isFinite(ancestor.clientHeight)
-          ? ancestor.clientHeight
-          : bounds.height;
+        const clientLeft = bounds.left + ancestor.clientLeft;
+        const clientTop = bounds.top + ancestor.clientTop;
+        const clientWidth = ancestor.clientWidth;
+        const clientHeight = ancestor.clientHeight;
         region = intersectBounds(region, {
           left: clientLeft,
           right: clientLeft + clientWidth,
@@ -387,13 +383,8 @@ export async function inspectPage(
   };
 
   const clipThroughAncestors = (initialRect, element) => {
-    const rect = {
-      top: initialRect.top, bottom: initialRect.bottom,
-      left: initialRect.left, right: initialRect.right,
-      width: initialRect.width, height: initialRect.height
-    };
     const region = inheritedClipRegion(element);
-    return region ? intersectBounds(rect, region) : null;
+    return region ? intersectBounds(initialRect, region) : null;
   };
 
   const paintClipCache = new WeakMap();
@@ -423,12 +414,13 @@ export async function inspectPage(
     return clipped;
   };
 
+  const sampleFractions = [0.02, 0.25, 0.5, 0.75, 0.98];
   const paintedAtSample = (element, rect, view) => {
     const target = element.nodeType === Node.ELEMENT_NODE
       ? element
-      : element.parentElement || (element.getRootNode && element.getRootNode().host);
+      : element.parentElement || element.getRootNode().host;
     if (!target || computedStyle(target).pointerEvents === 'none') return true;
-    const root = target.getRootNode ? target.getRootNode() : null;
+    const root = target.getRootNode();
     const source = root && typeof root.elementsFromPoint === 'function'
       ? root
       : target.ownerDocument;
@@ -439,10 +431,9 @@ export async function inspectPage(
     const top = Math.max(0, rect.top);
     const bottom = Math.min(view.innerHeight, rect.bottom);
     if (right <= left || bottom <= top) return false;
-    const fractions = [0.02, 0.25, 0.5, 0.75, 0.98];
-    for (const yFraction of fractions) {
+    for (const yFraction of sampleFractions) {
       const y = top + (bottom - top) * yFraction;
-      for (const xFraction of fractions) {
+      for (const xFraction of sampleFractions) {
         const x = left + (right - left) * xFraction;
         const hits = source.elementsFromPoint(x, y);
         if (hits.some(hit => hit === target || target.contains(hit))) return true;

@@ -141,6 +141,19 @@ describeBrowser("Browser integration", () => {
     expect(result).toBe("clicked!");
   }, 15000);
 
+  it("completes a click that navigates away from its remote object", async () => {
+    await surfing.navigate(fixtureUrls["basic.html"]);
+    const page = surfing.getPage();
+    await page.evaluate(`document.body.innerHTML =
+      '<a href="${fixtureUrls["interactive.html"]}">Next page</a>'`);
+    await surfing.getState();
+
+    await expect(page.click("L1")).resolves.toBeUndefined();
+    await page.waitForStable(5_000);
+
+    expect(await page.evaluate("location.pathname")).toBe("/interactive.html");
+  }, 15000);
+
   it("types into an input", async () => {
     await surfing.navigate(fixtureUrls["interactive.html"]);
     await surfing.getState();

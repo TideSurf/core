@@ -58,7 +58,7 @@ const LIFECYCLE_COMMAND_NAMES = [
 ] as const;
 const LIFECYCLE_COMMANDS = new Set<string>(LIFECYCLE_COMMAND_NAMES);
 
-export function availableCommandNames(): string[] {
+function availableCommandNames(): string[] {
   return [...LIFECYCLE_COMMAND_NAMES, ...getToolCommandNames()];
 }
 
@@ -273,7 +273,10 @@ export function parseInvocation(argv: string[]): ParsedInvocation {
     throw new CliUsageError("--timeout must be a positive integer");
   }
   const channel = values["channel"] as ChromeChannel | undefined;
-  if (channel && !["stable", "beta", "dev", "canary", "chromium"].includes(channel)) {
+  if (
+    channel !== undefined &&
+    !["stable", "beta", "dev", "canary", "chromium"].includes(channel)
+  ) {
     throw new CliUsageError("--channel must be stable, beta, dev, canary, or chromium");
   }
   if (values["autoConnect"] && values["connectOnly"]) {
@@ -287,6 +290,15 @@ export function parseInvocation(argv: string[]): ParsedInvocation {
   }
   if (values["host"] === "") {
     throw new CliUsageError("--host must be non-empty");
+  }
+  if (values["browserUrl"] === "") {
+    throw new CliUsageError("--browser-url must be non-empty");
+  }
+  if (values["chromePath"] === "") {
+    throw new CliUsageError("--chrome-path must be non-empty");
+  }
+  if (values["userDataDir"] === "") {
+    throw new CliUsageError("--user-data-dir must be non-empty");
   }
 
   const rawSession = String(values["session"] ?? "default");
@@ -311,9 +323,13 @@ export function parseInvocation(argv: string[]): ParsedInvocation {
     host: values["host"] as string | undefined,
     port,
     browserUrl: values["browserUrl"] as string | undefined,
-    chromePath: values["chromePath"] ? resolve(String(values["chromePath"])) : undefined,
+    chromePath: values["chromePath"] !== undefined
+      ? resolve(String(values["chromePath"]))
+      : undefined,
     channel,
-    userDataDir: values["userDataDir"] ? resolve(String(values["userDataDir"])) : undefined,
+    userDataDir: values["userDataDir"] !== undefined
+      ? resolve(String(values["userDataDir"]))
+      : undefined,
     timeout: sessionTimeout,
     readOnly: Boolean(values["readOnly"]),
     allowLocalhost: Boolean(values["allowLocalhost"]),

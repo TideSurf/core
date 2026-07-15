@@ -103,12 +103,10 @@ export function classify(
     }
   }
 
-  // Discard tags
   if (DISCARD_TAGS.has(upper)) {
     return { action: "DISCARD" };
   }
 
-  // Role-based classification takes priority for generic elements
   if (attributes?.["role"]) {
     const mapped = ROLE_TAG_MAP[attributes["role"]];
     if (mapped) {
@@ -116,7 +114,6 @@ export function classify(
     }
   }
 
-  // Conditional structural tags: KEEP only when semantically meaningful
   if (upper === "SECTION" || upper === "ARTICLE" || upper === "ASIDE") {
     if (attributes?.["aria-label"] || attributes?.["role"]) {
       return { action: "KEEP", mappedTag: upper.toLowerCase() };
@@ -134,12 +131,10 @@ export function classify(
     return { action: "COLLAPSE" };
   }
 
-  // Keep tags
   if (KEEP_TAG_MAP[upper]) {
     return { action: "KEEP", mappedTag: KEEP_TAG_MAP[upper] };
   }
 
-  // Everything else: COLLAPSE (promote children)
   return { action: "COLLAPSE" };
 }
 

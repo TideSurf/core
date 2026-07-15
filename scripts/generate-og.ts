@@ -26,6 +26,7 @@ const server = Bun.serve({
 });
 
 let surf: TideSurf | null = null;
+let generationFailed = false;
 try {
   surf = await TideSurf.launch({
     headless: true,
@@ -59,7 +60,16 @@ try {
   console.log(`  ${outPath}`);
   console.log(`  ${ghOutPath}`);
   console.log(`  ${manifestPath}`);
+} catch (error) {
+  generationFailed = true;
+  throw error;
 } finally {
-  await surf?.close().catch(() => undefined);
+  let closeFailure: { error: unknown } | undefined;
+  try {
+    await surf?.close();
+  } catch (error) {
+    closeFailure = { error };
+  }
   server.stop(true);
+  if (!generationFailed && closeFailure) throw closeFailure.error;
 }

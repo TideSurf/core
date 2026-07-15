@@ -64,7 +64,7 @@ function filterNode(
   }
 
   if (!selfVisible && children.length === 0) return undefined;
-  if (!childrenChanged && children.length === node.children.length) return node;
+  if (!childrenChanged) return node;
 
   return {
     tag: node.tag,

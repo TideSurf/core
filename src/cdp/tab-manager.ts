@@ -15,13 +15,10 @@ export interface TabInfo {
  * Manages multiple browser tabs via CDP.
  */
 export class TabManager {
-  private readonly port: number;
-  private readonly host: string;
-
-  constructor(port: number, host: string = "localhost") {
-    this.port = port;
-    this.host = host;
-  }
+  constructor(
+    private readonly port: number,
+    private readonly host: string = "localhost"
+  ) {}
 
   /** List page targets, excluding workers and browser targets. */
   async listTabs(timeout?: number): Promise<TabInfo[]> {
@@ -31,7 +28,7 @@ export class TabManager {
         timeout ?? 10_000,
         "listTabs"
       );
-      return (targets as Array<{ id: string; url: string; title: string; type: string }>)
+      return targets
         .filter((t) => t.type === "page")
         .map((t) => ({
           id: t.id,
@@ -57,7 +54,7 @@ export class TabManager {
       host: this.host,
       url,
       useHostName: true,
-    }) as Promise<{ id: string; url: string; title: string; type: string }>;
+    });
     void pending.then(async (target) => {
       if (!abandoned) return;
       await withTimeout(
@@ -115,9 +112,7 @@ export class TabManager {
     }
   }
 
-  /**
-   * Connect to a specific tab and return a CDPConnection.
-   */
+  /** Connect to a page target. */
   async connectToTab(tabId: string, timeout?: number): Promise<CDPConnection> {
     return connect({ port: this.port, host: this.host, tab: tabId, timeout });
   }
@@ -125,11 +120,8 @@ export class TabManager {
   /** Check whether the browser endpoint still responds. */
   async isConnected(timeout?: number): Promise<boolean> {
     try {
-      const cdpModule = CDP as unknown as {
-        Version(options: { port: number; host: string }): Promise<unknown>;
-      };
       await withTimeout(
-        cdpModule.Version({ port: this.port, host: this.host }),
+        CDP.Version({ port: this.port, host: this.host }),
         timeout ?? 5_000,
         "isConnected"
       );

@@ -89,7 +89,6 @@ async function main() {
     try {
       await surf.navigate(site.url);
 
-      // Get rendered DOM token count
       const rawHtml = await surf.getPage().evaluate("document.documentElement.outerHTML") as string;
       const rawTokens = estimateTokens(rawHtml);
 
@@ -127,7 +126,6 @@ async function main() {
 
   await surf.close();
 
-  // Summary
   if (results.length === 0) return;
 
   const avgMs = results.reduce((s, r) => s + r.ms, 0) / results.length;
@@ -175,7 +173,6 @@ async function main() {
   );
   console.log("═".repeat(80));
 
-  // Markdown output for README
   console.log("\n\n--- MARKDOWN (for README) ---\n");
   console.log("| Site | Raw HTML | TideSurf | Reduction | Ratio |");
   console.log("|------|----------|----------|-----------|-------|");

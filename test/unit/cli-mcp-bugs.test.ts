@@ -156,6 +156,12 @@ describe("CLI parsing", () => {
     expect(() => parseInvocation(["--port", "0", "status"])).toThrow(
       CliUsageError
     );
+    expect(() => parseInvocation(["--channel", "", "status"])).toThrow(
+      CliUsageError
+    );
+    for (const flag of ["--browser-url", "--chrome-path", "--user-data-dir"]) {
+      expect(() => parseInvocation([flag, "", "status"])).toThrow(CliUsageError);
+    }
     expect(() => parseInvocation(["--auto-connect", "--connect-only", "status"])).toThrow(
       CliUsageError
     );

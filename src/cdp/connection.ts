@@ -11,7 +11,13 @@ import { withTimeout } from "./timeout.js";
 
 /** Clipboard reads share one cooldown across connections. */
 let lastClipboardReadTime = 0;
-const CLIPBOARD_READ_COOLDOWN_MS = 5000; // 5 seconds between reads
+const CLIPBOARD_READ_COOLDOWN_MS = 5_000;
+const REMOTE_OBJECT_GONE_MESSAGES = [
+  "Cannot find context with specified id",
+  "Could not find object with given id",
+  "Invalid remote object id",
+  "Execution context was destroyed",
+] as const;
 
 interface RuntimeResponse {
   result?: {
@@ -167,9 +173,23 @@ export async function connect(options: {
   } catch (err) {
     abandoned = true;
     if (client) {
-      await withTimeout(client.close(), Math.min(timeout, 1_000), "CDP rollback").catch(
-        () => {}
-      );
+      try {
+        await withTimeout(
+          client.close(),
+          Math.min(timeout, 1_000),
+          "CDP rollback"
+        );
+      } catch (cleanupError) {
+        throw new CDPConnectionError(
+          "Failed to initialize Chrome CDP and close the partial connection",
+          {
+            cause: new AggregateError(
+              [err, cleanupError],
+              "CDP initialization and rollback failed"
+            ),
+          }
+        );
+      }
     }
     if (err instanceof TideSurfError) throw err;
     throw new CDPConnectionError(
@@ -181,9 +201,7 @@ export async function connect(options: {
 
 export const MAX_DOM_NODES = 50_000;
 
-/**
- * Count nodes in a CDP DOM tree recursively
- */
+/** Count composed CDP nodes without growing the JavaScript call stack. */
 function countNodes(root: CDPNode): number {
   let count = 0;
   const stack = [root];
@@ -299,17 +317,13 @@ export async function navigate(
   const loaded = new Promise<void>((resolveLoad) => {
     resolveLoaded = resolveLoad;
   });
-  const unsubscribe = (
-    conn.Page.loadEventFired as unknown as (
-      handler: () => void
-    ) => (() => void) | Promise<unknown>
-  )(() => resolveLoaded());
+  const unsubscribe = conn.Page.loadEventFired(() => resolveLoaded());
   try {
-    const result = (await withTimeout(
+    const result = await withTimeout(
       conn.Page.navigate({ url }),
       operationTimeout,
       "navigate:request"
-    )) as { errorText?: string; loaderId?: string };
+    );
     if (result.errorText) throw new Error(result.errorText);
     if (result.loaderId) {
       await withTimeout(loaded, operationTimeout, "navigate:load");
@@ -322,7 +336,7 @@ export async function navigate(
       { cause: err instanceof Error ? err : undefined }
     );
   } finally {
-    if (typeof unsubscribe === "function") unsubscribe();
+    unsubscribe();
   }
 }
 
@@ -341,6 +355,7 @@ async function withResolvedNode<T>(
   const objectId = object.objectId;
   if (!objectId) throw new ElementNotFoundError(`backendNodeId:${backendNodeId}`);
 
+  let operationFailed = false;
   try {
     const connected = await callFunction(
       conn,
@@ -356,13 +371,28 @@ async function withResolvedNode<T>(
       throw new ElementNotFoundError(`backendNodeId:${backendNodeId}`, "The mapped node is detached.");
     }
     return await use(objectId);
+  } catch (error) {
+    operationFailed = true;
+    throw error;
   } finally {
-    await withTimeout(
-      conn.Runtime.releaseObject({ objectId }),
-      timeout,
-      `${operation}:release`
-    ).catch(() => {});
+    try {
+      await withTimeout(
+        conn.Runtime.releaseObject({ objectId }),
+        timeout,
+        `${operation}:release`
+      );
+    } catch (error) {
+      if (!operationFailed && !isRemoteObjectGone(error)) throw error;
+    }
   }
+}
+
+function isRemoteObjectGone(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  for (const message of REMOTE_OBJECT_GONE_MESSAGES) {
+    if (error.message.includes(message)) return true;
+  }
+  return false;
 }
 
 /**
@@ -424,7 +454,7 @@ export async function typeText(
             if (!editable) {
               throw new Error('Target is not a text-editable input, textarea, or contenteditable element');
             }
-            if (this.disabled || this.readOnly || this.getAttribute?.('aria-disabled') === 'true') {
+            if (this.disabled || this.readOnly || this.getAttribute('aria-disabled') === 'true') {
               throw new Error('Target is disabled or read-only');
             }
             this.focus();
@@ -462,10 +492,11 @@ export async function typeText(
         );
       }
 
-      const input = conn.Input as unknown as {
-        insertText(params: { text: string }): Promise<void>;
-      };
-      await withTimeout(input.insertText({ text }), operationTimeout, "typeText:insert");
+      await withTimeout(
+        conn.Input.insertText({ text }),
+        operationTimeout,
+        "typeText:insert"
+      );
       await callFunction(
         conn,
         {
@@ -505,7 +536,7 @@ export async function selectOption(
             if (this.tagName !== 'SELECT') {
               throw new Error('Target is not a native select element');
             }
-            if (this.disabled || this.getAttribute?.('aria-disabled') === 'true') {
+            if (this.disabled || this.getAttribute('aria-disabled') === 'true') {
               throw new Error('Target is disabled');
             }
             if (!Array.from(this.options).some(option => option.value === value)) {
@@ -709,7 +740,11 @@ export async function clipboardRead(
     "clipboard:read"
   );
 
-  return String(result.result?.value ?? "");
+  const value = result.result?.value;
+  if (typeof value !== "string") {
+    throw new Error("Clipboard read returned no text result");
+  }
+  return value;
 }
 
 /**

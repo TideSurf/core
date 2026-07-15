@@ -38,33 +38,45 @@ export async function downloadFromAction(
   let unsubscribeBegin: (() => void) | undefined;
   let unsubscribeProgress: (() => void) | undefined;
   let completed = false;
-  let cleaned = false;
   let guid: string | undefined;
   let fileName: string | undefined;
 
   const cleanup = async () => {
-    if (cleaned) return;
-    cleaned = true;
-    unsubscribeBegin?.();
-    unsubscribeProgress?.();
+    const failures: unknown[] = [];
+    const attempt = async (operation: () => unknown | Promise<unknown>) => {
+      try {
+        await operation();
+      } catch (error) {
+        failures.push(error);
+      }
+    };
+
+    await attempt(() => unsubscribeBegin?.());
+    await attempt(() => unsubscribeProgress?.());
     if (!completed && guid) {
-      await withTimeout(
-        conn.client.send("Browser.cancelDownload", { guid }),
-        2_000,
-        "download:cancel"
-      ).catch(() => undefined);
+      await attempt(() =>
+        withTimeout(
+          conn.client.send("Browser.cancelDownload", { guid }),
+          2_000,
+          "download:cancel"
+        )
+      );
     }
-    await withTimeout(
-      conn.Page.setDownloadBehavior({ behavior: "default" }),
-      2_000,
-      "download:restore"
-    ).catch(() => undefined);
+    await attempt(() =>
+      withTimeout(
+        conn.Page.setDownloadBehavior({ behavior: "default" }),
+        2_000,
+        "download:restore"
+      )
+    );
     activeDownloads.delete(conn);
     if (ownsDirectory && !completed) {
-      rmSync(downloadDir, { recursive: true, force: true });
+      await attempt(() => rmSync(downloadDir, { recursive: true, force: true }));
     }
+    if (failures.length > 0) throw failures[0];
   };
 
+  let operationFailed = false;
   try {
     mkdirSync(downloadDir, { recursive: true, mode: 0o700 });
     await withTimeout(
@@ -81,6 +93,7 @@ export async function downloadFromAction(
       resolveDownload = resolve;
       rejectDownload = reject;
     });
+    // The trigger can fail before the event promise is awaited.
     void download.catch(() => undefined);
 
     const finish = (progress: DownloadProgress) => {
@@ -134,7 +147,14 @@ export async function downloadFromAction(
     );
     completed = true;
     return result;
+  } catch (error) {
+    operationFailed = true;
+    throw error;
   } finally {
-    await cleanup();
+    try {
+      await cleanup();
+    } catch (error) {
+      if (!operationFailed) throw error;
+    }
   }
 }

@@ -35,8 +35,8 @@ function loadSessionModule(): Promise<typeof import("./cli/session.js")> {
   return sessionModule ??= import("./cli/session.js");
 }
 
-function protocolError(value: string): Error {
-  const error = new Error(value);
+function protocolError(value: string, cause?: unknown): Error {
+  const error = new Error(value, { cause });
   error.name = "SessionProtocolError";
   return error;
 }
@@ -57,7 +57,9 @@ function pretty(value: unknown): string {
 
 function errorExitCode(error: unknown): number {
   const name = error instanceof Error ? error.name : "";
-  const code = (error as NodeJS.ErrnoException).code ?? "";
+  const code = typeof error === "object" && error !== null
+    ? (error as NodeJS.ErrnoException).code ?? ""
+    : "";
   if (error instanceof CliUsageError) return EXIT_USAGE;
   if (name === "SessionStateError") return EXIT_BROWSER;
   if (/Chrome|CDPConnection|Navigation/.test(name)) return EXIT_BROWSER;
@@ -105,10 +107,8 @@ function preflightToolInput(
 }
 
 async function sessionPolicy(
-  invocation: ParsedInvocation,
-  useExistingSession = true
+  invocation: ParsedInvocation
 ): Promise<SessionState["config"]> {
-  if (!useExistingSession) return invocation.sessionConfig;
   const { getSessionPaths, isProcessRunning, readSessionState } =
     await loadSessionModule();
   const candidate = readSessionState(getSessionPaths(invocation.session));
@@ -203,9 +203,14 @@ async function runTool(invocation: ParsedInvocation): Promise<number> {
     { method: "tool", name: tool.name, input },
     requestTimeout(invocation, input)
   );
-  const result = tool.outputKind === "image"
-    ? await outputScreenshot(toToolResult(response), invocation.screenshotOutput, invocation.json)
-    : toToolResult(response);
+  let result = toToolResult(response);
+  if (tool.outputKind === "image") {
+    result = await outputScreenshot(
+      result,
+      invocation.screenshotOutput,
+      invocation.json
+    );
+  }
   if (tool.outputKind === "image" && invocation.screenshotOutput === "-" && result.success) {
     return 0;
   }
@@ -235,7 +240,7 @@ async function callTool(invocation: ParsedInvocation): Promise<number> {
   if (invocation.positionals.length > 1) {
     throw new CliUsageError(`Unexpected argument: ${invocation.positionals[1]}`);
   }
-  const spec = getToolSpec(name) ?? getToolSpecByCommand(name);
+  const spec = getToolSpecByCommand(name);
   if (!spec) {
     throw new CliUsageError(unknownToolMessage(name));
   }
@@ -338,7 +343,7 @@ async function inspect(invocation: ParsedInvocation): Promise<number> {
     throw new CliUsageError(`Unexpected argument: ${invocation.positionals[1]}`);
   }
   const navigationSpec = getToolSpec("navigate")!;
-  const policy = await sessionPolicy(invocation, false);
+  const policy = invocation.sessionConfig;
   const denied = readOnlyFailure(policy, navigationSpec);
   if (denied) return printToolResult(denied, invocation.json);
   preflightToolInput(navigationSpec, { url }, policy);
@@ -353,7 +358,7 @@ async function inspect(invocation: ParsedInvocation): Promise<number> {
   try {
     const browser = await controller.getBrowser();
     await browser.navigate(url);
-    const execute = await controller.executor();
+    const execute = browser.getToolExecutor();
     return printToolResult(await execute({ name: "get_state", input }), invocation.json);
   } finally {
     await controller.close();
@@ -376,8 +381,11 @@ async function runMcp(invocation: ParsedInvocation): Promise<number> {
       import(stdioPath),
       import(zodPath),
     ]) as typeof externalModules;
-  } catch {
-    throw protocolError("MCP dependencies are unavailable. Install @modelcontextprotocol/sdk and zod.");
+  } catch (error) {
+    throw protocolError(
+      "MCP dependencies are unavailable. Install @modelcontextprotocol/sdk and zod.",
+      error
+    );
   }
 
   const [{ McpServer }, { StdioServerTransport }, { z }] = externalModules;
@@ -406,7 +414,9 @@ async function runMcp(invocation: ParsedInvocation): Promise<number> {
     return closingPromise;
   };
   const shutdown = (code: number) => {
-    void close().finally(() => process.exit(code));
+    void close()
+      .catch(printError)
+      .finally(() => process.exit(code));
   };
   let inputEnded = false;
   const closeOnInputEnd = () => {
@@ -426,7 +436,11 @@ async function runMcp(invocation: ParsedInvocation): Promise<number> {
       new StdioServerTransport()
     );
   } catch (error) {
-    await close().catch(() => {});
+    try {
+      await close();
+    } catch (closeError) {
+      printError(closeError);
+    }
     throw error;
   }
   if (!invocation.quiet) writeLine("[tidesurf] MCP server ready on stdio", process.stderr);

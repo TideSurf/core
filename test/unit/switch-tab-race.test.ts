@@ -43,8 +43,11 @@ function instance(
     false,
     "initial",
     defaultViewport,
-    undefined,
+    [],
     urlValidationOptions,
+    undefined,
+    "localhost",
+    9222,
   ]) as TideSurf;
 }
 
@@ -68,6 +71,42 @@ describe("TideSurf.switchTab", () => {
     expect(connectToTab).toHaveBeenCalledTimes(1);
     expect(applyViewport).toHaveBeenCalledTimes(1);
     expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports a failed tab rollback without hiding the setup failure", async () => {
+    const setupError = new Error("viewport setup failed");
+    const disconnectError = new Error("disconnect failed");
+    const conn = connection({
+      close: mock(async () => {
+        throw disconnectError;
+      }),
+      applyViewport: mock(async () => {
+        throw setupError;
+      }),
+    });
+    const surf = instance(
+      { connectToTab: mock(async () => conn) } as Pick<
+        TabManager,
+        "connectToTab"
+      >,
+      { width: 1280, height: 720 }
+    );
+
+    let failure: unknown;
+    try {
+      await surf.switchTab("next");
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure).toBeInstanceOf(CDPConnectionError);
+    expect((failure as Error).message).toContain("rollback did not complete");
+    const cause = (failure as Error & { cause?: unknown }).cause;
+    expect(cause).toBeInstanceOf(AggregateError);
+    expect((cause as AggregateError).errors).toEqual([
+      setupError,
+      disconnectError,
+    ]);
   });
 
   it("keeps a successfully initialized tab active", async () => {
@@ -229,6 +268,33 @@ describe("TideSurf.closeTab", () => {
     expect(closeTab).toHaveBeenCalledWith("replacement", undefined);
     expect(surf.getPage()).toBeInstanceOf(SurfingPage);
   });
+
+  it("reports a page disconnect failure after removing the closed tab", async () => {
+    const closeTab = mock(async () => {});
+    const surf = instance({
+      connectToTab: mock(async () => connection()),
+      closeTab,
+    } as unknown as Pick<TabManager, "connectToTab">);
+    const pages = Reflect.get(surf, "pages") as Map<string, SurfingPage>;
+    pages.set(
+      "second",
+      new SurfingPage(
+        connection({
+          close: mock(async () => {
+            throw new Error("disconnect failed");
+          }),
+        })
+      )
+    );
+
+    await expect(surf.closeTab("second")).rejects.toThrow(
+      "CDP connection did not close cleanly"
+    );
+
+    expect(closeTab).toHaveBeenCalledWith("second", undefined);
+    expect(pages.has("second")).toBe(false);
+    expect(Reflect.get(surf, "activeTabId")).toBe("initial");
+  });
 });
 
 describe("TideSurf.close", () => {
@@ -250,6 +316,9 @@ describe("TideSurf.close", () => {
       undefined,
       [],
       {},
+      undefined,
+      "localhost",
+      9222,
     ]) as TideSurf;
 
     const first = surf.close();
@@ -322,6 +391,9 @@ describe("TideSurf.close", () => {
       undefined,
       [],
       {},
+      undefined,
+      "localhost",
+      9222,
     ]) as TideSurf;
 
     try {

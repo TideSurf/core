@@ -79,7 +79,7 @@ function usageForTool(tool: ToolSpec): string {
   return `tidesurf ${tool.cli.command}${positionals.length ? ` ${positionals.join(" ")}` : ""} [options]`;
 }
 
-export function toolHelp(tool: ToolSpec): string {
+function toolHelp(tool: ToolSpec): string {
   const aliases = tool.cli.aliases.length
     ? `\nAlias: ${tool.cli.aliases.join(", ")}`
     : "";

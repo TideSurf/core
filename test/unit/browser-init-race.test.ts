@@ -116,6 +116,20 @@ describe("BrowserController initialization", () => {
     await expect(controller.getBrowser()).rejects.toThrow("closed");
   });
 
+  it("does not retry a failed browser close", async () => {
+    const close = mock(async () => {
+      throw new Error("close failed");
+    });
+    replaceLaunch(mock(async () => fakeBrowser(close)));
+    const controller = new BrowserController(config);
+    await controller.getBrowser();
+
+    await expect(controller.close()).rejects.toThrow("close failed");
+    await expect(controller.close()).rejects.toThrow("close failed");
+
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
   it("honors a configured acquisition timeout without a hidden floor", async () => {
     const observedTimeouts: number[] = [];
     const connect = mock(async (options: Parameters<typeof TideSurf.connect>[0]) => {

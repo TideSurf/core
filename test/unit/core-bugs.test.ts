@@ -26,7 +26,7 @@ function createMockCDPConnection(overrides: Partial<CDPConnection> = {}): CDPCon
     Page: {
       enable: jest.fn(),
       navigate: jest.fn(),
-      loadEventFired: jest.fn(),
+      loadEventFired: jest.fn(() => () => {}),
       captureScreenshot: jest.fn().mockResolvedValue({ data: "base64png" }),
     } as unknown as CDPConnection["Page"],
     Runtime: {
@@ -36,7 +36,7 @@ function createMockCDPConnection(overrides: Partial<CDPConnection> = {}): CDPCon
       releaseObject: jest.fn(),
     } as unknown as CDPConnection["Runtime"],
     Input: {
-      dispatchKeyEvent: jest.fn(),
+      insertText: jest.fn(),
     } as unknown as CDPConnection["Input"],
     Emulation: {} as unknown as CDPConnection["Emulation"],
     ...overrides,

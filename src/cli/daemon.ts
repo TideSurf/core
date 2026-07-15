@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { createServer, type Server, type Socket } from "node:net";
 import { resolve } from "node:path";
 import { readFileSync, rmSync } from "node:fs";
@@ -6,7 +7,6 @@ import {
   SESSION_PROTOCOL_VERSION,
   getSessionPaths,
   removeSessionFiles,
-  secretsMatch,
   writeSessionState,
   SessionProtocolError,
   type SessionRequest,
@@ -19,7 +19,6 @@ const MAX_REQUEST_BYTES = 1024 * 1024;
 const REQUEST_IDLE_TIMEOUT_MS = 30_000;
 
 interface IncomingRequest {
-  protocol: number;
   id: string;
   secret: string;
   request: SessionRequest;
@@ -67,7 +66,6 @@ function parseIncomingRequest(value: unknown): IncomingRequest {
     throw new SessionProtocolError("Unsupported session protocol version");
   }
   return {
-    protocol: value["protocol"],
     id: value["id"],
     secret: value["secret"],
     request: parseSessionRequest(value["request"]),
@@ -91,6 +89,11 @@ function errorDetails(error: unknown): { error: string; errorType: string } {
     error: error instanceof Error ? error.message : String(error),
     errorType: error instanceof Error ? error.name : "Error",
   };
+}
+
+function secretsMatch(expected: Uint8Array, received: string): boolean {
+  const value = Buffer.from(received);
+  return expected.length === value.length && timingSafeEqual(expected, value);
 }
 
 function send(
@@ -121,8 +124,9 @@ export async function runDaemon(
   }
   writeSessionState(paths, { ...initial, pid: process.pid, ready: false });
 
-  const controller = options.controllerFactory?.(initial.config) ??
-    new BrowserController(initial.config);
+  const controller = options.controllerFactory
+    ? options.controllerFactory(initial.config)
+    : new BrowserController(initial.config);
   const expectedSecret = Buffer.from(initial.secret);
   let server!: Server;
   let closing: Promise<void> | null = null;
@@ -149,8 +153,9 @@ export async function runDaemon(
       await serverClosed;
       try {
         removeSessionFiles(paths, true);
-      } catch {
-        removeSessionFiles(paths);
+      } catch (error) {
+        console.error(`[tidesurf] Session cleanup failed: ${errorDetails(error).error}`);
+        exitCode = 1;
       }
       process.exitCode = exitCode;
     })();
@@ -259,17 +264,13 @@ export async function runDaemon(
         queue = queue.then(task, task);
       }
     });
-    socket.on("error", () => {});
+    socket.on("error", () => socket.destroy());
   };
 
   if (process.platform !== "win32") {
-    removeStaleSocket(paths.socketPath);
+    rmSync(paths.socketPath, { force: true });
   }
   server = createServer(handleSocket);
-  server.on("error", (error) => {
-    console.error(`[tidesurf] Session server error: ${error.message}`);
-    void shutdown(1);
-  });
 
   try {
     await new Promise<void>((resolveListen, rejectListen) => {
@@ -280,10 +281,22 @@ export async function runDaemon(
       });
     });
   } catch (error) {
-    await controller.close().catch(() => {});
-    removeSessionFiles(paths);
+    try {
+      await controller.close();
+    } catch (closeError) {
+      console.error(`[tidesurf] Browser shutdown failed: ${errorDetails(closeError).error}`);
+    }
+    try {
+      removeSessionFiles(paths);
+    } catch (cleanupError) {
+      console.error(`[tidesurf] Session cleanup failed: ${errorDetails(cleanupError).error}`);
+    }
     throw error;
   }
+  server.on("error", (error) => {
+    console.error(`[tidesurf] Session server error: ${error.message}`);
+    void shutdown(1);
+  });
 
   const ready: SessionState = {
     ...initial,
@@ -291,8 +304,13 @@ export async function runDaemon(
     ready: true,
     startedAt: new Date().toISOString(),
   };
-  writeSessionState(paths, ready);
-  rmSync(paths.lockFile, { force: true });
+  try {
+    writeSessionState(paths, ready);
+    rmSync(paths.lockFile, { force: true });
+  } catch (error) {
+    await shutdown(1);
+    throw error;
+  }
 
   if (options.installProcessHandlers !== false) {
     process.once("SIGINT", () => void shutdown(130));
@@ -314,7 +332,6 @@ function readSessionStateFromFile(stateFile: string): SessionState {
   const name = candidate.split(/[\\/]/).pop();
   if (!name?.endsWith(".json")) throw new Error("Invalid session state file");
 
-  // The session name is inside the file, so derive its canonical path after parsing.
   const raw = JSON.parse(readFileSync(candidate, "utf8")) as SessionState;
   if (
     raw.protocol !== SESSION_PROTOCOL_VERSION ||
@@ -329,8 +346,4 @@ function readSessionStateFromFile(stateFile: string): SessionState {
     throw new Error("Invalid pending session state");
   }
   return raw;
-}
-
-function removeStaleSocket(socketPath: string): void {
-  rmSync(socketPath, { force: true });
 }

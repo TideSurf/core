@@ -15,7 +15,7 @@ function asciiPrefix(text: string, length: number): boolean {
   return true;
 }
 
-export function graphemeSegments(text: string): Iterable<GraphemeSegment> {
+function graphemeSegments(text: string): Iterable<GraphemeSegment> {
   if (segmenter) return segmenter.segment(text);
   return {
     *[Symbol.iterator]() {

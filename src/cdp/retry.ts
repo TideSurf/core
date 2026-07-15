@@ -7,11 +7,8 @@ export interface RetryOptions {
   retryable?: (err: unknown) => boolean;
 }
 
-const DEFAULT_RETRYABLE = (err: unknown): boolean => {
-  // Timeout errors should NOT be retried (they indicate a fundamental problem)
-  if (err instanceof CDPTimeoutError) return false;
-  return true;
-};
+const DEFAULT_RETRYABLE = (err: unknown): boolean =>
+  !(err instanceof CDPTimeoutError);
 
 /**
  * Retry a function with exponential backoff.
@@ -49,7 +46,7 @@ export async function withRetry<T>(
         throw err;
       }
 
-      const delay = initialDelayMs * Math.pow(backoffFactor, attempt - 1);
+      const delay = initialDelayMs * backoffFactor ** (attempt - 1);
       await new Promise((resolve) => setTimeout(resolve, delay));
       attempt++;
     }

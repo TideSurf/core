@@ -322,6 +322,8 @@ describe("session recovery", () => {
     try {
       writeFileSync(paths.stateFile, "{}\n", { mode: 0o600 });
       expect(readSessionState(paths)).toBeNull();
+      writeFileSync(paths.stateFile, "{\n", { mode: 0o600 });
+      expect(readSessionState(paths)).toBeNull();
     } finally {
       removeSessionFiles(paths);
     }

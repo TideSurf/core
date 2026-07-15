@@ -127,11 +127,10 @@ function filterInteractiveNode(node: OSNode, depth: number): InteractiveResult {
 }
 
 /** Keep interactive nodes and only the ancestor structure needed to reach them. */
-export function filterInteractive(nodes: OSNode[], depth: number = 0): OSNode[] {
-  if (depth > MAX_FILTER_DEPTH) return [];
+export function filterInteractive(nodes: OSNode[]): OSNode[] {
   const result: OSNode[] = [];
   for (const node of nodes) {
-    const filtered = filterInteractiveNode(node, depth).node;
+    const filtered = filterInteractiveNode(node, 0).node;
     if (filtered) result.push(filtered);
   }
   return result;
@@ -204,7 +203,7 @@ export function interactiveSummary(counts: Record<string, number>): string {
       parts.push(`${count} ${count === 1 ? singular : label}`);
     }
   }
-  return parts.length > 0 ? `[${parts.join(", ")}]` : "";
+  return `[${parts.join(", ")}]`;
 }
 
 interface MinimalResult {
@@ -282,11 +281,10 @@ function summarizeMinimal(node: OSNode, depth: number): MinimalResult {
 }
 
 /** Summarize landmarks in one post-order traversal. */
-export function filterMinimal(nodes: OSNode[], depth: number = 0): OSNode[] {
-  if (depth > MAX_FILTER_DEPTH) return [];
+export function filterMinimal(nodes: OSNode[]): OSNode[] {
   const result: OSNode[] = [];
   for (const node of nodes) {
-    let link = summarizeMinimal(node, depth).landmarks?.head;
+    let link = summarizeMinimal(node, 0).landmarks?.head;
     while (link) {
       result.push(link.node);
       link = link.next;

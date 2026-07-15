@@ -102,7 +102,6 @@ function caught(error: unknown): McpCallResult {
   return text(error instanceof Error ? error.message : String(error), true);
 }
 
-/** Register launch_browser and every enabled canonical TideSurf tool. */
 export function registerMcpTools({
   server,
   coordinator,
@@ -118,12 +117,8 @@ export function registerMcpTools({
     },
     async (input) => {
       try {
-        const headless = input["headless"];
-        if (headless !== undefined && typeof headless !== "boolean") {
-          return text("Headless must be a boolean", true);
-        }
         const result = await coordinator.launchBrowser({
-          headless: headless as boolean | undefined,
+          headless: input["headless"] as boolean | undefined,
         });
         return text(
           result.alreadyRunning
@@ -150,7 +145,7 @@ export function registerMcpTools({
           const execute = await coordinator.executor();
           return toolResult(
             spec,
-            await execute({ name: spec.name, input: input ?? {} })
+            await execute({ name: spec.name, input })
           );
         } catch (error) {
           return caught(error);
