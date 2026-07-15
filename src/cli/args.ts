@@ -4,7 +4,7 @@ import {
   getToolSpec,
   type ToolSpec,
 } from "../tools/registry.js";
-import type { ChromeChannel } from "../types.js";
+import { CHROME_CHANNELS, type ChromeChannel } from "../types.js";
 import {
   GLOBAL_OPTIONS,
   LIFECYCLE_COMMANDS,
@@ -30,14 +30,11 @@ const GLOBAL_BY_FLAG = new Map<string, GlobalOptionSpec>(
 );
 const LIFECYCLE_COMMAND_NAMES = LIFECYCLE_COMMANDS.map(({ name }) => name);
 const LIFECYCLE_COMMAND_SET = new Set<string>(LIFECYCLE_COMMAND_NAMES);
-
-function availableCommandNames(): string[] {
-  return [...LIFECYCLE_COMMAND_NAMES, ...getToolNames()];
-}
+const AVAILABLE_COMMAND_LIST = [...LIFECYCLE_COMMAND_NAMES, ...getToolNames()].join(", ");
 
 export function unknownCommandError(command: string): CliUsageError {
   return new CliUsageError(
-    `Unknown command: ${command}. Available commands: ${availableCommandNames().join(", ")}.`
+    `Unknown command: ${command}. Available commands: ${AVAILABLE_COMMAND_LIST}.`
   );
 }
 
@@ -126,13 +123,42 @@ function setValue(
   }
 }
 
-function toolOptionDefinitions(tool?: ToolSpec): OptionDefinition[] {
-  if (!tool) return [];
-  return tool.cli.options.map((option) => ({
-    flag: option.flag,
-    property: option.property,
-    kind: option.kind,
-  }));
+const EMPTY_LOCAL_OPTIONS = new Map<string, OptionDefinition>();
+const CALL_OPTIONS = new Map<string, OptionDefinition>([
+  ["--input", { flag: "--input", property: "callInput", kind: "string" }],
+]);
+const TOOL_OPTIONS = new WeakMap<ToolSpec, ReadonlyMap<string, OptionDefinition>>();
+let inspectOptions: ReadonlyMap<string, OptionDefinition> | undefined;
+
+function optionMap(
+  definitions: readonly OptionDefinition[]
+): ReadonlyMap<string, OptionDefinition> {
+  const options = new Map<string, OptionDefinition>();
+  for (const definition of definitions) options.set(definition.flag, definition);
+  return options;
+}
+
+function localOptions(
+  command: string | undefined,
+  tool: ToolSpec | undefined
+): ReadonlyMap<string, OptionDefinition> {
+  if (tool) {
+    let options = TOOL_OPTIONS.get(tool);
+    if (!options) {
+      options = optionMap(tool.cli.options);
+      TOOL_OPTIONS.set(tool, options);
+    }
+    return options;
+  }
+  if (command === "call") return CALL_OPTIONS;
+  if (command !== "inspect") return EMPTY_LOCAL_OPTIONS;
+  if (!inspectOptions) {
+    const stateTool = getToolSpec("get_state");
+    inspectOptions = stateTool
+      ? optionMap(stateTool.cli.options.filter(({ property }) => property !== "viewport"))
+      : EMPTY_LOCAL_OPTIONS;
+  }
+  return inspectOptions;
 }
 
 export function parseInvocation(argv: string[]): ParsedInvocation {
@@ -142,21 +168,7 @@ export function parseInvocation(argv: string[]): ParsedInvocation {
     throw unknownCommandError(command);
   }
 
-  const localDefinitions = toolOptionDefinitions(tool);
-  if (command === "call") {
-    localDefinitions.push({ flag: "--input", property: "callInput", kind: "string" });
-  }
-  if (command === "inspect") {
-    localDefinitions.push(
-      ...toolOptionDefinitions(getToolSpec("get_state")).filter(
-        ({ property }) => property !== "viewport"
-      )
-    );
-  }
-
-  const localByFlag = new Map<string, OptionDefinition>(
-    localDefinitions.map((definition) => [definition.flag, definition])
-  );
+  const localByFlag = localOptions(command, tool);
   const values: Record<string, unknown> = {};
   const positionals: string[] = [];
   let help = false;
@@ -245,10 +257,7 @@ export function parseInvocation(argv: string[]): ParsedInvocation {
     throw new CliUsageError("--timeout must be a positive integer");
   }
   const channel = values["channel"] as ChromeChannel | undefined;
-  if (
-    channel !== undefined &&
-    !["stable", "beta", "dev", "canary", "chromium"].includes(channel)
-  ) {
+  if (channel !== undefined && !CHROME_CHANNELS.includes(channel)) {
     throw new CliUsageError("--channel must be stable, beta, dev, canary, or chromium");
   }
   if (values["autoConnect"] && values["connectOnly"]) {
@@ -431,15 +440,20 @@ export function normalizeCliPaths(
   input: Record<string, unknown>
 ): Record<string, unknown> {
   let output = input;
-  const pathProperties = [
-    ...tool.cli.positionals.filter((item) => item.resolvePath).map((item) => item.name),
-    ...tool.cli.options.filter((item) => item.resolvePath).map((item) => item.property),
-  ];
-  for (const property of pathProperties) {
+  const normalize = (property: string) => {
     const value = output[property];
-    if (typeof value !== "string") continue;
+    if (typeof value !== "string") return;
     if (output === input) output = { ...input };
     output[property] = resolve(value);
+  };
+  for (const positional of tool.cli.positionals) {
+    if (positional.resolvePath) normalize(positional.name);
+  }
+  for (const option of tool.cli.options) {
+    if (!option.resolvePath) continue;
+    normalize(typeof option.input === "object"
+      ? option.input.property
+      : option.property);
   }
   return output;
 }

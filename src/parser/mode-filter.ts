@@ -24,6 +24,8 @@ function emptyCounts(): InteractiveCounts {
   return { links: 0, buttons: 0, inputs: 0, selects: 0, interactive: 0 };
 }
 
+const EMPTY_COUNTS: InteractiveCounts = emptyCounts();
+
 function addInteractiveId(counts: InteractiveCounts, id?: string): void {
   if (!id) return;
   if (id.startsWith("L")) counts.links++;
@@ -46,13 +48,11 @@ interface TextSummary {
   count?: number;
 }
 
+const EMPTY_TEXT: TextSummary = { value: "", count: 0 };
+
 function summarizeText(text: string | undefined, limit: number): TextSummary {
   const value = truncateGraphemes(text ?? "", limit);
   return { value, count: value ? undefined : 0 };
-}
-
-function emptyText(): TextSummary {
-  return { value: "", count: 0 };
 }
 
 function appendText(
@@ -90,7 +90,7 @@ interface InteractiveResult {
 }
 
 function filterInteractiveNode(node: OSNode, depth: number): InteractiveResult {
-  if (depth > MAX_FILTER_DEPTH) return { text: emptyText() };
+  if (depth > MAX_FILTER_DEPTH) return { text: EMPTY_TEXT };
   if (node.tag === "#text") {
     return { text: summarizeText(node.text, SUMMARY_TEXT_LIMIT) };
   }
@@ -109,7 +109,7 @@ function filterInteractiveNode(node: OSNode, depth: number): InteractiveResult {
       : [];
     return {
       node: { ...node, children: [...labelNode, ...children], text: undefined },
-      text: emptyText(),
+      text: EMPTY_TEXT,
     };
   }
   if (children.length === 0) return { text: label };
@@ -224,29 +224,34 @@ function appendLandmarks(
 
 function summarizeMinimal(node: OSNode, depth: number): MinimalResult {
   if (depth > MAX_FILTER_DEPTH) {
-    return { counts: emptyCounts(), text: emptyText() };
+    return { counts: EMPTY_COUNTS, text: EMPTY_TEXT };
   }
 
-  const counts = emptyCounts();
-  addInteractiveId(counts, node.id);
+  let counts: InteractiveCounts | undefined;
+  if (node.id) {
+    counts = emptyCounts();
+    addInteractiveId(counts, node.id);
+  }
   const isLandmark = LANDMARK_TAGS.has(node.tag);
   const text = summarizeText(node.text, SUMMARY_TEXT_LIMIT);
-  const childCounts = isLandmark ? emptyCounts() : undefined;
+  let childCounts: InteractiveCounts | undefined;
   let childLandmarks: LandmarkList | undefined;
 
   for (const child of node.children) {
     const result = summarizeMinimal(child, depth + 1);
-    mergeCounts(counts, result.counts);
-    if (childCounts) mergeCounts(childCounts, result.counts);
+    if (result.counts !== EMPTY_COUNTS) {
+      mergeCounts(counts ??= emptyCounts(), result.counts);
+      if (isLandmark) mergeCounts(childCounts ??= emptyCounts(), result.counts);
+    }
     appendText(text, result.text, SUMMARY_TEXT_LIMIT);
     childLandmarks = appendLandmarks(childLandmarks, result.landmarks);
   }
 
   if (!isLandmark) {
-    return { counts, text, landmarks: childLandmarks };
+    return { counts: counts ?? EMPTY_COUNTS, text, landmarks: childLandmarks };
   }
 
-  const countSummary = interactiveSummary(childCounts!);
+  const countSummary = interactiveSummary(childCounts ?? EMPTY_COUNTS);
   const trimmedText = text.value.trim();
   const summary = trimmedText && countSummary
     ? `${trimmedText} ${countSummary}`
@@ -266,7 +271,7 @@ function summarizeMinimal(node: OSNode, depth: number): MinimalResult {
 
   // A nested landmark owns its summary. Do not repeat its text and counts in
   // every ancestor landmark.
-  return { counts: emptyCounts(), text: emptyText(), landmarks };
+  return { counts: EMPTY_COUNTS, text: EMPTY_TEXT, landmarks };
 }
 
 /** Summarize landmarks in one post-order traversal. */

@@ -1,4 +1,5 @@
 import { CDPTimeoutError, ValidationError } from "../errors.js";
+import { MAX_TIMER_DELAY_MS } from "../validation.js";
 
 export interface RetryOptions {
   maxAttempts?: number;
@@ -27,14 +28,28 @@ export async function withRetry<T>(
     retryable = DEFAULT_RETRYABLE,
   } = options;
 
-  if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
-    throw new ValidationError("maxAttempts must be a positive integer");
+  if (!Number.isSafeInteger(maxAttempts) || maxAttempts < 1) {
+    throw new ValidationError("maxAttempts must be a positive safe integer");
   }
-  if (!Number.isFinite(initialDelayMs) || initialDelayMs < 0) {
-    throw new ValidationError("initialDelayMs must be a non-negative finite number");
+  if (
+    !Number.isFinite(initialDelayMs) ||
+    initialDelayMs < 0 ||
+    initialDelayMs > MAX_TIMER_DELAY_MS
+  ) {
+    throw new ValidationError(
+      `initialDelayMs must be between 0 and ${MAX_TIMER_DELAY_MS}`
+    );
   }
   if (!Number.isFinite(backoffFactor) || backoffFactor <= 0) {
     throw new ValidationError("backoffFactor must be a positive finite number");
+  }
+  const largestDelay = initialDelayMs === 0 || maxAttempts < 2
+    ? 0
+    : initialDelayMs * Math.max(1, backoffFactor ** (maxAttempts - 2));
+  if (!Number.isFinite(largestDelay) || largestDelay > MAX_TIMER_DELAY_MS) {
+    throw new ValidationError(
+      `retry delay must not exceed ${MAX_TIMER_DELAY_MS} milliseconds`
+    );
   }
 
   let attempt = 1;

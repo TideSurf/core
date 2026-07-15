@@ -17,8 +17,8 @@ Starts Chromium, connects through CDP, and returns a ready instance. TideSurf ow
 | `channel` | `ChromeChannel` | first found | Select stable, Beta, Dev, Canary, or Chromium |
 | `port` | `number` | ephemeral | Fixed CDP port; explicit collisions fail |
 | `userDataDir` | `string` | temporary | Browser profile directory |
-| `defaultViewport` | `{ width; height }` | browser default | Apply a viewport to connected tabs |
-| `timeout` | `number` | operation default | Override startup and CDP timeouts in milliseconds |
+| `defaultViewport` | `{ width; height }` | browser default | Apply a viewport; maximum 16,384 px per side and 12,000,000 total pixels |
+| `timeout` | `number` | operation default | Override startup and CDP timeouts; positive integer up to 2,147,483,647 ms |
 | `readOnly` | `boolean` | `false` | Reject navigation, interaction, evaluation, clipboard, upload/download, and tab creation/closure |
 | `fileAccessRoots` | `string[]` | working directory and OS temp | Allowed upload/download roots; `[]` disables file access |
 | `allowLocalhost` | `boolean` | `false` | Permit loopback URLs |
@@ -38,8 +38,8 @@ Attaches to an existing CDP endpoint. Connect never launches a browser. `close()
 |---|---|---|---|
 | `host` | `string` | `"localhost"` | CDP host |
 | `port` | `number` | `9222` | CDP port |
-| `defaultViewport` | `{ width; height }` | browser default | Apply a viewport to connected tabs |
-| `timeout` | `number` | operation default | Override connection and CDP timeouts in milliseconds |
+| `defaultViewport` | `{ width; height }` | browser default | Apply a viewport; maximum 16,384 px per side and 12,000,000 total pixels |
+| `timeout` | `number` | operation default | Override connection and CDP timeouts; positive integer up to 2,147,483,647 ms |
 | `readOnly` | `boolean` | `false` | Enforce the read-only policy |
 | `fileAccessRoots` | `string[]` | working directory and OS temp | Allowed upload/download roots; `[]` disables file access |
 | `allowLocalhost` | `boolean` | `false` | Permit loopback URLs |
@@ -227,7 +227,7 @@ Finds case-insensitive page text and returns snippets with a nearby current inte
 screenshot(options?: ScreenshotOptions): Promise<string>
 ```
 
-Returns base64 PNG. `elementId` captures one element; `fullPage` captures the scrollable page; the default captures the viewport.
+Returns base64 PNG. `elementId` captures one element; `fullPage` captures the scrollable page; the default captures the viewport. Element and full-page clips share the `defaultViewport` capture limit: 16,384 px per side and 12,000,000 total pixels.
 
 ### `upload(id, filePaths)`
 
@@ -257,7 +257,7 @@ download(
 ): Promise<DownloadResult>
 ```
 
-Clicks one current element and waits for its file. The destination must resolve inside `fileAccessRoots`. A page accepts one active download operation at a time.
+Clicks one current element and waits for its file. The destination must resolve inside `fileAccessRoots`; TideSurf checks it again after directory creation and before browser setup. A second download on the same page fails while one is active.
 
 ### `close()`
 

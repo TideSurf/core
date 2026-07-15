@@ -16,6 +16,15 @@ export const SNAPSHOT_COMPUTED_STYLES = [
   "clip",
   "position",
 ] as const;
+const HIDDEN_COMPUTED_STYLES = [
+  "display",
+  "visibility",
+  "opacity",
+  "content-visibility",
+  "clip-path",
+  "pointer-events",
+] as const;
+const STATE_COMPUTED_STYLES = ["pointer-events"] as const;
 const MAX_SNAPSHOT_CHARACTERS = 16_000_000;
 type SnapshotStyle = (typeof SNAPSHOT_COMPUTED_STYLES)[number];
 
@@ -125,7 +134,7 @@ interface Bounds {
 
 interface LayoutData {
   bounds: Bounds;
-  style: Record<SnapshotStyle, string>;
+  style: Partial<Record<SnapshotStyle, string>>;
 }
 
 interface DecodedDocument {
@@ -137,7 +146,7 @@ interface DecodedDocument {
   layouts: Array<LayoutData | undefined>;
   contentDocuments: Map<number, number>;
   root: CDPNode;
-  effectiveBounds: Array<Bounds | undefined>;
+  effectiveBounds?: Array<Bounds | undefined>;
   hiddenSelf: Uint8Array;
   hiddenSubtree: Uint8Array;
   inertSubtree: Uint8Array;
@@ -222,11 +231,11 @@ function rareFlags(data: RareBooleanData | undefined): Set<number> {
 }
 
 function decodeAttributes(encoded: number[] | undefined, strings: string[]): Attributes {
-  if (!encoded) return {};
+  const attributes = Object.create(null) as Attributes;
+  if (!encoded) return attributes;
   if (encoded.length % 2 !== 0) {
     throw new Error("DOM snapshot contains an unpaired attribute");
   }
-  const attributes: Attributes = {};
   for (let index = 0; index < encoded.length; index += 2) {
     attributes[stringAt(strings, encoded[index])] = stringAt(strings, encoded[index + 1]);
   }
@@ -235,8 +244,8 @@ function decodeAttributes(encoded: number[] | undefined, strings: string[]): Att
 
 function flattenAttributes(attributes: Attributes): string[] {
   const flattened: string[] = [];
-  for (const [name, value] of Object.entries(attributes)) {
-    flattened.push(name, value);
+  for (const name in attributes) {
+    flattened.push(name, attributes[name]);
   }
   return flattened;
 }
@@ -244,7 +253,14 @@ function flattenAttributes(attributes: Attributes): string[] {
 function layoutBounds(value: number[] | undefined): Bounds | undefined {
   if (!value || value.length < 4) return undefined;
   const [left, top, width, height] = value;
-  if (![left, top, width, height].every(Number.isFinite)) return undefined;
+  if (
+    !Number.isFinite(left) ||
+    !Number.isFinite(top) ||
+    !Number.isFinite(width) ||
+    !Number.isFinite(height)
+  ) {
+    return undefined;
+  }
   return {
     top,
     right: left + Math.max(0, width),
@@ -377,24 +393,24 @@ function legacyClipBounds(value: string, bounds: Bounds): Bounds | null | undefi
 }
 
 function clipsDescendants(style: LayoutData["style"]): boolean {
-  const contain = style.contain.toLowerCase().split(/\s+/);
-  return contain.includes("paint") || contain.includes("strict") || contain.includes("content");
+  return /(?:^|\s)(?:paint|strict|content)(?:\s|$)/i.test(style.contain ?? "");
 }
 
 function styleHidingKind(layout: LayoutData | undefined): "self" | "subtree" | undefined {
   if (!layout) return undefined;
   const style = layout.style;
-  const visibility = style.visibility.toLowerCase();
+  const visibility = (style.visibility ?? "").toLowerCase();
   if (visibility === "hidden" || visibility === "collapse") return "self";
   const opacity = Number.parseFloat(style.opacity || "1");
   if (
-    style.display.toLowerCase() === "none" ||
-    style["content-visibility"].toLowerCase() === "hidden" ||
+    (style.display ?? "").toLowerCase() === "none" ||
+    (style["content-visibility"] ?? "").toLowerCase() === "hidden" ||
     (Number.isFinite(opacity) && opacity < 0.01)
   ) {
     return "subtree";
   }
-  const clipPath = style["clip-path"].trim().toLowerCase();
+  const clipPath = (style["clip-path"] ?? "").trim().toLowerCase();
+  if (clipPath === "" || clipPath === "none") return undefined;
   const clipBounds = clipPathBounds(clipPath, layout.bounds);
   if (
     clipPath.replaceAll(" ", "") === "polygon(00,00,00)" ||
@@ -451,6 +467,7 @@ function buildDocument(
   const attributes: Attributes[] = new Array(count);
   const nodes: CDPNode[] = new Array(count);
   const children: Array<number[] | undefined> = new Array(count);
+  const localNames: string[] = [];
   let rootIndex = -1;
 
   for (let index = 0; index < count; index++) {
@@ -463,7 +480,8 @@ function buildDocument(
       rootIndex = index;
     }
 
-    const nodeName = stringAt(strings, names[index]);
+    const nodeNameIndex = names[index];
+    const nodeName = stringAt(strings, nodeNameIndex);
     const attrs = decodeAttributes(table.attributes?.[index], strings);
     if (nodeName === "INPUT") {
       const type = (attrs["type"] ?? "text").toLowerCase();
@@ -488,12 +506,17 @@ function buildDocument(
       else delete attrs["selected"];
     }
     attributes[index] = attrs;
+    let localName = "";
+    if (nodeTypes[index] === 1) {
+      localName = localNames[nodeNameIndex] ?? nodeName.toLowerCase();
+      localNames[nodeNameIndex] = localName;
+    }
     nodes[index] = {
       nodeId: 0,
       backendNodeId: backendIds[index],
       nodeType: nodeTypes[index],
       nodeName,
-      localName: nodeTypes[index] === 1 ? nodeName.toLowerCase() : "",
+      localName,
       nodeValue: stringAt(strings, values?.[index]),
       attributes: nodeTypes[index] === 1 ? [] : undefined,
     };
@@ -522,9 +545,7 @@ function buildDocument(
     const bounds = layoutBounds(layoutRects[position]);
     if (!bounds) continue;
     const encodedStyle = layoutStyles[position] ?? [];
-    const style = Object.fromEntries(
-      SNAPSHOT_COMPUTED_STYLES.map((name) => [name, ""])
-    ) as LayoutData["style"];
+    const style: LayoutData["style"] = {};
     for (let styleIndex = 0; styleIndex < computedStyles.length; styleIndex++) {
       style[computedStyles[styleIndex]] = stringAt(strings, encodedStyle[styleIndex]);
     }
@@ -540,7 +561,6 @@ function buildDocument(
     layouts,
     contentDocuments,
     root: nodes[rootIndex],
-    effectiveBounds: new Array(count),
     hiddenSelf: new Uint8Array(count),
     hiddenSubtree: new Uint8Array(count),
     inertSubtree: new Uint8Array(count),
@@ -549,10 +569,14 @@ function buildDocument(
   };
 }
 
-function prepareDocument(document: DecodedDocument, markers: InspectionMarkerAttributes): void {
+function prepareDocument(
+  document: DecodedDocument,
+  markers: InspectionMarkerAttributes,
+  markViewport: boolean,
+  markHidden: boolean
+): void {
   const count = document.nodes.length;
-  const firstLegends = new Int32Array(count);
-  firstLegends.fill(-1);
+  let firstLegends: Int32Array | undefined;
   for (let index = 0; index < count; index++) {
     if (
       document.nodes[index].nodeName !== "FIELDSET" ||
@@ -560,6 +584,8 @@ function prepareDocument(document: DecodedDocument, markers: InspectionMarkerAtt
     ) {
       continue;
     }
+    firstLegends ??= new Int32Array(count).fill(-2);
+    firstLegends[index] = -1;
     for (const child of document.children[index] ?? []) {
       if (document.nodes[child].nodeName === "LEGEND") {
         firstLegends[index] = child;
@@ -567,86 +593,97 @@ function prepareDocument(document: DecodedDocument, markers: InspectionMarkerAtt
       }
     }
   }
-  const subtreeHasLayout = document.layouts.map(Boolean);
-  for (let index = count - 1; index > 0; index--) {
-    if (subtreeHasLayout[index]) subtreeHasLayout[document.parents[index]] = true;
+  const trackHidden = markViewport || markHidden;
+  const subtreeHasLayout = trackHidden ? new Uint8Array(count) : undefined;
+  if (subtreeHasLayout) {
+    for (let index = 0; index < count; index++) {
+      if (document.layouts[index]) subtreeHasLayout[index] = 1;
+    }
+    for (let index = count - 1; index > 0; index--) {
+      if (subtreeHasLayout[index]) subtreeHasLayout[document.parents[index]] = 1;
+    }
   }
 
-  const childClips: Bounds[] = new Array(count);
+  const childClips: Array<Bounds | undefined> | undefined = markViewport
+    ? new Array(count)
+    : undefined;
+  if (markViewport) document.effectiveBounds = new Array(count);
   for (let index = 0; index < count; index++) {
     const parent = document.parents[index];
     let disabledFieldsetDepth =
       parent >= 0 ? document.disabledFieldsetDepth[parent] : 0;
+    const firstLegend = parent >= 0 ? firstLegends?.[parent] : undefined;
     if (
-      parent >= 0 &&
-      document.nodes[parent].nodeName === "FIELDSET" &&
-      document.attributes[parent]["disabled"] !== undefined &&
-      firstLegends[parent] !== index
+      firstLegend !== undefined &&
+      firstLegend !== -2 &&
+      firstLegend !== index
     ) {
       disabledFieldsetDepth++;
     }
     document.disabledFieldsetDepth[index] = disabledFieldsetDepth;
-    const inheritedClip = parent >= 0 ? childClips[parent] : UNBOUNDED;
     const attrs = document.attributes[index];
     const layout = document.layouts[index];
-    const styleKind = styleHidingKind(layout);
-    const parentHidden = parent >= 0 && document.hiddenSubtree[parent] !== 0;
-    const attributeHidden =
-      attrs["hidden"] !== undefined ||
-      attrs["aria-hidden"]?.toLowerCase() === "true";
-    const noLayoutHidden =
-      document.nodes[index].nodeType === 1 &&
-      !layout &&
-      !subtreeHasLayout[index] &&
-      !NO_LAYOUT_EXEMPT.has(document.nodes[index].nodeName);
-    const selfKind =
-      styleKind && document.nodes[index].nodeName === "IFRAME"
-        ? "subtree"
-        : styleKind ?? (noLayoutHidden ? "subtree" : undefined);
-    document.hiddenSelf[index] =
-      parentHidden || attributeHidden || selfKind !== undefined ? 1 : 0;
-    document.hiddenSubtree[index] =
-      parentHidden || attributeHidden || selfKind === "subtree" ? 1 : 0;
-
-    const ownBounds = layout?.bounds;
-    let effective = ownBounds ? intersect(ownBounds, inheritedClip) : undefined;
-    const clipPath = layout?.style["clip-path"].trim().toLowerCase() ?? "";
-    const pathBounds = ownBounds && clipPath !== "" && clipPath !== "none"
-      ? clipPathBounds(clipPath, ownBounds) ?? ownBounds
-      : undefined;
-    const positioned = layout?.style.position.toLowerCase();
-    const legacyBounds = ownBounds && (positioned === "absolute" || positioned === "fixed")
-      ? legacyClipBounds(layout?.style.clip ?? "", ownBounds)
-      : undefined;
-    for (const clip of [pathBounds, legacyBounds]) {
-      if (clip) effective = effective ? intersect(effective, clip) : undefined;
-      if (clip === null) effective = undefined;
+    let selfKind: "self" | "subtree" | undefined;
+    if (trackHidden) {
+      const styleKind = styleHidingKind(layout);
+      const parentHidden = parent >= 0 && document.hiddenSubtree[parent] !== 0;
+      const attributeHidden =
+        attrs["hidden"] !== undefined ||
+        attrs["aria-hidden"]?.toLowerCase() === "true";
+      const noLayoutHidden =
+        document.nodes[index].nodeType === 1 &&
+        !layout &&
+        !subtreeHasLayout![index] &&
+        !NO_LAYOUT_EXEMPT.has(document.nodes[index].nodeName);
+      selfKind =
+        styleKind && document.nodes[index].nodeName === "IFRAME"
+          ? "subtree"
+          : styleKind ?? (noLayoutHidden ? "subtree" : undefined);
+      document.hiddenSelf[index] =
+        parentHidden || attributeHidden || selfKind !== undefined ? 1 : 0;
+      document.hiddenSubtree[index] =
+        parentHidden || attributeHidden || selfKind === "subtree" ? 1 : 0;
     }
-    document.effectiveBounds[index] = effective;
 
-    let childClip = inheritedClip;
-    if (layout && ownBounds) {
-      const overflowXValue = layout.style["overflow-x"].toLowerCase();
-      const overflowYValue = layout.style["overflow-y"].toLowerCase();
-      const overflowX = overflowXValue !== "" && overflowXValue !== "visible";
-      const overflowY = overflowYValue !== "" && overflowYValue !== "visible";
-      if (overflowX || overflowY) {
-        childClip = intersect(childClip, ownBounds, overflowX, overflowY) ?? {
-          top: 0,
-          right: 0,
-          bottom: 0,
-          left: 0,
-        };
+    if (childClips) {
+      const inheritedClip = parent >= 0 ? childClips[parent]! : UNBOUNDED;
+      const ownBounds = layout?.bounds;
+      let effective = ownBounds ? intersect(ownBounds, inheritedClip) : undefined;
+      const clipPath = (layout?.style["clip-path"] ?? "").trim().toLowerCase();
+      let pathBounds: Bounds | null | undefined;
+      if (ownBounds && clipPath !== "" && clipPath !== "none") {
+        pathBounds = clipPathBounds(clipPath, ownBounds);
+        if (pathBounds === undefined) pathBounds = ownBounds;
       }
-      if (clipsDescendants(layout.style)) {
-        childClip = intersect(childClip, ownBounds) ?? EMPTY_BOUNDS;
+      const positioned = (layout?.style.position ?? "").toLowerCase();
+      const legacyBounds = ownBounds && (positioned === "absolute" || positioned === "fixed")
+        ? legacyClipBounds(layout?.style.clip ?? "", ownBounds)
+        : undefined;
+      if (pathBounds === null) effective = undefined;
+      else if (pathBounds && effective) effective = intersect(effective, pathBounds);
+      if (legacyBounds === null) effective = undefined;
+      else if (legacyBounds && effective) effective = intersect(effective, legacyBounds);
+      document.effectiveBounds![index] = effective;
+
+      let childClip = inheritedClip;
+      if (layout && ownBounds) {
+        const overflowXValue = (layout.style["overflow-x"] ?? "").toLowerCase();
+        const overflowYValue = (layout.style["overflow-y"] ?? "").toLowerCase();
+        const overflowX = overflowXValue !== "" && overflowXValue !== "visible";
+        const overflowY = overflowYValue !== "" && overflowYValue !== "visible";
+        if (overflowX || overflowY) {
+          childClip = intersect(childClip, ownBounds, overflowX, overflowY) ?? EMPTY_BOUNDS;
+        }
+        if (clipsDescendants(layout.style)) {
+          childClip = intersect(childClip, ownBounds) ?? EMPTY_BOUNDS;
+        }
+        if (pathBounds === null) childClip = EMPTY_BOUNDS;
+        else if (pathBounds) childClip = intersect(childClip, pathBounds) ?? EMPTY_BOUNDS;
+        if (legacyBounds === null) childClip = EMPTY_BOUNDS;
+        else if (legacyBounds) childClip = intersect(childClip, legacyBounds) ?? EMPTY_BOUNDS;
       }
-      for (const clip of [pathBounds, legacyBounds]) {
-        if (clip) childClip = intersect(childClip, clip) ?? EMPTY_BOUNDS;
-        if (clip === null) childClip = EMPTY_BOUNDS;
-      }
+      childClips[index] = childClip;
     }
-    childClips[index] = childClip;
 
     document.inertSubtree[index] =
       (parent >= 0 && document.inertSubtree[parent] !== 0) ||
@@ -656,23 +693,23 @@ function prepareDocument(document: DecodedDocument, markers: InspectionMarkerAtt
       attrs["aria-disabled"]?.toLowerCase() === "true" ? 1 : 0;
 
     if (interactive(document.nodes[index].nodeName, attrs)) {
-      const states: string[] = [];
       const nativeDisabled =
         FIELDSET_CONTROLS.has(document.nodes[index].nodeName) &&
         (attrs["disabled"] !== undefined || disabledFieldsetDepth > 0);
-      if (nativeDisabled || document.ariaDisabledSubtree[index]) {
-        states.push("disabled");
-      }
-      if (
+      const disabled = nativeDisabled || document.ariaDisabledSubtree[index] !== 0;
+      const inert =
         document.inertSubtree[index] ||
-        layout?.style["pointer-events"].toLowerCase() === "none"
-      ) {
-        states.push("inert");
+        (layout?.style["pointer-events"] ?? "").toLowerCase() === "none";
+      if (disabled || inert) {
+        appendMarker(
+          attrs,
+          markers.state,
+          disabled ? (inert ? "disabled,inert" : "disabled") : "inert"
+        );
       }
-      appendMarker(attrs, markers.state, states.join(","));
     }
 
-    if (selfKind) appendMarker(attrs, markers.hidden, selfKind);
+    if (markHidden && selfKind) appendMarker(attrs, markers.hidden, selfKind);
   }
 }
 
@@ -681,12 +718,12 @@ function markDocumentViewport(
   viewport: Bounds | undefined,
   markers: InspectionMarkerAttributes
 ): void {
-  const visible = new Array<boolean>(document.nodes.length).fill(false);
+  const visible = new Uint8Array(document.nodes.length);
   if (viewport) {
     for (let index = 0; index < document.nodes.length; index++) {
       if (document.hiddenSelf[index]) continue;
-      const bounds = document.effectiveBounds[index];
-      visible[index] = bounds !== undefined && intersect(bounds, viewport) !== undefined;
+      const bounds = document.effectiveBounds?.[index];
+      visible[index] = bounds !== undefined && intersect(bounds, viewport) !== undefined ? 1 : 0;
       if (visible[index] && document.nodes[index].nodeType === 1) {
         const attrs = document.attributes[index];
         appendMarker(attrs, markers.visible, "1");
@@ -703,10 +740,10 @@ function markDocumentViewport(
       }
       const parent = document.parents[index];
       if (parent < 0 || !visible[parent]) continue;
-      visible[index] = true;
+      visible[index] = 1;
       appendMarker(document.attributes[index], markers.visible, "1");
       for (const child of document.children[index] ?? []) {
-        if (document.nodes[child].nodeType === 3) visible[child] = true;
+        if (document.nodes[child].nodeType === 3) visible[child] = 1;
       }
     }
   }
@@ -736,7 +773,7 @@ function frameViewport(
 ): Bounds | undefined {
   if (!parentViewport || parent.hiddenSelf[ownerIndex]) return undefined;
   const raw = parent.layouts[ownerIndex]?.bounds;
-  const effective = parent.effectiveBounds[ownerIndex];
+  const effective = parent.effectiveBounds?.[ownerIndex];
   if (!raw || !effective) return undefined;
   const exposed = intersect(effective, parentViewport);
   if (!exposed) return undefined;
@@ -813,17 +850,21 @@ export function decodeDOMSnapshot(
   }
 
   const markers = options.markerAttributes ?? snapshotMarkers();
+  const markViewport = options.markViewport !== false;
+  const markHidden = options.markHidden !== false;
   const computedStyles = options.computedStyles ?? SNAPSHOT_COMPUTED_STYLES;
   const documents = data.documents.map((document) =>
     buildDocument(document, data.strings, computedStyles)
   );
   const owners = attachDocuments(documents);
-  for (const document of documents) prepareDocument(document, markers);
+  for (const document of documents) {
+    prepareDocument(document, markers, markViewport, markHidden);
+  }
 
   const main = documents[0];
   const scrollX = finite(main.source.scrollOffsetX);
   const scrollY = finite(main.source.scrollOffsetY);
-  if (options.markViewport !== false) {
+  if (markViewport) {
     const viewports: Array<Bounds | undefined> = new Array(documents.length);
     viewports[0] = {
       top: scrollY,
@@ -860,7 +901,6 @@ export function decodeDOMSnapshot(
   for (const document of documents) {
     for (let index = 0; index < document.nodes.length; index++) {
       const attrs = document.attributes[index];
-      if (options.markHidden === false) delete attrs[markers.hidden];
       if (document.nodes[index].nodeType === 1) {
         document.nodes[index].attributes = flattenAttributes(attrs);
       }
@@ -904,13 +944,11 @@ function preflightExpression(limit: number): string {
     if (current.nodeType === Node.ELEMENT_NODE) {
       const tag = current.tagName;
       const type = tag === 'INPUT' ? (current.getAttribute('type') || 'text').toLowerCase() : '';
-      const hasLiveValue = (tag === 'INPUT' && type !== 'password') || tag === 'TEXTAREA';
+      const hasLiveValue = tag === 'INPUT' || tag === 'TEXTAREA';
       const omitsDefaultChoiceValue = tag === 'INPUT' && (type === 'checkbox' || type === 'radio') &&
         !current.hasAttribute('value') && current.value === 'on';
       for (const attribute of current.attributes) {
-        if (attribute.name === 'value' && tag === 'INPUT' && type === 'password') continue;
         characterCount += attribute.name.length + attribute.value.length;
-        if (hasLiveValue && attribute.name === 'value') characterCount -= attribute.value.length;
       }
       if (hasLiveValue && !omitsDefaultChoiceValue) characterCount += current.value.length;
       if (current.shadowRoot && !enqueue(current.shadowRoot)) return {
@@ -980,9 +1018,11 @@ export async function captureDOMSnapshot(
     );
   }
 
-  const computedStyles = options.markViewport || options.markHidden
+  const computedStyles = options.markViewport
     ? SNAPSHOT_COMPUTED_STYLES
-    : ["pointer-events"] as const;
+    : options.markHidden
+      ? HIDDEN_COMPUTED_STYLES
+      : STATE_COMPUTED_STYLES;
   const value = await withTimeout(
     conn.client.send("DOMSnapshot.captureSnapshot", {
       computedStyles: [...computedStyles],

@@ -176,6 +176,17 @@ describe("CLI process behavior", () => {
     expect(result.stderr).toContain("finite number");
   });
 
+  it("rejects timeout budgets that exceed the session transport timer", () => {
+    for (const args of [
+      ["--session", `timeout-${crypto.randomUUID()}`, "--timeout", "200000000", "get_state"],
+      ["--session", `timeout-${crypto.randomUUID()}`, "download", "B1", "--timeout", "1100000000"],
+    ]) {
+      const result = cli(...args);
+      expect(result.code).toBe(2);
+      expect(result.stderr).toContain("session transport limit");
+    }
+  });
+
   it("rejects conflicting page-state options before browser startup", () => {
     const result = cli("get_state", "--viewport", "--full-page");
     expect(result.code).toBe(2);

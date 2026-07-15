@@ -17,6 +17,7 @@ import { connect as connectSocket } from "node:net";
 import type { ChromeChannel, ToolResult } from "../types.js";
 import { VERSION } from "../version.js";
 import { isValidSessionName, SESSION_NAME_ERROR } from "./session-name.js";
+import { MAX_SESSION_EXECUTION_TIMEOUT_MS } from "./timeouts.js";
 
 export const SESSION_PROTOCOL_VERSION = 2;
 const MAX_RESPONSE_BYTES = 64 * 1024 * 1024;
@@ -272,8 +273,17 @@ export async function sendSessionRequest<T = unknown>(
       `Session ${state.session} uses protocol ${state.protocol}; expected ${SESSION_PROTOCOL_VERSION}`
     );
   }
+  if (
+    !Number.isFinite(timeoutMs) ||
+    timeoutMs <= 0 ||
+    timeoutMs > MAX_SESSION_EXECUTION_TIMEOUT_MS
+  ) {
+    throw new SessionProtocolError(
+      `Session request timeout must be between 1 and ${MAX_SESSION_EXECUTION_TIMEOUT_MS}ms`
+    );
+  }
   const id = randomUUID();
-  const executionTimeout = Math.max(1, timeoutMs);
+  const executionTimeout = timeoutMs;
   const transportTimeout = executionTimeout * 2;
   const payload: WireRequest = {
     protocol: SESSION_PROTOCOL_VERSION,

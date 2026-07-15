@@ -1,7 +1,11 @@
 import type { OSNode } from "../types.js";
 import { validatePositiveNumber } from "../validation.js";
 import { formatTruncation, truncateGraphemes } from "./truncation.js";
-import { compressUrl } from "./url-compressor.js";
+import {
+  compressUrlWithContext,
+  createUrlCompressionContext,
+  type UrlCompressionContext,
+} from "./url-compressor.js";
 
 export function estimateTokens(text: string, charsPerToken: number = 4): number {
   validatePositiveNumber(charsPerToken, "charsPerToken");
@@ -52,6 +56,15 @@ const STRUCTURAL_CONTAINERS = new Set([
   "article",
   "aside",
   "dialog",
+]);
+const HEADING_TAGS = new Set([
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "heading",
 ]);
 const TRUNCATION_SIZE_WITHOUT_COUNT = formatTruncation("").length + 1;
 
@@ -111,8 +124,8 @@ function hasText(text: string | undefined): boolean {
 /** Estimate only the characters contributed by this node, excluding children. */
 function estimateOwnSize(
   node: OSNode,
-  depth = 0,
-  pageUrl?: string,
+  depth: number,
+  url: UrlCompressionContext,
   hasNonInteractiveText = hasText(node.text)
 ): number {
   const idSize = node.id?.length ?? 0;
@@ -126,7 +139,9 @@ function estimateOwnSize(
   }
   if (node.tag === "link") {
     const href = attributes["href"];
-    const hrefSize = href ? compressUrl(href, pageUrl).length : 0;
+    const hrefSize = href
+      ? compressUrlWithContext(href, url).length
+      : 0;
     const fallbackSize = hasNonInteractiveText
       ? 0
       : escapedTextSize(attributes["aria-label"] ?? attributes["title"]);
@@ -149,13 +164,17 @@ function estimateOwnSize(
     if (type && type !== "text") size += type.length + 1;
     if (placeholder) size += escapedQuoteSize(placeholder) + 2;
     if (value) size += escapedQuoteSize(value) + 4;
-    for (const key of ["min", "max", "step", "pattern"]) {
-      const attribute = attributes[key];
-      if (attribute !== undefined) size += key.length + attribute.length + 2;
-    }
-    for (const key of ["readonly", "required", "checked"]) {
-      if (attributes[key] !== undefined) size += key.length + 1;
-    }
+    const min = attributes["min"];
+    const max = attributes["max"];
+    const step = attributes["step"];
+    const pattern = attributes["pattern"];
+    if (min !== undefined) size += min.length + 5;
+    if (max !== undefined) size += max.length + 5;
+    if (step !== undefined) size += step.length + 6;
+    if (pattern !== undefined) size += pattern.length + 9;
+    if (attributes["readonly"] !== undefined) size += 9;
+    if (attributes["required"] !== undefined) size += 9;
+    if (attributes["checked"] !== undefined) size += 8;
     return size;
   }
   if (node.tag === "select") {
@@ -166,11 +185,13 @@ function estimateOwnSize(
   if (node.tag === "img") return indentation + (attributes["alt"]?.length ?? 0) + 8;
   if (node.tag === "iframe") {
     const src = attributes["src"];
-    const srcSize = src ? compressUrl(src, pageUrl).length + 14 : 0;
+    const srcSize = src
+      ? compressUrlWithContext(src, url).length + 14
+      : 0;
     const emptySize = attributes["status"] === "inaccessible" ? 23 : 18;
     return indentation + Math.max(srcSize, emptySize);
   }
-  if (/^h[1-6]$/.test(node.tag) || node.tag === "heading") {
+  if (HEADING_TAGS.has(node.tag)) {
     return indentation + escapedTextSize(node.text) + 5;
   }
   if (node.tag === "above" || node.tag === "below") {
@@ -201,7 +222,12 @@ function estimateOwnSize(
       attributes["aria-selected"] === "true";
     return indentation + escapedTextSize(node.text) + (selected ? 2 : 0) + 4;
   }
-  if (["list", "row", "cell", "label"].includes(node.tag)) {
+  if (
+    node.tag === "list" ||
+    node.tag === "row" ||
+    node.tag === "cell" ||
+    node.tag === "label"
+  ) {
     return indentation + (node.text?.length ?? 0) + 4;
   }
   return indentation + escapedTextSize(node.text) + 1;
@@ -220,45 +246,60 @@ function childDepth(node: OSNode, depth: number): number {
     : depth;
 }
 
-function measureTree(nodes: OSNode[], pageUrl?: string): Map<OSNode, NodeMetrics> {
-  const metrics = new Map<OSNode, NodeMetrics>();
+function measureNode(
+  node: OSNode,
+  depth: number,
+  url: UrlCompressionContext,
+  metrics: Map<OSNode, NodeMetrics>,
+  cache: boolean,
+  cacheDescendants = false
+): NodeMetrics {
+  let totalSize = 0;
+  let interactiveCount = node.id ? 1 : 0;
+  let visibleCount = node.visible ? 1 : 0;
+  let textLength = node.text?.length ?? 0;
+  let hasNonInteractiveText = node.tag === "truncated" || hasText(node.text);
 
-  const measure = (node: OSNode, depth: number): NodeMetrics => {
-    let totalSize = 0;
-    let interactiveCount = node.id ? 1 : 0;
-    let visibleCount = node.visible ? 1 : 0;
-    let textLength = node.text?.length ?? 0;
-    let hasNonInteractiveText = node.tag === "truncated" ||
-      hasText(node.text);
-
-    const nextDepth = childDepth(node, depth);
-    for (const child of node.children) {
-      const childMetrics = measure(child, nextDepth);
-      totalSize += childMetrics.totalSize;
-      interactiveCount += childMetrics.interactiveCount;
-      visibleCount += childMetrics.visibleCount;
-      textLength += childMetrics.textLength;
-      if (!child.id && childMetrics.hasNonInteractiveText) {
-        hasNonInteractiveText = true;
-      }
+  const nextDepth = childDepth(node, depth);
+  const cacheChildren = cacheDescendants || node.children.length > 1;
+  for (const child of node.children) {
+    const childMetrics = measureNode(
+      child,
+      nextDepth,
+      url,
+      metrics,
+      cacheChildren,
+      cacheDescendants
+    );
+    totalSize += childMetrics.totalSize;
+    interactiveCount += childMetrics.interactiveCount;
+    visibleCount += childMetrics.visibleCount;
+    textLength += childMetrics.textLength;
+    if (!child.id && childMetrics.hasNonInteractiveText) {
+      hasNonInteractiveText = true;
     }
+  }
 
-    const ownSize = estimateOwnSize(node, depth, pageUrl, hasNonInteractiveText);
-    totalSize += ownSize;
-
-    const result = {
-      ownSize,
-      totalSize,
-      interactiveCount,
-      visibleCount,
-      textLength,
-      hasNonInteractiveText,
-    };
-    metrics.set(node, result);
-    return result;
+  const ownSize = estimateOwnSize(node, depth, url, hasNonInteractiveText);
+  totalSize += ownSize;
+  const result = {
+    ownSize,
+    totalSize,
+    interactiveCount,
+    visibleCount,
+    textLength,
+    hasNonInteractiveText,
   };
+  if (cache) metrics.set(node, result);
+  return result;
+}
 
-  for (const node of nodes) measure(node, 0);
+function measureTree(
+  nodes: OSNode[],
+  url: UrlCompressionContext
+): Map<OSNode, NodeMetrics> {
+  const metrics = new Map<OSNode, NodeMetrics>();
+  for (const node of nodes) measureNode(node, 0, url, metrics, true);
   return metrics;
 }
 
@@ -280,7 +321,7 @@ function comparePriority(
   }
   if (a.visibleCount !== b.visibleCount) return b.visibleCount - a.visibleCount;
   if (a.textLength !== b.textLength) return a.textLength - b.textLength;
-  return left.index - right.index;
+  return 0;
 }
 
 function truncationNode(count: number): OSNode {
@@ -303,14 +344,14 @@ function fitInteractiveShell(
   node: OSNode,
   budget: number,
   depth: number,
-  pageUrl?: string
+  url: UrlCompressionContext
 ): FittedNode | undefined {
   const usefulShell = withoutFallbackLabels({
     ...node,
     children: [],
     text: undefined,
   });
-  const usefulShellSize = estimateOwnSize(usefulShell, depth, pageUrl, false);
+  const usefulShellSize = estimateOwnSize(usefulShell, depth, url, false);
   if (usefulShellSize <= budget) {
     return {
       node: usefulShell,
@@ -320,7 +361,7 @@ function fitInteractiveShell(
   }
 
   const bareShell = { ...node, attributes: {}, children: [], text: undefined };
-  const bareShellSize = estimateOwnSize(bareShell, depth, pageUrl, false);
+  const bareShellSize = estimateOwnSize(bareShell, depth, url, false);
   return bareShellSize <= budget
     ? { node: bareShell, size: bareShellSize, hasNonInteractiveText: false }
     : undefined;
@@ -331,7 +372,7 @@ function fitNode(
   budget: number,
   metrics: Map<OSNode, NodeMetrics>,
   depth: number,
-  pageUrl?: string
+  url: UrlCompressionContext
 ): FittedNode | undefined {
   const measured = metrics.get(node)!;
   if (measured.totalSize <= budget) {
@@ -353,12 +394,12 @@ function fitNode(
     const shortenedNode = { ...node, text: shortened };
     return {
       node: shortenedNode,
-      size: estimateOwnSize(shortenedNode, depth, pageUrl, true),
+      size: estimateOwnSize(shortenedNode, depth, url, true),
       hasNonInteractiveText: Boolean(shortened.trim()),
     };
   }
   if (node.children.length === 0) {
-    if (node.id) return fitInteractiveShell(node, budget, depth, pageUrl);
+    if (node.id) return fitInteractiveShell(node, budget, depth, url);
     return undefined;
   }
 
@@ -370,10 +411,10 @@ function fitNode(
       children: [],
       text: undefined,
     });
-    ownSize = estimateOwnSize(base, depth, pageUrl, false);
+    ownSize = estimateOwnSize(base, depth, url, false);
     if (ownSize > budget) {
       base = { ...node, attributes: {}, children: [], text: undefined };
-      ownSize = estimateOwnSize(base, depth, pageUrl, false);
+      ownSize = estimateOwnSize(base, depth, url, false);
       if (ownSize > budget) return undefined;
     }
   }
@@ -383,10 +424,10 @@ function fitNode(
     budget - ownSize,
     metrics,
     childDepth(node, depth),
-    pageUrl
+    url
   );
   if (childResult.nodes.length === 0) {
-    return node.id ? fitInteractiveShell(node, budget, depth, pageUrl) : undefined;
+    return node.id ? fitInteractiveShell(node, budget, depth, url) : undefined;
   }
 
   const hasNonInteractiveText = hasText(base.text) ||
@@ -395,13 +436,13 @@ function fitNode(
   ownSize = estimateOwnSize(
     fittedNode,
     depth,
-    pageUrl,
+    url,
     hasNonInteractiveText
   );
 
   if (ownSize + childResult.size > budget && !hasNonInteractiveText) {
     fittedNode = withoutFallbackLabels(fittedNode);
-    ownSize = estimateOwnSize(fittedNode, depth, pageUrl, false);
+    ownSize = estimateOwnSize(fittedNode, depth, url, false);
   }
 
   return ownSize + childResult.size <= budget
@@ -411,7 +452,7 @@ function fitNode(
         hasNonInteractiveText,
       }
     : node.id
-      ? fitInteractiveShell(node, budget, depth, pageUrl)
+      ? fitInteractiveShell(node, budget, depth, url)
       : undefined;
 }
 
@@ -420,12 +461,13 @@ function fitList(
   budget: number,
   metrics: Map<OSNode, NodeMetrics>,
   depth: number,
-  pageUrl?: string
+  url: UrlCompressionContext
 ): FittedList {
   let totalSize = 0;
   let collectibleText = false;
   for (const node of nodes) {
-    const measured = metrics.get(node)!;
+    const measured = metrics.get(node) ??
+      measureNode(node, depth, url, metrics, true, true);
     totalSize += measured.totalSize;
     if (!node.id && measured.hasNonInteractiveText) collectibleText = true;
   }
@@ -438,7 +480,7 @@ function fitList(
   }
 
   const largestMarker = truncationNode(nodes.length);
-  const markerSize = estimateOwnSize(largestMarker, depth, pageUrl, true);
+  const markerSize = estimateOwnSize(largestMarker, depth, url, true);
   const contentBudget = Math.max(0, budget - markerSize);
   const candidates = new Array<Candidate>(nodes.length);
   for (let index = 0; index < nodes.length; index++) {
@@ -462,7 +504,7 @@ function fitList(
         hasNonInteractiveText: measured.hasNonInteractiveText,
       };
     } else if (remaining > 0) {
-      fitted = fitNode(candidate.node, remaining, metrics, depth, pageUrl);
+      fitted = fitNode(candidate.node, remaining, metrics, depth, url);
     }
 
     if (fitted) {
@@ -501,6 +543,7 @@ export function pruneToFit(nodes: OSNode[], options: PruneOptions): OSNode[] {
   const { maxTokens, charsPerToken = 4, pageUrl } = options;
   validatePositiveNumber(maxTokens, "maxTokens");
   validatePositiveNumber(charsPerToken, "charsPerToken");
-  const metrics = measureTree(nodes, pageUrl);
-  return fitList(nodes, maxTokens * charsPerToken, metrics, 0, pageUrl).nodes;
+  const url = createUrlCompressionContext(pageUrl);
+  const metrics = measureTree(nodes, url);
+  return fitList(nodes, maxTokens * charsPerToken, metrics, 0, url).nodes;
 }

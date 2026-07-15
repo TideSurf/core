@@ -69,6 +69,8 @@ Use `tidesurf help <command>` for exact positionals and flags. Page-state flags:
 
 Without `--output`, screenshot writes a unique temporary PNG and prints its absolute path.
 
+Element and full-page captures, plus SDK `defaultViewport` values, are limited to 16,384 px per side and 12,000,000 total pixels.
+
 Default output is readable text or pretty JSON. `--json` returns the ToolResult shape:
 
 ```json
@@ -97,6 +99,8 @@ Startup and policy flags:
 `--headful`, `--auto-connect`, `--connect-only`, `--browser-url`, `--host`, `--port`, `--chrome-path`, `--channel`, `--user-data-dir`, `--read-only`, `--allow-localhost`, `--allow-private-hosts`, repeatable `--file-access-root`, `--timeout`.
 
 For `download`, `--timeout` after the command sets the download wait. Put the global `--timeout` before `download` to set the session operation timeout.
+
+Timer-backed SDK and tool timeouts are positive whole milliseconds up to 2,147,483,647. CLI aggregate request budgets must stay at or below 1,073,741,823 ms.
 
 Session policy is immutable. Later calls may omit startup flags or repeat matching standalone values. Browser-mode flag combinations must resolve to the stored mode, and a repeated `--file-access-root` set must match the complete stored list. Conflicting explicit values require `stop` or another session name. Sessions have no idle shutdown.
 
@@ -150,6 +154,8 @@ Blocked operations: navigation, interaction, evaluation, clipboard, upload/downl
 ## Files and URLs
 
 SDK uploads and downloads stay inside `fileAccessRoots`. Omit the option for the working directory and OS temporary directory; pass `fileAccessRoots: []` to disable SDK filesystem operations. The CLI adds roots with repeatable `--file-access-root` flags.
+
+One download may run on a page at a time. TideSurf checks the destination again after directory creation and before enabling browser downloads.
 
 Localhost, loopback, private, and link-local navigation is blocked by default. Use `allowLocalhost` or `allowPrivateHosts` only for trusted targets.
 

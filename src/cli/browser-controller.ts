@@ -7,7 +7,9 @@ import { CDPConnectionError } from "../errors.js";
 import { discoverActiveBrowser } from "../cdp/launcher.js";
 import {
   dispatchTool,
-  executeToolSpec,
+  executeValidatedToolSpec,
+  type ToolDispatchOptions,
+  type ToolSpec,
 } from "../tools/registry.js";
 import type { ToolResult } from "../types.js";
 import type { SessionConfig } from "./session.js";
@@ -51,11 +53,26 @@ export class BrowserController {
   private operationTail: Promise<void> = Promise.resolve();
   private closing: Promise<void> | null = null;
   private closed = false;
+  private readonly dispatchOptions: ToolDispatchOptions;
+  private readonly executeValidated = (
+    tool: ToolSpec,
+    input: Record<string, unknown>
+  ): Promise<ToolResult> =>
+    this.runSerialized(async () =>
+      executeValidatedToolSpec(await this.getBrowser(), tool, input)
+    );
 
   constructor(config: SessionConfig) {
     this.config = {
       ...config,
       fileAccessRoots: config.fileAccessRoots ? [...config.fileAccessRoots] : undefined,
+    };
+    this.dispatchOptions = {
+      readOnly: this.config.readOnly,
+      urlOptions: {
+        allowLocalhost: this.config.allowLocalhost,
+        allowPrivateHosts: this.config.allowPrivateHosts,
+      },
     };
   }
 
@@ -225,10 +242,10 @@ export class BrowserController {
   }
 
   async execute(name: string, input: Record<string, unknown>): Promise<ToolResult> {
-    return dispatchTool({ name, input }, this.config.readOnly, (tool, toolInput) =>
-      this.runSerialized(async () =>
-        executeToolSpec(await this.getBrowser(), tool, toolInput)
-      )
+    return dispatchTool(
+      { name, input },
+      this.dispatchOptions,
+      this.executeValidated
     );
   }
 

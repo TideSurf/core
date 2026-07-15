@@ -1,5 +1,5 @@
 import { withTimeout } from "../../src/cdp/timeout.js";
-import { CDPTimeoutError } from "../../src/errors.js";
+import { CDPTimeoutError, ValidationError } from "../../src/errors.js";
 
 describe("withTimeout", () => {
   it("resolves when promise completes before timeout", async () => {
@@ -36,4 +36,13 @@ describe("withTimeout", () => {
       withTimeout(failing, 5000, "test")
     ).rejects.toThrow("original error");
   });
+
+  it.each([-1, Number.NaN, Number.POSITIVE_INFINITY, 2_147_483_648])(
+    "rejects unsupported timer delay %p",
+    async (delay) => {
+      await expect(
+        withTimeout(Promise.resolve("unused"), delay, "invalid")
+      ).rejects.toBeInstanceOf(ValidationError);
+    }
+  );
 });

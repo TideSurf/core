@@ -55,6 +55,18 @@ export function truncateGraphemes(
   if (options.measure) {
     let end = 0;
     let used = options.reservedSize ?? options.measure(options.suffix ?? "");
+    for (; end < text.length; end++) {
+      if (text.charCodeAt(end) > 0x7f) break;
+      const nextSize = options.measure(text[end]);
+      if (used + nextSize > limit) {
+        return `${text.slice(0, end).trimEnd()}${options.suffix ?? ""}`;
+      }
+      used += nextSize;
+    }
+    if (end === text.length) return text;
+
+    end = 0;
+    used = options.reservedSize ?? options.measure(options.suffix ?? "");
     let truncated = false;
     for (const part of graphemeSegments(text)) {
       const nextSize = options.measure(part.segment);

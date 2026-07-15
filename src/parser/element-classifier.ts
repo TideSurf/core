@@ -59,8 +59,16 @@ const ROLE_TAG_MAP: Record<string, string> = {
   cell: "cell",
 };
 
+function upperTagName(nodeName: string): string {
+  for (let index = 0; index < nodeName.length; index++) {
+    const code = nodeName.charCodeAt(index);
+    if (code >= 0x61 && code <= 0x7a) return nodeName.toUpperCase();
+  }
+  return nodeName;
+}
+
 export function parseAttributes(attrs?: string[]): Record<string, string> {
-  const result: Record<string, string> = {};
+  const result = Object.create(null) as Record<string, string>;
   if (!attrs) return result;
   for (let i = 0; i < attrs.length; i += 2) {
     result[attrs[i]] = attrs[i + 1];
@@ -74,7 +82,7 @@ export function classify(
   children?: { nodeName: string; attributes?: string[] }[],
   options?: { includeHidden?: boolean; computedVisibility?: boolean }
 ): ClassifyResult {
-  const upper = nodeName.toUpperCase();
+  const upper = upperTagName(nodeName);
 
   if (!options?.includeHidden) {
     if (
@@ -117,7 +125,7 @@ export function classify(
 
   if (upper === "HEADER" || upper === "FOOTER") {
     const hasInteractiveChild = children?.some((c) =>
-      INTERACTIVE_TAGS.has(c.nodeName.toUpperCase())
+      INTERACTIVE_TAGS.has(upperTagName(c.nodeName))
     );
     if (hasInteractiveChild) {
       return { action: "KEEP", mappedTag: upper.toLowerCase() };

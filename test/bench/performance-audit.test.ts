@@ -161,4 +161,30 @@ describe("parser scaling", () => {
     expectNearLinear(smallTime, largeTime, 16);
     expectWithinCeiling(largeTime);
   });
+
+  it("serializes and prunes link-heavy trees in near-linear time", () => {
+    const build = (count: number) =>
+      Array.from({ length: count }, (_, index) => ({
+        ...node("link", [text(`Product ${index}`)], `L${index + 1}`),
+        attributes: {
+          id: `L${index + 1}`,
+          href: `https://example.com/products/${index}?utm_source=bench&id=${index}`,
+        },
+      }));
+    const small = build(4_096);
+    const large = build(32_768);
+    const run = (nodes: OSNode[]) => {
+      serialize(nodes, 0, "https://example.com/catalog");
+      pruneToFit(nodes, {
+        maxTokens: 2_000,
+        pageUrl: "https://example.com/catalog",
+      });
+    };
+
+    const smallTime = medianRuntime(() => run(small), 3);
+    const largeTime = medianRuntime(() => run(large), 3);
+
+    expectNearLinear(smallTime, largeTime, 8);
+    expectWithinCeiling(largeTime);
+  });
 });

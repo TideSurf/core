@@ -59,13 +59,15 @@ export interface ReadPageOptions {
 /** @deprecated Use `ReadPageOptions`. */
 export type GetStateOptions = ReadPageOptions;
 
-/** Chromium release channel used for executable and profile discovery. */
-export type ChromeChannel =
-  | "stable"
-  | "beta"
-  | "dev"
-  | "canary"
-  | "chromium";
+/** Chromium release channels in automatic discovery order. */
+export const CHROME_CHANNELS = [
+  "stable",
+  "beta",
+  "dev",
+  "canary",
+  "chromium",
+] as const;
+export type ChromeChannel = (typeof CHROME_CHANNELS)[number];
 
 interface TideSurfSessionOptions {
   defaultViewport?: { width: number; height: number };

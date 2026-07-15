@@ -104,9 +104,6 @@ declare module "chrome-remote-interface" {
       }>;
       releaseObject(params: { objectId: string }): Promise<void>;
     };
-    Input: {
-      insertText(params: { text: string }): Promise<void>;
-    };
     Emulation: {
       setDeviceMetricsOverride(params: {
         width: number;

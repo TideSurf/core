@@ -82,10 +82,13 @@ describe("withRetry", () => {
   it.each([
     { maxAttempts: 0 },
     { maxAttempts: 1.5 },
+    { maxAttempts: Number.MAX_SAFE_INTEGER + 1 },
     { initialDelayMs: -1 },
     { initialDelayMs: Number.NaN },
+    { initialDelayMs: 2_147_483_648 },
     { backoffFactor: 0 },
     { backoffFactor: Number.POSITIVE_INFINITY },
+    { maxAttempts: 3, initialDelayMs: 1_500_000_000, backoffFactor: 2 },
   ])("rejects invalid retry options before calling the task", async (options) => {
     const fn = jest.fn().mockResolvedValue("unexpected");
 

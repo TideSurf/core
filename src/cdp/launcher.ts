@@ -8,22 +8,15 @@ import {
   rmSync,
   statSync,
 } from "node:fs";
+import { rm } from "node:fs/promises";
 import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { join, posix, win32 } from "node:path";
 import CDP from "chrome-remote-interface";
-import type { ChromeChannel } from "../types.js";
+import { CHROME_CHANNELS, type ChromeChannel } from "../types.js";
 import { CDPConnectionError, ChromeLaunchError } from "../errors.js";
 import { validatePort } from "../validation.js";
 import { withTimeout } from "./timeout.js";
-
-const CHANNEL_ORDER: readonly ChromeChannel[] = [
-  "stable",
-  "beta",
-  "dev",
-  "canary",
-  "chromium",
-];
 
 const EXECUTABLE_NAMES: Record<ChromeChannel, Record<string, readonly string[]>> = {
   stable: {
@@ -104,7 +97,7 @@ interface DevToolsActivePort {
 class DevToolsEndpointMismatchError extends ChromeLaunchError {}
 
 function selectedChannels(channel?: ChromeChannel): readonly ChromeChannel[] {
-  return channel ? [channel] : CHANNEL_ORDER;
+  return channel ? [channel] : CHROME_CHANNELS;
 }
 
 function joinForPlatform(platform: NodeJS.Platform, ...parts: string[]): string {
@@ -646,7 +639,7 @@ export async function launchChrome(options: LaunchOptions = {}): Promise<LaunchR
     }
     if (ownsTempDir) {
       try {
-        rmSync(userDataDir, { recursive: true, force: true });
+        await rm(userDataDir, { recursive: true, force: true });
       } catch (cleanupError) {
         throw new ChromeLaunchError(
           `${launchError.message}; failed to remove temporary profile ${userDataDir}`,

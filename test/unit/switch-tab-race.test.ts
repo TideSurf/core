@@ -236,6 +236,25 @@ describe("TideSurf.switchTab", () => {
     expect(createTab).not.toHaveBeenCalled();
   });
 
+  it("rejects blank tab IDs before contacting Chrome", async () => {
+    const connectToTab = mock(async () => connection());
+    const closeTab = mock(async () => {});
+    const listTabs = mock(async () => []);
+    const surf = instance({
+      connectToTab,
+      closeTab,
+      listTabs,
+    } as unknown as Pick<TabManager, "connectToTab">);
+
+    await expect(surf.switchTab(" ")).rejects.toBeInstanceOf(ValidationError);
+    await expect(surf.closeTab("")).rejects.toBeInstanceOf(ValidationError);
+
+    expect(connectToTab).not.toHaveBeenCalled();
+    expect(closeTab).not.toHaveBeenCalled();
+    expect(listTabs).not.toHaveBeenCalled();
+    await surf.close();
+  });
+
   it("rolls back a new target when close starts before ownership commits", async () => {
     const replacementClose = mock(async () => {});
     const replacementPage = new SurfingPage(

@@ -12,14 +12,21 @@ const TAG_PREFIX: IDPrefixMap = {
 
 /** Assigns positional action IDs; counters reset for each page read. */
 export class IDAssigner {
-  private counters: Map<string, number> = new Map();
+  private counters: Record<string, number> = {
+    L: 0,
+    B: 0,
+    I: 0,
+    S: 0,
+    F: 0,
+    T: 0,
+    D: 0,
+  };
 
   assign(mappedTag: string): string | undefined {
     const prefix = TAG_PREFIX[mappedTag];
     if (!prefix) return undefined;
 
-    const count = (this.counters.get(prefix) ?? 0) + 1;
-    this.counters.set(prefix, count);
+    const count = ++this.counters[prefix];
     return `${prefix}${count}`;
   }
 }

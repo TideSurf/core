@@ -22,6 +22,7 @@ import {
   type SessionState,
 } from "../../src/cli/session.js";
 import { runDaemon, type DaemonController } from "../../src/cli/daemon.js";
+import { MAX_SESSION_EXECUTION_TIMEOUT_MS } from "../../src/cli/timeouts.js";
 import { VERSION } from "../../src/version.js";
 
 const root = join(import.meta.dir, "..", "..");
@@ -35,6 +36,22 @@ const config: SessionConfig = {
   allowPrivateHosts: false,
 };
 let state: SessionState;
+
+function disconnectedState(
+  name: string,
+  protocol = SESSION_PROTOCOL_VERSION
+): SessionState {
+  return {
+    protocol,
+    version: VERSION,
+    session: name,
+    secret: "0".repeat(64),
+    socketPath: "unused",
+    config,
+    pid: process.pid,
+    ready: true,
+  };
+}
 
 async function stop(candidate: SessionState | undefined): Promise<void> {
   if (candidate && isProcessRunning(candidate.pid)) {
@@ -278,10 +295,23 @@ describe("session recovery", () => {
   it("rejects protocol mismatch before opening a socket", async () => {
     await expect(
       sendSessionRequest(
-        { ...state, protocol: SESSION_PROTOCOL_VERSION + 1 },
+        disconnectedState(
+          "protocol-mismatch",
+          SESSION_PROTOCOL_VERSION + 1
+        ),
         { method: "ping" }
       )
     ).rejects.toThrow("uses protocol");
+  });
+
+  it("rejects transport timeouts that would overflow the platform timer", async () => {
+    await expect(
+      sendSessionRequest(
+        disconnectedState("timeout-overflow"),
+        { method: "ping" },
+        MAX_SESSION_EXECUTION_TIMEOUT_MS + 1
+      )
+    ).rejects.toThrow(`between 1 and ${MAX_SESSION_EXECUTION_TIMEOUT_MS}ms`);
   });
 
   it("replaces state whose live PID has no socket", async () => {
@@ -289,7 +319,7 @@ describe("session recovery", () => {
     const paths = getSessionPaths(staleName);
     writeSessionState(paths, {
       protocol: SESSION_PROTOCOL_VERSION,
-      version: state.version,
+      version: VERSION,
       session: staleName,
       secret: "a".repeat(64),
       socketPath: paths.socketPath,
@@ -626,7 +656,7 @@ describe("session recovery", () => {
     const paths = getSessionPaths(name);
     const pending: SessionState = {
       protocol: SESSION_PROTOCOL_VERSION,
-      version: state.version,
+      version: VERSION,
       session: name,
       secret: "b".repeat(64),
       socketPath: paths.socketPath,

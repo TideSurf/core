@@ -35,10 +35,6 @@ interface LaunchBrowserResult {
   source: "launched" | "attached";
 }
 
-/**
- * Owns browser startup and executor reuse for an MCP server. The adapter stays
- * independent of the optional MCP SDK and of the CLI session implementation.
- */
 interface McpBrowserCoordinator {
   execute(name: string, input: Record<string, unknown>): Promise<ToolResult>;
   launchBrowser(options: { headless?: boolean }): Promise<LaunchBrowserResult>;
@@ -147,7 +143,6 @@ export function registerMcpTools({
   }
 }
 
-/** Build the adapter callback from Zod 4 without importing the optional package. */
 export function createZodInputSchemaFactory(zod: {
   fromJSONSchema: (schema: unknown) => unknown;
 }): McpInputSchemaFactory {

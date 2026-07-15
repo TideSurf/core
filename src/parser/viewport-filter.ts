@@ -14,11 +14,17 @@ const MAX_FILTER_DEPTH = 500;
 const SUMMARY_NODE_LIMIT = 5;
 const SUMMARY_TEXT_LIMIT = 50;
 
-function summarizeRegion(nodes: OSNode[], tag: "above" | "below"): OSNode | undefined {
+function summarizeRegion(
+  nodes: OSNode[],
+  start: number,
+  end: number,
+  tag: "above" | "below"
+): OSNode | undefined {
   const parts: string[] = [];
   let sectionCount = 0;
 
-  for (const node of nodes) {
+  for (let index = start; index < end; index++) {
+    const node = nodes[index];
     if (node.tag === "#text") continue;
     sectionCount++;
     if (parts.length >= SUMMARY_NODE_LIMIT) continue;
@@ -99,7 +105,12 @@ export function filterViewportOnly(nodes: OSNode[]): ViewportFilterResult {
 
   return {
     nodes: filtered,
-    aboveSummary: summarizeRegion(nodes.slice(0, firstVisibleIndex), "above"),
-    belowSummary: summarizeRegion(nodes.slice(lastVisibleIndex + 1), "below"),
+    aboveSummary: summarizeRegion(nodes, 0, firstVisibleIndex, "above"),
+    belowSummary: summarizeRegion(
+      nodes,
+      lastVisibleIndex + 1,
+      nodes.length,
+      "below"
+    ),
   };
 }

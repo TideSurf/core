@@ -1,5 +1,10 @@
 import type { OSNode, ScrollPosition } from "../types.js";
-import { compressUrl } from "./url-compressor.js";
+import {
+  compressUrl,
+  compressUrlWithContext,
+  createUrlCompressionContext,
+  type UrlCompressionContext,
+} from "./url-compressor.js";
 import { formatTruncation } from "./truncation.js";
 
 function escapeQuotes(text: string): string {
@@ -40,7 +45,7 @@ interface ElementState {
 }
 
 interface SerializationContext {
-  pageUrl?: string;
+  url: UrlCompressionContext;
   text: Map<OSNode, { all: string; nonInteractive: string }>;
 }
 
@@ -95,27 +100,41 @@ function collectText(
     const value = escapeHtml(node.text ?? "");
     result = { all: value, nonInteractive: value };
   } else {
-    const all: string[] = [];
-    let nonInteractive: string[] | undefined;
     const text = serializableText(node);
-    if (text) {
-      all.push(escapeHtml(text));
-    }
-    for (const child of node.children) {
+    const ownText = text ? escapeHtml(text) : "";
+    if (node.children.length === 0) {
+      result = { all: ownText, nonInteractive: ownText };
+    } else if (node.children.length === 1) {
+      const child = node.children[0];
       const childText = collectText(child, context);
-      if (!childText.all) continue;
+      const all = childText.all
+        ? ownText ? `${ownText} ${childText.all}` : childText.all
+        : ownText;
       const retained = child.id ? "" : childText.nonInteractive;
-      if (!nonInteractive && childText.all !== retained) {
-        nonInteractive = all.slice();
+      const nonInteractive = retained
+        ? ownText ? `${ownText} ${retained}` : retained
+        : ownText;
+      result = { all, nonInteractive };
+    } else {
+      const all: string[] = [];
+      let nonInteractive: string[] | undefined;
+      if (ownText) all.push(ownText);
+      for (const child of node.children) {
+        const childText = collectText(child, context);
+        if (!childText.all) continue;
+        const retained = child.id ? "" : childText.nonInteractive;
+        if (!nonInteractive && childText.all !== retained) {
+          nonInteractive = all.slice();
+        }
+        all.push(childText.all);
+        if (nonInteractive && retained) nonInteractive.push(retained);
       }
-      all.push(childText.all);
-      if (nonInteractive && retained) nonInteractive.push(retained);
+      const allText = all.join(" ");
+      result = {
+        all: allText,
+        nonInteractive: nonInteractive?.join(" ") ?? allText,
+      };
     }
-    const allText = all.join(" ");
-    result = {
-      all: allText,
-      nonInteractive: nonInteractive?.join(" ") ?? allText,
-    };
   }
 
   context.text.set(node, result);
@@ -136,6 +155,14 @@ function appendAction(
 ): void {
   const pad = "  ".repeat(indent);
   parts.push(struck ? `${pad}~~${line.trim()}~~` : `${pad}${line}`);
+  let mayContainAction = false;
+  for (const child of node.children) {
+    if (child.id || child.children.length > 0) {
+      mayContainAction = true;
+      break;
+    }
+  }
+  if (!mayContainAction) return;
   const nestedActions = collectInteractiveDescendants(node);
   if (nestedActions.length > 0) {
     pushIfNotEmpty(parts, serializeNodes(nestedActions, indent + 1, context));
@@ -144,7 +171,7 @@ function appendAction(
 
 export function serialize(nodes: OSNode[], indent: number = 0, pageUrl?: string): string {
   return serializeNodes(nodes, indent, {
-    pageUrl,
+    url: createUrlCompressionContext(pageUrl),
     text: new Map(),
   });
 }
@@ -178,7 +205,9 @@ function serializeNodes(
       const id = node.id ?? "";
       const href = node.attributes["href"];
       const text = collectNonInteractiveText(node, context).trim() || node.attributes["aria-label"] || node.attributes["title"] || "";
-      const compHref = href ? compressUrl(href, context.pageUrl) : undefined;
+      const compHref = href
+        ? compressUrlWithContext(href, context.url)
+        : undefined;
       const newTab = node.attributes["target"] === "_blank" ? " →" : "";
       const { struck, flags } = getElementState(node, node.attributes["aria-disabled"] === "true");
       let line: string;
@@ -249,7 +278,7 @@ function serializeNodes(
     if (node.tag === "iframe") {
       if (node.children.length > 0) {
         const src = node.attributes["src"];
-        parts.push(`${pad}[iframe: ${src ? compressUrl(src, context.pageUrl) : "inline"}]`);
+        parts.push(`${pad}[iframe: ${src ? compressUrlWithContext(src, context.url) : "inline"}]`);
         pushIfNotEmpty(
           parts,
           serializeNodes(node.children, indent + 1, context)
@@ -260,7 +289,7 @@ function serializeNodes(
           parts.push(`${pad}[iframe: inaccessible]`);
         } else {
           const src = node.attributes["src"];
-          parts.push(`${pad}[iframe: ${src ? compressUrl(src, context.pageUrl) : "unknown"}]`);
+          parts.push(`${pad}[iframe: ${src ? compressUrlWithContext(src, context.url) : "unknown"}]`);
         }
       }
       continue;

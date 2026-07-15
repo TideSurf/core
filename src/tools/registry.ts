@@ -9,7 +9,9 @@ import {
   validatePositiveNumber,
   validateSearchQuery,
   validateSelector,
+  validateTimeout,
   validateUrl,
+  type UrlValidationOptions,
 } from "../validation.js";
 
 type ToolOutputKind = "text" | "json" | "image";
@@ -47,7 +49,7 @@ export interface ToolSpec {
   readonly cli: ToolCliSpec;
   readonly validate?: (
     input: Record<string, unknown>,
-    instance?: Partial<Pick<TideSurf, "getUrlValidationOptions">>
+    urlOptions?: UrlValidationOptions
   ) => void;
   readonly handler: (
     instance: TideSurf,
@@ -136,13 +138,12 @@ function optionalBoolean(
 
 function validateUrlInput(
   input: Record<string, unknown>,
-  instance?: Partial<Pick<TideSurf, "getUrlValidationOptions">>,
+  urlOptions?: UrlValidationOptions,
   optional = false
 ): void {
   const url = optionalString(input, "url");
   if (url === undefined && optional) return;
-  const options = instance?.getUrlValidationOptions?.() ?? {};
-  validateUrl(url ?? "", options);
+  validateUrl(url ?? "", urlOptions);
 }
 
 function validateId(input: Record<string, unknown>): void {
@@ -245,7 +246,7 @@ export const TOOL_REGISTRY: readonly ToolSpec[] = deepFreeze([
     readOnlyAllowed: false,
     outputKind: "text",
     cli: cli([positional("url", "URL to open")]),
-    validate: (input, instance) => validateUrlInput(input, instance),
+    validate: (input, urlOptions) => validateUrlInput(input, urlOptions),
     handler: async (instance, input) => {
       await instance.navigate(stringInput(input, "url"));
       return pageAfterAction(instance, "Navigation completed.");
@@ -387,7 +388,7 @@ export const TOOL_REGISTRY: readonly ToolSpec[] = deepFreeze([
     readOnlyAllowed: false,
     outputKind: "json",
     cli: cli([positional("url", "URL to open", false)]),
-    validate: (input, instance) => validateUrlInput(input, instance, true),
+    validate: (input, urlOptions) => validateUrlInput(input, urlOptions, true),
     handler: (instance, input) => instance.newTab(optionalString(input, "url")),
   },
   {
@@ -570,7 +571,7 @@ export const TOOL_REGISTRY: readonly ToolSpec[] = deepFreeze([
       const dir = optionalString(input, "downloadDir");
       if (dir !== undefined) validateFilePath(dir);
       const timeout = optionalNumber(input, "timeout");
-      if (timeout !== undefined) validatePositiveInteger(timeout, "timeout");
+      if (timeout !== undefined) validateTimeout(timeout);
     },
     handler: (instance, input) =>
       instance.getPage().download(stringInput(input, "id"), {
@@ -581,6 +582,11 @@ export const TOOL_REGISTRY: readonly ToolSpec[] = deepFreeze([
 ] satisfies ToolSpec[]);
 
 const TOOL_BY_NAME = new Map(TOOL_REGISTRY.map((tool) => [tool.name, tool]));
+const READ_ONLY_TOOL_SPECS = Object.freeze(
+  TOOL_REGISTRY.filter((tool) => tool.readOnlyAllowed)
+);
+const TOOL_NAMES = Object.freeze(TOOL_REGISTRY.map((tool) => tool.name));
+const UNKNOWN_TOOL_LIST = TOOL_NAMES.join(", ");
 
 export function getToolSpec(name: string): ToolSpec | undefined {
   return TOOL_BY_NAME.get(name);
@@ -590,16 +596,16 @@ export function getToolSpecs(options?: {
   readOnly?: boolean;
 }): readonly ToolSpec[] {
   return options?.readOnly
-    ? TOOL_REGISTRY.filter((tool) => tool.readOnlyAllowed)
+    ? READ_ONLY_TOOL_SPECS
     : TOOL_REGISTRY;
 }
 
-export function getToolNames(): string[] {
-  return TOOL_REGISTRY.map((tool) => tool.name);
+export function getToolNames(): readonly string[] {
+  return TOOL_NAMES;
 }
 
 export function unknownToolMessage(name: string): string {
-  return `Unknown tool: ${name}. Available tools: ${getToolNames().join(", ")}.`;
+  return `Unknown tool: ${name}. Available tools: ${UNKNOWN_TOOL_LIST}.`;
 }
 
 export function readOnlyToolMessage(tool: Pick<ToolSpec, "name">): string {
@@ -631,7 +637,7 @@ function fieldLabel(name: string): string {
 export function validateToolInput(
   tool: ToolSpec,
   input: Record<string, unknown>,
-  instance?: Partial<Pick<TideSurf, "getUrlValidationOptions">>
+  urlOptions?: UrlValidationOptions
 ): void {
   const required = tool.inputSchema.required ?? [];
   for (const name of required) {
@@ -664,7 +670,7 @@ export function validateToolInput(
       );
     }
   }
-  tool.validate?.(input, instance);
+  tool.validate?.(input, urlOptions);
 }
 
 function failure(error: unknown): ToolResult {
@@ -679,16 +685,24 @@ function failure(error: unknown): ToolResult {
 }
 
 export function createToolExecutor(instance: TideSurf): ToolExecutor {
-  const readOnly = instance.isReadOnly();
+  const options: ToolDispatchOptions = {
+    readOnly: instance.isReadOnly(),
+    urlOptions: instance.getUrlValidationOptions?.() ?? {},
+  };
+  const execute: ToolDispatch = (tool, input) =>
+    executeValidatedToolSpec(instance, tool, input);
   return (request) =>
-    dispatchTool(request, readOnly, (tool, input) =>
-      executeToolSpec(instance, tool, input)
-    );
+    dispatchTool(request, options, execute);
+}
+
+export interface ToolDispatchOptions {
+  readonly readOnly: boolean;
+  readonly urlOptions?: UrlValidationOptions;
 }
 
 export function dispatchTool(
   request: ToolInput,
-  readOnly: boolean,
+  options: ToolDispatchOptions,
   dispatch: ToolDispatch
 ): Promise<ToolResult> {
   const tool = getToolSpec(request.name);
@@ -698,25 +712,33 @@ export function dispatchTool(
       error: unknownToolMessage(request.name),
     });
   }
-  if (readOnly && !tool.readOnlyAllowed) {
+  if (options.readOnly && !tool.readOnlyAllowed) {
     return Promise.resolve({
       success: false,
       error: readOnlyToolMessage(tool),
     });
   }
+  try {
+    if (
+      request.input === null ||
+      typeof request.input !== "object" ||
+      Array.isArray(request.input)
+    ) {
+      throw new Error("Tool input must be an object");
+    }
+    validateToolInput(tool, request.input, options.urlOptions);
+  } catch (error) {
+    return Promise.resolve(failure(error));
+  }
   return dispatch(tool, request.input);
 }
 
-export async function executeToolSpec(
+export async function executeValidatedToolSpec(
   instance: TideSurf,
   tool: ToolSpec,
   input: Record<string, unknown>
 ): Promise<ToolResult> {
   try {
-    if (input === null || typeof input !== "object" || Array.isArray(input)) {
-      throw new Error("Tool input must be an object");
-    }
-    validateToolInput(tool, input, instance);
     return { success: true, data: await tool.handler(instance, input) };
   } catch (error) {
     if (error instanceof ActionCommittedError) {

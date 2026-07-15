@@ -30,9 +30,9 @@ import {
   validateSelector,
   validateExpression,
   validateElementId,
-  validateDownloadDirectory,
   validatePositiveInteger,
   validatePositiveNumber,
+  validateTimeout,
   validateSearchQuery,
   validateUploadFilePath,
   resolveFileAccessRoots,
@@ -244,7 +244,7 @@ export class SurfingPage {
   async waitForStable(timeout?: number): Promise<void> {
     this.assertOpen();
     if (timeout !== undefined) {
-      validatePositiveInteger(timeout, "timeout");
+      validateTimeout(timeout);
     }
     await cdp.waitForStable(this.conn, timeout ?? this.timeout);
   }
@@ -435,13 +435,11 @@ export class SurfingPage {
     this.assertWritable("download");
     validateElementId(id);
     if (options?.timeout !== undefined) {
-      validatePositiveInteger(options.timeout, "timeout");
+      validateTimeout(options.timeout);
     }
     const backendNodeId = this.getBackendNodeId(id);
 
-    const downloadDir = options?.downloadDir !== undefined
-      ? validateDownloadDirectory(options.downloadDir, this.fileAccessRoots)
-      : undefined;
+    const downloadDir = options?.downloadDir;
     return downloadFromAction(
       this.conn,
       {
@@ -450,6 +448,7 @@ export class SurfingPage {
           downloadDir === undefined
             ? resolveImplicitDownloadRoot(this.fileAccessRoots)
             : undefined,
+        fileAccessRoots: this.fileAccessRoots,
         timeout: options?.timeout ?? this.timeout,
       },
       () => cdp.clickNode(this.conn, backendNodeId, this.timeout)

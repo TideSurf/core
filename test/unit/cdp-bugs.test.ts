@@ -1,4 +1,7 @@
 import { describe, expect, it, mock } from "bun:test";
+import { mkdtemp, rm, stat, symlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   clickNode,
   captureScreenshot,
@@ -32,7 +35,6 @@ function connection(overrides: Partial<CDPConnection> = {}): CDPConnection {
       callFunctionOn: mock(async () => ({})),
       releaseObject: mock(async () => ({})),
     } as unknown as CDPConnection["Runtime"],
-    Input: {} as CDPConnection["Input"],
     Emulation: {} as CDPConnection["Emulation"],
     ...overrides,
   };
@@ -470,6 +472,50 @@ describe("CDP operations", () => {
     expect(runtimeEvaluate).toHaveBeenCalledTimes(2);
   });
 
+  it("observes the document root so body replacement stays visible", async () => {
+    const documentElement = {};
+    let observed: object | undefined;
+    class Observer {
+      observe(target: object) {
+        observed = target;
+      }
+      disconnect() {}
+    }
+    const runtimeEvaluate = mock(async ({ expression }: { expression: string }) => {
+      const execute = new Function(
+        "MutationObserver",
+        "document",
+        `return (${expression})`
+      ) as (
+        observer: typeof Observer,
+        document: { documentElement: object; body: object }
+      ) => Promise<void>;
+      await execute(Observer, { documentElement, body: {} });
+      return { result: { value: undefined } };
+    });
+    const conn = connection({
+      Runtime: { evaluate: runtimeEvaluate } as unknown as CDPConnection["Runtime"],
+    });
+
+    await waitForStable(conn, 1);
+
+    expect(observed).toBe(documentElement);
+  });
+
+  it("keeps the maximum supported stability timeout within timer bounds", async () => {
+    const runtimeEvaluate = mock(async () => ({ result: { value: undefined } }));
+    const conn = connection({
+      Runtime: { evaluate: runtimeEvaluate } as unknown as CDPConnection["Runtime"],
+    });
+
+    await waitForStable(conn, 2_147_483_647);
+
+    expect(runtimeEvaluate).toHaveBeenCalledTimes(1);
+    expect(runtimeEvaluate.mock.calls[0][0].expression).toContain(
+      "hardTimer = setTimeout(done, 2147483397)"
+    );
+  });
+
   it("rejects an evaluation with no result object", async () => {
     const conn = connection({
       Runtime: {
@@ -557,6 +603,68 @@ describe("CDP operations", () => {
     expect(send.mock.calls.filter(([method]) =>
       method === "Browser.resetPermissions"
     )).toHaveLength(2);
+  });
+
+  it("queues a late permission reset behind the next clipboard operation", async () => {
+    let resolveLateGrant!: () => void;
+    const lateGrant = new Promise<void>((resolve) => {
+      resolveLateGrant = resolve;
+    });
+    let releaseWrite!: () => void;
+    const writeGate = new Promise<void>((resolve) => {
+      releaseWrite = resolve;
+    });
+    let signalWriteStarted!: () => void;
+    const writeStarted = new Promise<void>((resolve) => {
+      signalWriteStarted = resolve;
+    });
+    const events: string[] = [];
+    let grantCount = 0;
+    const send = mock(async (method: string) => {
+      events.push(method);
+      if (method === "Browser.grantPermissions" && grantCount++ === 0) {
+        return lateGrant;
+      }
+      return {};
+    });
+    const conn = connection({
+      client: { send } as unknown as CDPConnection["client"],
+      Runtime: {
+        evaluate: mock(async ({ expression }: { expression: string }) => {
+          if (expression === "location.origin") {
+            return { result: { value: "https://example.com" } };
+          }
+          events.push("write:start");
+          signalWriteStarted();
+          await writeGate;
+          events.push("write:end");
+          return { result: { value: undefined } };
+        }),
+      } as unknown as CDPConnection["Runtime"],
+    });
+
+    await expect(clipboardWrite(conn, "first", 5)).rejects.toBeInstanceOf(
+      CDPTimeoutError
+    );
+    const second = clipboardWrite(conn, "second", 100);
+    await writeStarted;
+    resolveLateGrant();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(events.slice(events.indexOf("write:start"))).toEqual(["write:start"]);
+
+    releaseWrite();
+    await second;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const writeStart = events.indexOf("write:start");
+    const writeEnd = events.indexOf("write:end");
+    expect(events.slice(writeStart, writeEnd + 1)).toEqual([
+      "write:start",
+      "write:end",
+    ]);
+    expect(events.filter((event) => event === "Browser.resetPermissions")).toHaveLength(3);
   });
 
   it("resets temporary clipboard permissions after writing", async () => {
@@ -714,5 +822,36 @@ describe("download listeners", () => {
     ).rejects.toThrow();
 
     expect(conn.Page.setDownloadBehavior).not.toHaveBeenCalled();
+  });
+
+  it("revalidates a download directory immediately before setup", async () => {
+    if (process.platform === "win32") return;
+
+    const allowedRoot = await mkdtemp(join(tmpdir(), "tidesurf-allowed-"));
+    const outsideRoot = await mkdtemp(join(tmpdir(), "tidesurf-outside-"));
+    const redirected = join(allowedRoot, "redirected");
+    const requested = join(redirected, "downloads");
+    await symlink(outsideRoot, redirected, "dir");
+    const { conn } = downloadConnection();
+
+    try {
+      await expect(
+        downloadFromAction(
+          conn,
+          {
+            downloadDir: requested,
+            fileAccessRoots: [allowedRoot],
+          },
+          async () => {}
+        )
+      ).rejects.toBeInstanceOf(ValidationError);
+      expect(conn.Page.setDownloadBehavior).not.toHaveBeenCalled();
+      await expect(stat(join(outsideRoot, "downloads"))).rejects.toThrow();
+    } finally {
+      await Promise.all([
+        rm(allowedRoot, { recursive: true, force: true }),
+        rm(outsideRoot, { recursive: true, force: true }),
+      ]);
+    }
   });
 });

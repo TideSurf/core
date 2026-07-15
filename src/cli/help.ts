@@ -3,7 +3,8 @@ import { VERSION } from "../version.js";
 import { GLOBAL_OPTIONS, LIFECYCLE_COMMANDS } from "./metadata.js";
 
 function rows(entries: readonly (readonly [string, string])[]): string {
-  const width = Math.max(...entries.map(([name]) => name.length));
+  let width = 0;
+  for (const [name] of entries) width = Math.max(width, name.length);
   return entries.map(([name, description]) => `  ${name.padEnd(width)}  ${description}`).join("\n");
 }
 
@@ -34,8 +35,10 @@ function globalOptionRows(): string {
   ]);
 }
 
+let generalHelpText: string | undefined;
+
 export function generalHelp(): string {
-  return `TideSurf ${VERSION}
+  return generalHelpText ??= `TideSurf ${VERSION}
 Stateful Chromium automation for agents
 
 Usage:
@@ -84,12 +87,25 @@ function toolHelp(tool: ToolSpec): string {
   return `${tool.name}\n\n${tool.description}\n\nUsage:\n  ${usageForTool(tool)}${positionalLines}${optionLines}\n\nGlobal session and output options are also accepted.`;
 }
 
+const toolHelpCache = new Map<ToolSpec, string>();
+const lifecycleHelpCache = new Map<string, string>();
+
 export function commandHelp(command?: string): string | undefined {
   if (!command) return generalHelp();
   const tool = getToolSpec(command);
-  if (tool) return toolHelp(tool);
+  if (tool) {
+    let help = toolHelpCache.get(tool);
+    if (help === undefined) {
+      help = toolHelp(tool);
+      toolHelpCache.set(tool, help);
+    }
+    return help;
+  }
+  const cached = lifecycleHelpCache.get(command);
+  if (cached !== undefined) return cached;
   const lifecycle = LIFECYCLE_COMMANDS.find((item) => item.name === command);
-  return lifecycle
-    ? `Usage: tidesurf ${"usage" in lifecycle ? lifecycle.usage : lifecycle.synopsis}\n\n${lifecycle.help}`
-    : undefined;
+  if (!lifecycle) return undefined;
+  const help = `Usage: tidesurf ${"usage" in lifecycle ? lifecycle.usage : lifecycle.synopsis}\n\n${lifecycle.help}`;
+  lifecycleHelpCache.set(command, help);
+  return help;
 }

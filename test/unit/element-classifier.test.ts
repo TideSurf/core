@@ -13,6 +13,19 @@ describe("parseAttributes", () => {
   it("returns empty for empty array", () => {
     expect(parseAttributes([])).toEqual({});
   });
+
+  it("preserves attribute names that exist on Object.prototype", () => {
+    const result = parseAttributes([
+      "__proto__",
+      "prototype-value",
+      "constructor",
+      "constructor-value",
+    ]);
+
+    expect(Object.getPrototypeOf(result)).toBeNull();
+    expect(result["__proto__"]).toBe("prototype-value");
+    expect(result["constructor"]).toBe("constructor-value");
+  });
 });
 
 describe("classify", () => {

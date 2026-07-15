@@ -167,7 +167,7 @@ tidesurf --session files \
 
 `--file-access-root` is a startup option. Stop the session before changing its roots.
 
-Only one download can run on a page at a time. Wait for the current call to finish before starting another.
+Only one download can run on a page at a time. A second call fails instead of sharing browser download state. A path that resolves outside the allowed roots is rejected before browser download setup.
 
 ## Screenshot output is unreadable
 
@@ -178,6 +178,8 @@ tidesurf screenshot --output - > page.png
 ```
 
 Do not expect JSON or terminal text on stdout in raw-byte mode.
+
+Element and full-page captures fail above 16,384 px on either side or 12,000,000 total pixels. Capture the viewport, target a smaller element, or reduce page dimensions.
 
 ## MCP dependencies are missing
 
@@ -206,3 +208,5 @@ tidesurf --session slow --timeout 60000 navigate https://example.com
 ```
 
 For an existing session, choose a new name or stop it before changing the timeout.
+
+Timeouts must be positive whole milliseconds no greater than 2,147,483,647. The CLI reserves time for sequential phases and transport cleanup, then rejects a computed request budget above 1,073,741,823 ms.

@@ -11,14 +11,33 @@ const TRACKING_PARAMS = new Set([
   "mc_eid",
 ]);
 
+export interface UrlCompressionContext {
+  pageUrl?: string;
+  pageOrigin?: string;
+  originResolved: boolean;
+}
+
+export function createUrlCompressionContext(
+  pageUrl?: string
+): UrlCompressionContext {
+  return { pageUrl, originResolved: false };
+}
+
 /** Strip tracking parameters, relativize same-origin URLs, and shorten paths. */
 export function compressUrl(href: string, pageUrl?: string): string {
-  if (
-    href.startsWith("javascript:") ||
-    href.startsWith("#") ||
-    href.startsWith("blob:") ||
-    href.startsWith("data:")
-  ) {
+  return compressUrlWithContext(href, createUrlCompressionContext(pageUrl));
+}
+
+export function compressUrlWithContext(
+  href: string,
+  context: UrlCompressionContext
+): string {
+  const first = href.charCodeAt(0) | 0x20;
+  const opaqueProtocol =
+    (first === 0x6a && href.slice(0, 11).toLowerCase() === "javascript:") ||
+    (first === 0x62 && href.slice(0, 5).toLowerCase() === "blob:") ||
+    (first === 0x64 && href.slice(0, 5).toLowerCase() === "data:");
+  if (href.startsWith("#") || opaqueProtocol) {
     return href;
   }
 
@@ -29,21 +48,40 @@ export function compressUrl(href: string, pageUrl?: string): string {
     return href;
   }
 
-  for (const param of [...url.searchParams.keys()]) {
-    if (TRACKING_PARAMS.has(param) || param.startsWith("utm_")) {
-      url.searchParams.delete(param);
+  if (url.search.length > 1) {
+    for (const param of [...url.searchParams.keys()]) {
+      if (TRACKING_PARAMS.has(param) || param.startsWith("utm_")) {
+        url.searchParams.delete(param);
+      }
     }
   }
 
-  const pageOrigin = pageUrl ? new URL(pageUrl).origin : undefined;
-  const sameOrigin = pageOrigin !== undefined && url.origin === pageOrigin;
+  if (!context.originResolved) {
+    context.pageOrigin = context.pageUrl
+      ? new URL(context.pageUrl).origin
+      : undefined;
+    context.originResolved = true;
+  }
+  const sameOrigin = context.pageOrigin !== undefined &&
+    url.origin === context.pageOrigin;
 
   const search = url.search;
   const hash = url.hash;
   let path = url.pathname;
 
-  const segments = path.split("/").filter(Boolean);
-  if (segments.length > 4) {
+  let segmentCount = 0;
+  let insideSegment = false;
+  for (let index = 0; index < path.length; index++) {
+    if (path.charCodeAt(index) === 47) {
+      insideSegment = false;
+    } else if (!insideSegment) {
+      insideSegment = true;
+      segmentCount++;
+      if (segmentCount > 4) break;
+    }
+  }
+  if (segmentCount > 4) {
+    const segments = path.split("/").filter(Boolean);
     const truncated = [segments[0], segments[1], "...", segments[segments.length - 1]];
     path = "/" + truncated.join("/");
   }

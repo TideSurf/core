@@ -201,7 +201,7 @@ describe("evaluate validation", () => {
 });
 
 describe("BrowserController tool preflight", () => {
-  it("rejects read-only and unknown tools without acquiring a browser", async () => {
+  it("rejects read-only and unknown calls without acquiring a browser", async () => {
     const controller = new BrowserController({
       browserMode: "launch",
       headless: true,
@@ -217,6 +217,29 @@ describe("BrowserController tool preflight", () => {
       await expect(controller.execute("missing", {})).resolves.toMatchObject({
         success: false,
         error: expect.stringContaining("Unknown tool: missing"),
+      });
+      expect(controller.status().running).toBe(false);
+    } finally {
+      await controller.close();
+    }
+  });
+
+  it("rejects invalid input before acquiring a browser", async () => {
+    const controller = new BrowserController({
+      browserMode: "launch",
+      headless: true,
+      readOnly: false,
+      allowLocalhost: false,
+      allowPrivateHosts: false,
+    });
+    try {
+      await expect(controller.execute("navigate", { url: "not-a-url" })).resolves.toMatchObject({
+        success: false,
+        error: expect.stringContaining("Invalid URL"),
+      });
+      await expect(controller.execute("get_state", { maxTokens: -1 })).resolves.toMatchObject({
+        success: false,
+        error: expect.stringContaining("positive integer"),
       });
       expect(controller.status().running).toBe(false);
     } finally {

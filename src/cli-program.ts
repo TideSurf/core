@@ -11,6 +11,7 @@ import {
   CLI_EXIT_CODES,
   type LifecycleCommandName,
 } from "./cli/metadata.js";
+import { MAX_SESSION_EXECUTION_TIMEOUT_MS } from "./cli/timeouts.js";
 import type { SessionState } from "./cli/session.js";
 import type { McpServerLike } from "./mcp/adapter.js";
 import {
@@ -82,12 +83,18 @@ function requestTimeout(
 ): number {
   const toolTimeout = typeof input?.["timeout"] === "number" ? input["timeout"] : 0;
   const operationTimeout = invocation.sessionConfig.timeout ?? DEFAULT_OPERATION_TIMEOUT;
-  return Math.max(
+  const timeout = Math.max(
     60_000,
     operationTimeout * MAX_SEQUENTIAL_OPERATION_PHASES +
       toolTimeout +
       REQUEST_TIMEOUT_MARGIN
   );
+  if (!Number.isSafeInteger(timeout) || timeout > MAX_SESSION_EXECUTION_TIMEOUT_MS) {
+    throw new CliUsageError(
+      `Timeout budget exceeds the session transport limit of ${MAX_SESSION_EXECUTION_TIMEOUT_MS}ms`
+    );
+  }
+  return timeout;
 }
 
 function preflightToolInput(
@@ -97,10 +104,8 @@ function preflightToolInput(
 ): void {
   try {
     validateToolInput(tool, input, {
-      getUrlValidationOptions: () => ({
-        allowLocalhost: policy.allowLocalhost,
-        allowPrivateHosts: policy.allowPrivateHosts,
-      }),
+      allowLocalhost: policy.allowLocalhost,
+      allowPrivateHosts: policy.allowPrivateHosts,
     });
   } catch (error) {
     throw new CliUsageError(message(error));
@@ -342,9 +347,9 @@ function listTools(invocation: ParsedInvocation): number {
   if (invocation.json) {
     writeLine(JSON.stringify({ success: true, data: getToolDefinitions() }, null, 2));
   } else {
-    for (const tool of getToolSpecs()) {
-      writeLine(`${tool.name}\t${tool.description}`);
-    }
+    writeLine(getToolSpecs()
+      .map((tool) => `${tool.name}\t${tool.description}`)
+      .join("\n"));
   }
   return 0;
 }

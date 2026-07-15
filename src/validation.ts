@@ -5,6 +5,9 @@ import { ValidationError } from "./errors.js";
 
 const ELEMENT_ID_PATTERN = /^[A-Z]\d+$/;
 const ALLOWED_URL_PROTOCOLS = new Set(["http:", "https:", "about:"]);
+export const MAX_TIMER_DELAY_MS = 2_147_483_647;
+const MAX_SCREENSHOT_DIMENSION = 16_384;
+const MAX_SCREENSHOT_PIXELS = 12_000_000;
 const NON_LATIN_HOST_SCRIPTS =
   /\p{Script=Han}|\p{Script=Cyrl}|\p{Script=Greek}|\p{Script=Arabic}/u;
 
@@ -326,6 +329,37 @@ export function validateDownloadDirectory(
 export function validatePositiveInteger(value: number, name: string): void {
   if (!Number.isInteger(value) || value <= 0) {
     throw new ValidationError(`${name} must be a positive integer`);
+  }
+}
+
+export function validateTimeout(value: number, name: string = "timeout"): void {
+  validatePositiveInteger(value, name);
+  if (value > MAX_TIMER_DELAY_MS) {
+    throw new ValidationError(
+      `${name} must not exceed ${MAX_TIMER_DELAY_MS} milliseconds`
+    );
+  }
+}
+
+export function validateScreenshotDimensions(
+  width: number,
+  height: number,
+  scale: number = 1
+): void {
+  const scaledWidth = width * scale;
+  const scaledHeight = height * scale;
+  if (
+    !Number.isFinite(scaledWidth) ||
+    !Number.isFinite(scaledHeight) ||
+    scaledWidth <= 0 ||
+    scaledHeight <= 0 ||
+    scaledWidth > MAX_SCREENSHOT_DIMENSION ||
+    scaledHeight > MAX_SCREENSHOT_DIMENSION ||
+    scaledWidth * scaledHeight > MAX_SCREENSHOT_PIXELS
+  ) {
+    throw new ValidationError(
+      `Screenshot exceeds ${MAX_SCREENSHOT_DIMENSION}px per side or ${MAX_SCREENSHOT_PIXELS.toLocaleString()} total pixels`
+    );
   }
 }
 

@@ -350,6 +350,31 @@ describe("DOM snapshot decoder", () => {
     expect(attributes(findBackend(result.root, 103)!).value).toBeUndefined();
   });
 
+  it("preserves attributes named after Object prototype properties", () => {
+    const data = fixture();
+    const prototypeName = data.strings.push("__proto__") - 1;
+    const prototypeValue = data.strings.push("prototype-value") - 1;
+    const constructorName = data.strings.push("constructor") - 1;
+    const constructorValue = data.strings.push("constructor-value") - 1;
+    data.documents[0].nodes.attributes![22].push(
+      prototypeName,
+      prototypeValue,
+      constructorName,
+      constructorValue
+    );
+
+    const result = decodeDOMSnapshot(data, {
+      viewportWidth: 400,
+      viewportHeight: 300,
+      markerAttributes: MARKERS,
+    });
+
+    expect(findBackend(result.root, 122)?.attributes).toContain("__proto__");
+    expect(findBackend(result.root, 122)?.attributes).toContain("prototype-value");
+    expect(findBackend(result.root, 122)?.attributes).toContain("constructor");
+    expect(findBackend(result.root, 122)?.attributes).toContain("constructor-value");
+  });
+
   it("clips descendants for paint containment and non-inset CSS clips", () => {
     for (const style of [
       { contain: "paint" },
@@ -440,6 +465,51 @@ describe("DOM snapshot capture", () => {
       },
     ]);
     expect(result.root.nodeName).toBe("#document");
+  });
+
+  it("requests only styles used by non-viewport snapshots", async () => {
+    const requests: Array<Record<string, unknown> | undefined> = [];
+    const conn = {
+      Runtime: {
+        evaluate: async () => ({
+          result: {
+            value: {
+              nodeCount: 30,
+              characterCount: 1_000,
+              viewportWidth: 400,
+              viewportHeight: 300,
+            },
+          },
+        }),
+      },
+      client: {
+        send: async (_method: string, params?: Record<string, unknown>) => {
+          requests.push(params);
+          return fixture();
+        },
+      },
+    } as unknown as CDPConnection;
+
+    await captureDOMSnapshot(conn, {
+      markViewport: false,
+      markHidden: true,
+    });
+    await captureDOMSnapshot(conn, {
+      markViewport: false,
+      markHidden: false,
+    });
+
+    expect(requests.map((request) => request?.computedStyles)).toEqual([
+      [
+        "display",
+        "visibility",
+        "opacity",
+        "content-visibility",
+        "clip-path",
+        "pointer-events",
+      ],
+      ["pointer-events"],
+    ]);
   });
 
   it("stops before capture when the non-mutating preflight exceeds the limit", async () => {

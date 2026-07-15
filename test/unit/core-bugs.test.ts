@@ -113,9 +113,6 @@ function createMockCDPConnection(overrides: Partial<CDPConnection> = {}): CDPCon
       callFunctionOn: jest.fn().mockResolvedValue({}),
       releaseObject: jest.fn(),
     } as unknown as CDPConnection["Runtime"],
-    Input: {
-      insertText: jest.fn(),
-    } as unknown as CDPConnection["Input"],
     Emulation: {} as unknown as CDPConnection["Emulation"],
     ...overrides,
   };
@@ -386,11 +383,20 @@ describe("SurfingPage runtime validation", () => {
   });
 
   it("rejects invalid runtime timeouts and viewports before browser setup", async () => {
+    await expect(
+      TideSurf.connect(null as never)
+    ).rejects.toBeInstanceOf(ValidationError);
     await expect(TideSurf.connect({ timeout: 0 })).rejects.toBeInstanceOf(
       ValidationError
     );
     await expect(
+      TideSurf.connect({ timeout: 2_147_483_648 })
+    ).rejects.toBeInstanceOf(ValidationError);
+    await expect(
       TideSurf.launch({ defaultViewport: { width: 1280, height: -1 } })
+    ).rejects.toBeInstanceOf(ValidationError);
+    await expect(
+      TideSurf.launch({ defaultViewport: { width: 4_000, height: 4_000 } })
     ).rejects.toBeInstanceOf(ValidationError);
     await expect(TideSurf.launch({ chromePath: "" })).rejects.toBeInstanceOf(
       ValidationError
@@ -398,6 +404,15 @@ describe("SurfingPage runtime validation", () => {
     await expect(TideSurf.launch({ userDataDir: "" })).rejects.toBeInstanceOf(
       ValidationError
     );
+    await expect(
+      TideSurf.connect({ host: "" })
+    ).rejects.toBeInstanceOf(ValidationError);
+    await expect(
+      TideSurf.launch({ readOnly: "yes" as unknown as boolean })
+    ).rejects.toBeInstanceOf(ValidationError);
+    await expect(
+      TideSurf.connect({ fileAccessRoots: "." as unknown as string[] })
+    ).rejects.toBeInstanceOf(ValidationError);
     await expect(
       TideSurf.launch({ channel: "nightly" as "stable" })
     ).rejects.toBeInstanceOf(ValidationError);
@@ -409,6 +424,9 @@ describe("SurfingPage runtime validation", () => {
       })
     );
     await expect(page.waitForStable(0)).rejects.toBeInstanceOf(ValidationError);
+    await expect(
+      page.waitForStable(2_147_483_648)
+    ).rejects.toBeInstanceOf(ValidationError);
     expect(evaluate).not.toHaveBeenCalled();
   });
 

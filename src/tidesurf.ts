@@ -1,11 +1,12 @@
 import type { ChildProcess } from "node:child_process";
-import type {
-  TideSurfOptions,
-  TideSurfConnectOptions,
-  ToolResult,
-  ReadPageOptions,
-  GetStateOptions,
-  PageState,
+import {
+  CHROME_CHANNELS,
+  type TideSurfOptions,
+  type TideSurfConnectOptions,
+  type ToolResult,
+  type ReadPageOptions,
+  type GetStateOptions,
+  type PageState,
 } from "./types.js";
 import {
   discoverBrowser,
@@ -16,11 +17,14 @@ import { connect, disconnect, type CDPConnection } from "./cdp/connection.js";
 import { SurfingPage } from "./cdp/page.js";
 import { TabManager, type TabInfo } from "./cdp/tab-manager.js";
 import { createToolExecutor, getToolDefinitions } from "./tools/registry.js";
-import { rmSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import { applyViewport } from "./cdp/viewport.js";
 import {
   resolveFileAccessRoots,
+  validateScreenshotDimensions,
+  validatePort,
   validatePositiveInteger,
+  validateTimeout,
   validateUrl,
   type UrlValidationOptions,
 } from "./validation.js";
@@ -41,32 +45,65 @@ interface DiscoveredEndpoint {
 const DISCOVERED_ENDPOINT = Symbol("TideSurf.discoveredEndpoint");
 const CONNECTION_INFO = new WeakMap<TideSurf, { host: string; port: number }>();
 
-function validateRuntimeOptions(options: {
-  timeout?: number;
-  defaultViewport?: { width: number; height: number };
-  chromePath?: string;
-  userDataDir?: string;
-  channel?: TideSurfOptions["channel"];
-}): void {
-  if (options.timeout !== undefined) {
-    validatePositiveInteger(options.timeout, "timeout");
+function validateRuntimeOptionsObject(value: unknown): void {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new ValidationError("TideSurf options must be an object");
   }
-  if (options.defaultViewport) {
+}
+
+function validateRuntimeOptions(
+  options: TideSurfOptions | TideSurfConnectOptions
+): void {
+  const values = options as Record<string, unknown>;
+  if (options.timeout !== undefined) {
+    validateTimeout(options.timeout);
+  }
+  if (options.port !== undefined) validatePort(options.port);
+  if (options.defaultViewport !== undefined) {
+    if (
+      options.defaultViewport === null ||
+      typeof options.defaultViewport !== "object" ||
+      Array.isArray(options.defaultViewport)
+    ) {
+      throw new ValidationError("defaultViewport must be an object");
+    }
     validatePositiveInteger(options.defaultViewport.width, "defaultViewport.width");
     validatePositiveInteger(options.defaultViewport.height, "defaultViewport.height");
+    validateScreenshotDimensions(
+      options.defaultViewport.width,
+      options.defaultViewport.height
+    );
   }
   for (const [name, value] of [
-    ["chromePath", options.chromePath],
-    ["userDataDir", options.userDataDir],
+    ["chromePath", values["chromePath"]],
+    ["userDataDir", values["userDataDir"]],
+    ["host", values["host"]],
   ] as const) {
     if (value !== undefined && (typeof value !== "string" || value.trim() === "")) {
       throw new ValidationError(`${name} must be a non-empty string`);
     }
   }
-  if (
-    options.channel !== undefined &&
-    !["stable", "beta", "dev", "canary", "chromium"].includes(options.channel)
-  ) {
+  for (const name of [
+    "headless",
+    "readOnly",
+    "allowLocalhost",
+    "allowPrivateHosts",
+  ] as const) {
+    const value = values[name];
+    if (value !== undefined && typeof value !== "boolean") {
+      throw new ValidationError(`${name} must be a boolean`);
+    }
+  }
+  if (options.fileAccessRoots !== undefined) {
+    if (!Array.isArray(options.fileAccessRoots)) {
+      throw new ValidationError("fileAccessRoots must be an array");
+    }
+  }
+  const channel = values["channel"];
+  if (channel !== undefined && (
+    typeof channel !== "string" ||
+    !CHROME_CHANNELS.includes(channel as (typeof CHROME_CHANNELS)[number])
+  )) {
     throw new ValidationError("channel must be stable, beta, dev, canary, or chromium");
   }
 }
@@ -83,6 +120,12 @@ function snapshotOptions<
       ? [...options.fileAccessRoots]
       : options.fileAccessRoots,
   } as T;
+}
+
+function validateTabId(tabId: string): void {
+  if (typeof tabId !== "string" || tabId.trim() === "") {
+    throw new ValidationError("tabId must be a non-empty string");
+  }
 }
 
 async function rollbackCDP(
@@ -216,8 +259,9 @@ export class TideSurf {
    * @throws {CDPConnectionError} if CDP connection fails
    */
   static async launch(options: TideSurfOptions = {}): Promise<TideSurf> {
+    validateRuntimeOptionsObject(options);
+    validateRuntimeOptions(options);
     const config = snapshotOptions(options);
-    validateRuntimeOptions(config);
     const fileAccessRoots = resolveFileAccessRoots(config.fileAccessRoots);
     const urlValidationOptions: UrlValidationOptions = {
       allowLocalhost: config.allowLocalhost,
@@ -282,7 +326,7 @@ export class TideSurf {
       }
       if (ownsTempDir && exited) {
         try {
-          rmSync(userDataDir, { recursive: true, force: true });
+          await rm(userDataDir, { recursive: true, force: true });
         } catch (error) {
           cleanupErrors.push(error);
         }
@@ -315,8 +359,10 @@ export class TideSurf {
    * @throws {CDPConnectionError} if no Chrome instance is found
    */
   static async connect(options: TideSurfConnectOptions = {}): Promise<TideSurf> {
+    validateRuntimeOptionsObject(options);
+    validateRuntimeOptions(options);
     const config = snapshotOptions(options);
-    validateRuntimeOptions(config);
+    const fileAccessRoots = resolveFileAccessRoots(config.fileAccessRoots);
     const supplied = (config as TideSurfConnectOptions & {
       [DISCOVERED_ENDPOINT]?: DiscoveredEndpoint;
     })[DISCOVERED_ENDPOINT];
@@ -325,7 +371,6 @@ export class TideSurf {
       host: config.host,
       timeout: config.timeout,
     });
-    const fileAccessRoots = resolveFileAccessRoots(config.fileAccessRoots);
     const urlValidationOptions: UrlValidationOptions = {
       allowLocalhost: config.allowLocalhost,
       allowPrivateHosts: config.allowPrivateHosts,
@@ -532,6 +577,7 @@ export class TideSurf {
 
   async switchTab(tabId: string): Promise<void> {
     this.assertOpen();
+    validateTabId(tabId);
     return this.queueTabMutation(async () => {
       this.assertOpen();
       const page = await this.connectTabOnce(tabId);
@@ -544,6 +590,7 @@ export class TideSurf {
   async closeTab(tabId: string): Promise<void> {
     this.assertOpen();
     if (this.readOnly) throw new ReadOnlyError("closeTab");
+    validateTabId(tabId);
     return this.queueTabMutation(async () => {
       this.assertOpen();
       return this.closeTabResources(tabId);
@@ -660,7 +707,7 @@ export class TideSurf {
     let profileCleanup: { error: unknown } | undefined;
     if (this.ownsTempDir && exited) {
       try {
-        rmSync(this.userDataDir, { recursive: true, force: true });
+        await rm(this.userDataDir, { recursive: true, force: true });
       } catch (error) {
         profileCleanup = { error };
       }

@@ -193,16 +193,37 @@ describeBrowser("Browser integration", () => {
     expect(state.content).not.toContain("snapshot-secret");
   }, 15000);
 
-  it("rejects oversized live form values before snapshot capture", async () => {
+  it("rejects oversized live and password values before snapshot capture", async () => {
     await surfing.navigate(fixtureUrls["basic.html"]);
-    await surfing.getPage().evaluate(`(() => {
-      document.body.innerHTML = '<input id="large">';
-      document.getElementById('large').value = 'x'.repeat(16000001);
-    })()`);
+    for (const type of ["text", "password"]) {
+      await surfing.getPage().evaluate(`(() => {
+        document.body.innerHTML = '<input id="large" type="${type}">';
+        document.getElementById('large').value = 'x'.repeat(16000001);
+      })()`);
 
-    await expect(
-      surfing.readPage({ viewport: false })
-    ).rejects.toThrow("exceed 16,000,000 characters");
+      try {
+        await expect(
+          surfing.readPage({ viewport: false })
+        ).rejects.toThrow("exceed 16,000,000 characters");
+      } finally {
+        await surfing.getPage().evaluate("document.body.replaceChildren()");
+      }
+    }
+
+    await surfing.getPage().evaluate(`(() => {
+      const input = document.createElement('input');
+      input.type = 'password';
+      input.setAttribute('value', 'x'.repeat(16000001));
+      input.value = '';
+      document.body.replaceChildren(input);
+    })()`);
+    try {
+      await expect(
+        surfing.readPage({ viewport: false })
+      ).rejects.toThrow("exceed 16,000,000 characters");
+    } finally {
+      await surfing.getPage().evaluate("document.body.replaceChildren()");
+    }
   }, 15000);
 
   it("inherits disabled fieldsets except through the first legend", async () => {

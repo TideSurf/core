@@ -50,28 +50,54 @@ interface MarkerContext {
   markers: MarkerAttributes | undefined;
   ignoreLegacyMarkers: boolean;
   viewportMarked: boolean;
+  classifyOptions: { includeHidden: boolean; computedVisibility: boolean };
 }
 
 function walkAttributes(
   attributes: string[] | undefined,
   markerContext: MarkerContext
 ): Record<string, string> {
-  const values = parseAttributes(attributes);
-  if (!markerContext.markers && !markerContext.ignoreLegacyMarkers) return values;
   const markers = markerContext.markers;
-  const visible = markers ? values[markers.visible] : undefined;
-  const hidden = markers ? values[markers.hidden] : undefined;
-  const state = markers ? values[markers.state] : undefined;
-  const text = markers?.text ? values[markers.text] : undefined;
-  delete values["data-os-visible"];
-  delete values["data-os-hidden"];
-  delete values["data-os-state"];
-  delete values["data-os-text"];
-  if (markers) {
-    delete values[markers.visible];
-    delete values[markers.hidden];
-    delete values[markers.state];
-    if (markers.text) delete values[markers.text];
+  if (!markers && !markerContext.ignoreLegacyMarkers) {
+    return parseAttributes(attributes);
+  }
+
+  const values = Object.create(null) as Record<string, string>;
+  let visible: string | undefined;
+  let hidden: string | undefined;
+  let state: string | undefined;
+  let text: string | undefined;
+  const length = attributes?.length ?? 0;
+  for (let index = 0; index < length; index += 2) {
+    const key = attributes![index];
+    const value = attributes![index + 1];
+    if (markers) {
+      if (key === markers.visible) {
+        visible = value;
+        continue;
+      }
+      if (key === markers.hidden) {
+        hidden = value;
+        continue;
+      }
+      if (key === markers.state) {
+        state = value;
+        continue;
+      }
+      if (key === markers.text) {
+        text = value;
+        continue;
+      }
+    }
+    if (
+      key === "data-os-visible" ||
+      key === "data-os-hidden" ||
+      key === "data-os-state" ||
+      key === "data-os-text"
+    ) {
+      continue;
+    }
+    values[key] = value;
   }
   if (visible !== undefined) values["data-os-visible"] = visible;
   if (hidden !== undefined) values["data-os-hidden"] = hidden;
@@ -86,8 +112,10 @@ function outputAttributes(
 ): Record<string, string> {
   const result: Record<string, string> = {};
   if (id) result["id"] = id;
-  for (const [key, value] of Object.entries(attributes)) {
-    if (PASS_THROUGH_ATTRS.has(key)) result[key] = value;
+  for (const key in attributes) {
+    if (Object.hasOwn(attributes, key) && PASS_THROUGH_ATTRS.has(key)) {
+      result[key] = attributes[key];
+    }
   }
   return result;
 }
@@ -103,10 +131,6 @@ interface WalkContext {
   insideInteractive: boolean;
   insideHeading: boolean;
   viewportVisible?: boolean;
-}
-
-function appendNodes(target: OSNode[], nodes: OSNode[]): void {
-  for (const node of nodes) target.push(node);
 }
 
 function visibleTextIndices(
@@ -126,6 +150,7 @@ function visibleTextIndices(
     : separator < 0
       ? encoded
       : encoded.slice(0, separator);
+  if (values === "") return EMPTY_TEXT_INDICES;
   const indices = new Set<number>();
   for (const value of values.split(",")) {
     if (value === "") continue;
@@ -134,6 +159,8 @@ function visibleTextIndices(
   }
   return indices;
 }
+
+const EMPTY_TEXT_INDICES: ReadonlySet<number> = new Set();
 
 const HEADING_TAGS = new Set(["h1", "h2", "h3", "h4", "h5", "h6", "heading"]);
 const TEXT_TRUNCATE_LIMIT = 60;
@@ -162,11 +189,17 @@ export function walkDOM(
     markers: options?.markerAttributes,
     ignoreLegacyMarkers: options?.ignoreLegacyMarkers === true,
     viewportMarked: options?.viewportMarked === true,
+    classifyOptions: {
+      includeHidden,
+      computedVisibility: options?.markerAttributes !== undefined,
+    },
   };
   const ctx: WalkContext = { insideInteractive: false, insideHeading: false };
 
-  const nodes = walkChildren(
+  const nodes: OSNode[] = [];
+  walkChildren(
     root.children ?? [],
+    nodes,
     assigner,
     nodeMap,
     ctx,
@@ -182,6 +215,7 @@ export function walkDOM(
 
 function walkNode(
   node: CDPNode,
+  target: OSNode[],
   assigner: IDAssigner,
   nodeMap: NodeMap,
   ctx: WalkContext,
@@ -189,8 +223,7 @@ function walkNode(
   includeHidden: boolean,
   markerContext: MarkerContext,
   depth: number
-): OSNode[] {
-  // Prevent stack overflow on deeply nested DOM
+): void {
   if (depth > MAX_DEPTH) {
     const truncated: OSNode = {
       tag: "#text",
@@ -201,12 +234,13 @@ function walkNode(
     if (ctx.viewportVisible !== undefined) {
       truncated.visible = ctx.viewportVisible;
     }
-    return [truncated];
+    target.push(truncated);
+    return;
   }
 
   if (node.nodeType === 3) {
     let text = (node.nodeValue ?? "").trim();
-    if (!text) return [];
+    if (!text) return;
     if (doTruncate && !ctx.insideInteractive && !ctx.insideHeading) {
       text = truncateGraphemes(text, TEXT_TRUNCATE_LIMIT, {
         suffix: "...",
@@ -217,22 +251,69 @@ function walkNode(
     if (ctx.viewportVisible !== undefined) {
       textNode.visible = ctx.viewportVisible;
     }
-    return [textNode];
+    target.push(textNode);
+    return;
   }
 
-  if (node.nodeType !== 1) return [];
+  if (node.nodeType !== 1) return;
 
   const attrs = walkAttributes(node.attributes, markerContext);
   const children = node.children ?? [];
   const elementCtx: WalkContext = markerContext.viewportMarked
-    ? { ...ctx, viewportVisible: attrs["data-os-visible"] === "1" }
+    ? {
+        insideInteractive: ctx.insideInteractive,
+        insideHeading: ctx.insideHeading,
+        viewportVisible: attrs["data-os-visible"] === "1",
+      }
     : ctx;
   const directTextVisibility = visibleTextIndices(attrs, markerContext);
   const shadowTextVisibility = visibleTextIndices(attrs, markerContext, true);
 
   if (!includeHidden && attrs["data-os-hidden"] === "self") {
-    const promoted = walkChildren(
-      children.filter((child) => child.nodeType === 1),
+    for (const child of children) {
+      if (child.nodeType !== 1) continue;
+      walkNode(
+        child,
+        target,
+        assigner,
+        nodeMap,
+        elementCtx,
+        doTruncate,
+        includeHidden,
+        markerContext,
+        depth + 1
+      );
+    }
+    for (const shadowRoot of node.shadowRoots ?? []) {
+      walkChildren(
+        shadowRoot.children ?? [],
+        target,
+        assigner,
+        nodeMap,
+        elementCtx,
+        doTruncate,
+        includeHidden,
+        markerContext,
+        depth + 1,
+        shadowTextVisibility
+      );
+    }
+    return;
+  }
+
+  const result = classify(
+    node.nodeName,
+    attrs,
+    children,
+    markerContext.classifyOptions
+  );
+
+  if (result.action === "DISCARD") return;
+
+  if (result.action === "COLLAPSE") {
+    walkChildren(
+      children,
+      target,
       assigner,
       nodeMap,
       elementCtx,
@@ -243,67 +324,20 @@ function walkNode(
       directTextVisibility
     );
     for (const shadowRoot of node.shadowRoots ?? []) {
-      appendNodes(
-        promoted,
-        walkChildren(
-          shadowRoot.children ?? [],
-          assigner,
-          nodeMap,
-          elementCtx,
-          doTruncate,
-          includeHidden,
-          markerContext,
-          depth + 1,
-          shadowTextVisibility
-        )
+      walkChildren(
+        shadowRoot.children ?? [],
+        target,
+        assigner,
+        nodeMap,
+        elementCtx,
+        doTruncate,
+        includeHidden,
+        markerContext,
+        depth + 1,
+        shadowTextVisibility
       );
     }
-    return promoted;
-  }
-
-  const result = classify(
-    node.nodeName,
-    attrs,
-    children,
-    {
-      includeHidden,
-      computedVisibility: markerContext.markers !== undefined,
-    }
-  );
-
-  if (result.action === "DISCARD") return [];
-
-  if (result.action === "COLLAPSE") {
-    const promoted = walkChildren(
-      children,
-      assigner,
-      nodeMap,
-      elementCtx,
-      doTruncate,
-      includeHidden,
-      markerContext,
-      depth + 1,
-      directTextVisibility
-    );
-    if (node.shadowRoots) {
-      for (const shadowRoot of node.shadowRoots) {
-        appendNodes(
-          promoted,
-          walkChildren(
-            shadowRoot.children ?? [],
-            assigner,
-            nodeMap,
-            elementCtx,
-            doTruncate,
-            includeHidden,
-            markerContext,
-            depth + 1,
-            shadowTextVisibility
-          )
-        );
-      }
-    }
-    return promoted;
+    return;
   }
 
   const tag = result.mappedTag!;
@@ -314,8 +348,10 @@ function walkNode(
     const filteredAttrs = outputAttributes(attrs);
 
     if (node.contentDocument) {
-      const iframeChildren = walkChildren(
+      const iframeChildren: OSNode[] = [];
+      walkChildren(
         node.contentDocument.children ?? [],
+        iframeChildren,
         assigner,
         nodeMap,
         elementCtx,
@@ -325,25 +361,23 @@ function walkNode(
         depth + 1,
         directTextVisibility
       );
-      return [
-        {
-          tag: "iframe",
-          attributes: filteredAttrs,
-          children: postProcess(iframeChildren),
-          visible,
-          state,
-        },
-      ];
-    }
-    return [
-      {
+      target.push({
         tag: "iframe",
-        attributes: { ...filteredAttrs, status: "inaccessible" },
-        children: [],
+        attributes: filteredAttrs,
+        children: postProcess(iframeChildren),
         visible,
         state,
-      },
-    ];
+      });
+      return;
+    }
+    target.push({
+      tag: "iframe",
+      attributes: { ...filteredAttrs, status: "inaccessible" },
+      children: [],
+      visible,
+      state,
+    });
+    return;
   }
 
   const id = assigner.assign(tag);
@@ -354,7 +388,6 @@ function walkNode(
 
   const filteredAttrs = outputAttributes(attrs, id);
 
-  // Elide default/redundant attributes
   if (tag === "input" && filteredAttrs["type"] === "text") {
     delete filteredAttrs["type"];
   }
@@ -375,8 +408,10 @@ function walkNode(
     viewportVisible: elementCtx.viewportVisible,
   };
 
-  const osChildren = walkChildren(
+  const osChildren: OSNode[] = [];
+  walkChildren(
     children,
+    osChildren,
     assigner,
     nodeMap,
     childCtx,
@@ -387,39 +422,34 @@ function walkNode(
     directTextVisibility
   );
 
-  if (node.shadowRoots) {
-    for (const shadowRoot of node.shadowRoots) {
-      appendNodes(
-        osChildren,
-        walkChildren(
-          shadowRoot.children ?? [],
-          assigner,
-          nodeMap,
-          childCtx,
-          doTruncate,
-          includeHidden,
-          markerContext,
-          depth + 1,
-          shadowTextVisibility
-        )
-      );
-    }
+  for (const shadowRoot of node.shadowRoots ?? []) {
+    walkChildren(
+      shadowRoot.children ?? [],
+      osChildren,
+      assigner,
+      nodeMap,
+      childCtx,
+      doTruncate,
+      includeHidden,
+      markerContext,
+      depth + 1,
+      shadowTextVisibility
+    );
   }
 
-  const osNode: OSNode = {
+  target.push({
     tag,
     id,
     attributes: filteredAttrs,
     children: postProcess(osChildren),
     visible,
     state,
-  };
-
-  return [osNode];
+  });
 }
 
 function walkChildren(
   children: CDPNode[],
+  target: OSNode[],
   assigner: IDAssigner,
   nodeMap: NodeMap,
   ctx: WalkContext,
@@ -428,50 +458,50 @@ function walkChildren(
   markerContext: MarkerContext,
   depth: number,
   directTextVisibility?: ReadonlySet<number>
-): OSNode[] {
-  const result: OSNode[] = [];
+): void {
   for (let index = 0; index < children.length; index++) {
     const child = children[index];
     const childCtx =
       child.nodeType === 3 && directTextVisibility
-        ? { ...ctx, viewportVisible: directTextVisibility.has(index) }
+        ? {
+            insideInteractive: ctx.insideInteractive,
+            insideHeading: ctx.insideHeading,
+            viewportVisible: directTextVisibility.has(index),
+          }
         : ctx;
-    appendNodes(
-      result,
-      walkNode(
-        child,
-        assigner,
-        nodeMap,
-        childCtx,
-        doTruncate,
-        includeHidden,
-        markerContext,
-        depth
-      )
+    walkNode(
+      child,
+      target,
+      assigner,
+      nodeMap,
+      childCtx,
+      doTruncate,
+      includeHidden,
+      markerContext,
+      depth
     );
   }
-  return result;
 }
 
 /** Merge adjacent text and remove empty non-semantic nodes. */
 function postProcess(nodes: OSNode[]): OSNode[] {
-  const result: OSNode[] = [];
-  // A removed node still separates neighboring text, matching source order.
+  let length = 0;
   let mergeBarrier = false;
-  for (const node of nodes) {
+  for (let index = 0; index < nodes.length; index++) {
+    const node = nodes[index];
     if (node.tag === "#text") {
       if (!node.text?.trim()) {
         mergeBarrier = true;
         continue;
       }
-      const previous = result[result.length - 1];
+      const previous = nodes[length - 1];
       if (
         mergeBarrier ||
         !previous ||
         previous.tag !== "#text" ||
         previous.visible !== node.visible
       ) {
-        result.push(node);
+        nodes[length++] = node;
         mergeBarrier = false;
         continue;
       }
@@ -490,12 +520,13 @@ function postProcess(nodes: OSNode[]): OSNode[] {
       node.tag === "img" ||
       node.tag === "iframe";
     if (keep) {
-      result.push(node);
+      nodes[length++] = node;
       mergeBarrier = false;
     } else {
       mergeBarrier = true;
     }
   }
 
-  return result;
+  nodes.length = length;
+  return nodes;
 }

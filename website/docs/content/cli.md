@@ -101,6 +101,8 @@ Session names contain letters, numbers, dots, dashes, or underscores. Use differ
 
 `download` also has a tool-level `--timeout`. After the `download` command, it sets the file wait. Put the global flag before the command to set session timing: `tidesurf --timeout 60000 download B1 --timeout 30000`.
 
+Timeouts use positive whole milliseconds and cannot exceed 2,147,483,647 ms. The CLI also rejects a computed request budget above its 1,073,741,823 ms transport limit before sending the operation.
+
 Without `--auto-connect`, `--browser-url` or `--host` selects strict attach behavior. A bare `--port` fixes the managed launch port; combine it with `--connect-only` or `--auto-connect` to use it for attachment.
 
 ## Browser selection
@@ -157,6 +159,8 @@ tidesurf screenshot --output - > page.png
 ```
 
 `--output -` cannot be combined with `--json`.
+
+Element and full-page captures cannot exceed 16,384 px on either side or 12,000,000 total pixels. SDK `defaultViewport` values use the same limit.
 
 ## Shutdown ownership
 

@@ -58,6 +58,7 @@ describe("compressUrl", () => {
 
   it("passes through javascript: URLs", () => {
     expect(compressUrl("javascript:void(0)")).toBe("javascript:void(0)");
+    expect(compressUrl("JaVaScRiPt:alert(1)")).toBe("JaVaScRiPt:alert(1)");
   });
 
   it("passes through hash-only URLs", () => {
@@ -68,11 +69,17 @@ describe("compressUrl", () => {
     expect(compressUrl("blob:https://example.com/abc")).toBe(
       "blob:https://example.com/abc"
     );
+    expect(compressUrl("BLOB:https://example.com/abc")).toBe(
+      "BLOB:https://example.com/abc"
+    );
   });
 
   it("passes through data: URLs", () => {
     expect(compressUrl("data:text/html,<h1>Hi</h1>")).toBe(
       "data:text/html,<h1>Hi</h1>"
+    );
+    expect(compressUrl("DATA:text/plain,hello")).toBe(
+      "DATA:text/plain,hello"
     );
   });
 

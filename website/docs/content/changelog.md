@@ -17,6 +17,9 @@
 - Committed actions return a distinct result when post-action confirmation fails, preventing unsafe agent retries. Page-side CDP exceptions still preserve their original failure.
 - Page processing now handles viewport clipping and hidden nodes consistently. `includeHidden` reads the full DOM, bounded pruning keeps useful descendants, and oversized page or form state fails before capture.
 - Runtime paths defer optional modules, remove redundant CDP round trips and parser allocations, serialize SDK tab mutations, and preserve primary cleanup errors. Executable 65,536-branch and 10,000-element gates enforce near-linear behavior.
+- Snapshot capture now requests only the computed styles needed by active filters. Parser, registry, argument parsing, and help paths reuse derived data, while temporary profile and failed-download cleanup use asynchronous filesystem operations.
+- SDK and tool timeouts are capped at 2,147,483,647 ms; CLI aggregate request budgets are capped at 1,073,741,823 ms. Element and full-page screenshot clips and configured viewports are capped at 16,384 px per side or 12,000,000 total pixels.
+- Download setup rejects concurrent calls on one page and revalidates its allowed destination after directory creation. Clipboard permission changes run serially across page connections.
 - `evaluate` validates only input shape and size. It runs arbitrary unsandboxed page JavaScript and returns CDP unserializable values in a JSON-safe form.
 - CLI, API, architecture, security, troubleshooting, benchmark, and website content now share drift checks. Release verification exercises the packaged MCP and CLI under Node and Bun.
 

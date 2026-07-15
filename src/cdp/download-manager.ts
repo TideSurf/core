@@ -1,9 +1,9 @@
-import { randomUUID } from "node:crypto";
-import { mkdirSync, rmSync } from "node:fs";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import type { DownloadResult } from "../types.js";
 import { ValidationError } from "../errors.js";
+import { validateDownloadDirectory } from "../validation.js";
 import type { CDPConnection } from "./connection.js";
 import { withTimeout } from "./timeout.js";
 
@@ -22,6 +22,7 @@ export async function downloadFromAction(
     temporaryRoot?: string;
     timeout?: number;
     expectedUrl?: string;
+    fileAccessRoots?: string[];
   },
   trigger: () => Promise<void>
 ): Promise<DownloadResult> {
@@ -31,10 +32,7 @@ export async function downloadFromAction(
   activeDownloads.add(conn);
 
   const ownsDirectory = options.downloadDir === undefined;
-  const downloadDir = options.downloadDir ?? join(
-    options.temporaryRoot ?? tmpdir(),
-    `tidesurf-dl-${randomUUID()}`
-  );
+  let downloadDir = options.downloadDir;
   let unsubscribeBegin: (() => void) | undefined;
   let unsubscribeProgress: (() => void) | undefined;
   let completed = false;
@@ -73,18 +71,42 @@ export async function downloadFromAction(
       );
     }
     activeDownloads.delete(conn);
-    if (ownsDirectory && !completed) {
-      await attempt(() => rmSync(downloadDir, { recursive: true, force: true }));
+    const ownedDirectory = downloadDir;
+    if (ownsDirectory && !completed && ownedDirectory) {
+      await attempt(() => rm(ownedDirectory, { recursive: true, force: true }));
     }
     if (failures.length > 0) throw failures[0];
   };
 
   let operationFailed = false;
   try {
-    mkdirSync(downloadDir, { recursive: true, mode: 0o700 });
+    if (downloadDir === undefined) {
+      const temporaryRoot = options.temporaryRoot ?? tmpdir();
+      if (options.fileAccessRoots) {
+        validateDownloadDirectory(temporaryRoot, options.fileAccessRoots);
+      }
+      downloadDir = await mkdtemp(
+        join(temporaryRoot, "tidesurf-dl-")
+      );
+    } else {
+      if (options.fileAccessRoots) {
+        validateDownloadDirectory(downloadDir, options.fileAccessRoots);
+      }
+      await mkdir(downloadDir, { recursive: true, mode: 0o700 });
+    }
+    if (options.fileAccessRoots) {
+      downloadDir = validateDownloadDirectory(
+        downloadDir,
+        options.fileAccessRoots
+      );
+    }
+    const activeDownloadDir = downloadDir;
     downloadBehaviorMayBeConfigured = true;
     await withTimeout(
-      conn.Page.setDownloadBehavior({ behavior: "allow", downloadPath: downloadDir }),
+      conn.Page.setDownloadBehavior({
+        behavior: "allow",
+        downloadPath: activeDownloadDir,
+      }),
       5_000,
       "download:configure"
     );
@@ -105,7 +127,7 @@ export async function downloadFromAction(
       if (progress.state === "completed") {
         settled = true;
         resolveDownload({
-          filePath: join(downloadDir, fileName),
+          filePath: join(activeDownloadDir, fileName),
           fileName,
           totalBytes: progress.totalBytes ?? 0,
         });

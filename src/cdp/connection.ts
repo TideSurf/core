@@ -7,10 +7,24 @@ import {
   TideSurfError,
   ValidationError,
 } from "../errors.js";
+import {
+  MAX_TIMER_DELAY_MS,
+  validateScreenshotDimensions,
+} from "../validation.js";
 import { withTimeout } from "./timeout.js";
 
 let lastClipboardReadTime = 0;
+let clipboardTail: Promise<void> = Promise.resolve();
 const CLIPBOARD_READ_COOLDOWN_MS = 5_000;
+
+function serializeClipboard<T>(operation: () => Promise<T>): Promise<T> {
+  const result = clipboardTail.then(operation);
+  clipboardTail = result.then(
+    () => undefined,
+    () => undefined
+  );
+  return result;
+}
 
 interface RuntimeResponse {
   result?: {
@@ -76,7 +90,7 @@ function remainingTimeout(deadline: number): number {
   return Math.max(1, deadline - Date.now());
 }
 
-async function withClipboardPermissions<T>(
+async function withClipboardPermissionsUnlocked<T>(
   conn: CDPConnection,
   timeout: number,
   operation: (deadline: number) => Promise<T>
@@ -133,9 +147,21 @@ async function withClipboardPermissions<T>(
       if (!operationFailed) throw error;
     }
     if (!grantCompleted) {
-      void grant.then(() => reset()).catch(() => undefined);
+      void grant
+        .then(() => serializeClipboard(reset))
+        .catch(() => undefined);
     }
   }
+}
+
+function withClipboardPermissions<T>(
+  conn: CDPConnection,
+  timeout: number,
+  operation: (deadline: number) => Promise<T>
+): Promise<T> {
+  return serializeClipboard(() =>
+    withClipboardPermissionsUnlocked(conn, timeout, operation)
+  );
 }
 
 export interface CDPConnection {
@@ -143,7 +169,6 @@ export interface CDPConnection {
   DOM: Client["DOM"];
   Page: Client["Page"];
   Runtime: Client["Runtime"];
-  Input: Client["Input"];
   Emulation: Client["Emulation"];
 }
 
@@ -178,7 +203,7 @@ export async function connect(options: {
       "CDP connect"
     );
 
-    const { DOM, Page, Runtime, Input, Emulation } = client;
+    const { DOM, Page, Runtime, Emulation } = client;
 
     await withTimeout(
       Promise.all([DOM.enable(), Page.enable(), Runtime.enable()]),
@@ -191,7 +216,7 @@ export async function connect(options: {
       "CDP lifecycle enable"
     );
 
-    return { client, DOM, Page, Runtime, Input, Emulation };
+    return { client, DOM, Page, Runtime, Emulation };
   } catch (err) {
     abandoned = true;
     if (client) {
@@ -358,10 +383,21 @@ export async function typeText(
             const type = tag === 'INPUT'
               ? String(this.type || 'text').toLowerCase()
               : '';
-            const nonTextInput = [
-              'button', 'checkbox', 'color', 'file', 'hidden', 'image',
-              'radio', 'range', 'reset', 'submit'
-            ].includes(type);
+            let nonTextInput = false;
+            switch (type) {
+              case 'button':
+              case 'checkbox':
+              case 'color':
+              case 'file':
+              case 'hidden':
+              case 'image':
+              case 'radio':
+              case 'range':
+              case 'reset':
+              case 'submit':
+                nonTextInput = true;
+                break;
+            }
             const editable = tag === 'TEXTAREA' ||
               (tag === 'INPUT' && !nonTextInput) ||
               this.isContentEditable === true;
@@ -481,7 +517,14 @@ export async function selectOption(
             if (this.matches(':disabled') || ariaDisabled || inert || pointerBlocked) {
               throw new Error('Target is disabled or inert');
             }
-            const option = Array.from(this.options).find(option => option.value === value);
+            let option;
+            for (let index = 0; index < this.options.length; index++) {
+              const candidate = this.options[index];
+              if (candidate.value === value) {
+                option = candidate;
+                break;
+              }
+            }
             if (!option) {
               throw new Error('Select option does not exist: ' + value);
             }
@@ -556,7 +599,10 @@ export async function waitForStable(
   conn: CDPConnection,
   timeout: number = 5000
 ): Promise<void> {
-  const hardTimeout = Math.max(1, timeout);
+  const hardTimeout = Math.min(
+    Math.max(1, timeout),
+    MAX_TIMER_DELAY_MS - 250
+  );
   await runtimeEvaluate(
     conn,
     {
@@ -577,7 +623,12 @@ export async function waitForStable(
     clearTimeout(quietTimer);
     quietTimer = setTimeout(done, 300);
   });
-  observer.observe(document.body || document.documentElement, {
+  const root = document.documentElement || document.body;
+  if (!root) {
+    resolve();
+    return;
+  }
+  observer.observe(root, {
     childList: true, subtree: true, attributes: true, characterData: true
   });
   quietTimer = setTimeout(done, 300);
@@ -589,9 +640,6 @@ export async function waitForStable(
     "waitForStable"
   );
 }
-
-const MAX_SCREENSHOT_DIMENSION = 16_384;
-const MAX_SCREENSHOT_PIXELS = 12_000_000;
 
 export async function captureScreenshot(
   conn: CDPConnection,
@@ -609,21 +657,7 @@ export async function captureScreenshot(
 
   if (options?.clip) {
     const { width, height, scale } = options.clip;
-    const scaledWidth = width * scale;
-    const scaledHeight = height * scale;
-    if (
-      !Number.isFinite(scaledWidth) ||
-      !Number.isFinite(scaledHeight) ||
-      scaledWidth <= 0 ||
-      scaledHeight <= 0 ||
-      scaledWidth > MAX_SCREENSHOT_DIMENSION ||
-      scaledHeight > MAX_SCREENSHOT_DIMENSION ||
-      scaledWidth * scaledHeight > MAX_SCREENSHOT_PIXELS
-    ) {
-      throw new ValidationError(
-        `Screenshot exceeds ${MAX_SCREENSHOT_DIMENSION}px per side or ${MAX_SCREENSHOT_PIXELS.toLocaleString()} total pixels`
-      );
-    }
+    validateScreenshotDimensions(width, height, scale);
     params.clip = options.clip;
   }
 
