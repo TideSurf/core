@@ -7,8 +7,18 @@ import {
   readdirSync,
 } from "node:fs";
 import { dirname, resolve } from "node:path";
+import {
+  aggregateLiveResults,
+  LIVE_BENCHMARK_THRESHOLDS,
+} from "./benchmark-live.js";
 import { generalHelp } from "../src/cli/help.js";
+import {
+  CLI_EXIT_CODES,
+  GLOBAL_OPTIONS,
+  LIFECYCLE_COMMANDS,
+} from "../src/cli/metadata.js";
 import { TOOL_REGISTRY } from "../src/tools/registry.js";
+import { translations } from "../website/docs/src/translations.js";
 
 const root = resolve(import.meta.dir, "..");
 const failures: string[] = [];
@@ -131,8 +141,8 @@ equal(
   "llms.txt read-only list must match the registry"
 );
 const security = read("website/docs/content/security.md");
-const securityAllowed = security
-  .slice(security.indexOf("allows six observation tools:"), security.indexOf("It rejects:"))
+const securityAllowed = markdownSection(security, "## Read-only mode")
+  .split("\nIt rejects:", 1)[0]
   .match(/^- `([^`]+)`$/gm)
   ?.map((line) => line.slice(3, -1)) ?? [];
 equal(securityAllowed, expectedReadOnlyNames, "security read-only list must match the registry");
@@ -150,44 +160,52 @@ for (const path of [
   );
 }
 
-for (const option of [...generalHelp().matchAll(/^  (--[a-z][a-z-]*)/gm)].map((match) => match[1])) {
-  check(cliDocs.includes(option), `CLI docs must include global option ${option}`);
+const documentedLifecycle = [...markdownSection(
+  cliDocs,
+  "## Lifecycle and discovery commands"
+).matchAll(/^\| `tidesurf (.+)` \| ([^|]+) \|$/gm)].map((match) => ({
+  synopsis: match[1].replaceAll("\\|", "|"),
+  summary: match[2].trim(),
+}));
+equal(
+  documentedLifecycle,
+  LIFECYCLE_COMMANDS.map(({ synopsis, summary }) => ({ synopsis, summary })),
+  "CLI lifecycle table must match command metadata"
+);
+
+const documentedGlobalOptions = [...markdownSection(
+  cliDocs,
+  "## Global options"
+).matchAll(/^\| `(--[a-z-]+)(?: [^`]*)?` \| ([^|]+) \|$/gm)].map((match) => ({
+  flag: match[1],
+  description: match[2].trim(),
+}));
+equal(
+  documentedGlobalOptions,
+  GLOBAL_OPTIONS.map(({ flag, description }) => ({ flag, description })),
+  "CLI global-option table must match option metadata"
+);
+for (const { flag } of GLOBAL_OPTIONS) {
+  check(generalHelp().includes(flag), `generated CLI help must include ${flag}`);
 }
 
-const cliSource = read("src/cli-program.ts");
-const exitCodes = Object.fromEntries(
-  [...cliSource.matchAll(/^const EXIT_([A-Z]+) = (\d+);$/gm)].map((match) => [
-    match[1].toLowerCase(),
-    Number(match[2]),
-  ])
-);
-equal(exitCodes, { usage: 2, browser: 3, tool: 4, protocol: 5 }, "CLI exit-code constants changed");
-for (const code of Object.values(exitCodes)) {
-  check(cliDocs.includes(`| \`${code}\` |`), `CLI docs must include exit code ${code}`);
-  check(llms.includes(`${code} `), `llms.txt must include exit code ${code}`);
-}
-
-const typesSource = read("src/types.ts");
-function interfaceOptions(name: string): string[] {
-  const body = typesSource.match(new RegExp(`export interface ${name} \\{([\\s\\S]*?)^\\}`, "m"))?.[1] ?? "";
-  return [...body.matchAll(/^\s{2}(\w+)\?:/gm)].map((match) => match[1]);
-}
-function optionTable(sectionStart: string, sectionEnd: string): string[] {
-  const start = api.indexOf(sectionStart);
-  const end = api.indexOf(sectionEnd, start + sectionStart.length);
-  return [...api.slice(start, end < 0 ? undefined : end).matchAll(/^\| `([^`]+)` \|/gm)]
-    .map((match) => match[1]);
-}
-equal(
-  optionTable("### `TideSurf.launch(options?)`", "### `TideSurf.connect(options?)`").sort(),
-  interfaceOptions("TideSurfOptions").sort(),
-  "API launch option table must match TideSurfOptions"
-);
-equal(
-  optionTable("### `TideSurf.connect(options?)`", "### `close()`").sort(),
-  interfaceOptions("TideSurfConnectOptions").sort(),
-  "API connect option table must match TideSurfConnectOptions"
-);
+const expectedExitCodes = Object.values(CLI_EXIT_CODES);
+const documentedExitCodes = [...markdownSection(
+  cliDocs,
+  "## Output"
+).matchAll(/^\| `(\d+)` \| ([^|]+) \|$/gm)].map((match) => ({
+  code: Number(match[1]),
+  meaning: match[2].trim(),
+}));
+equal(documentedExitCodes, expectedExitCodes, "CLI exit-code table must match runtime metadata");
+const llmsExitCodes = (llms.match(/^Exit codes: (.+)\.$/m)?.[1] ?? "")
+  .split("; ")
+  .filter(Boolean)
+  .map((entry) => {
+    const match = /^(\d+) (.+)$/.exec(entry);
+    return { code: Number(match?.[1]), meaning: match?.[2] ?? "" };
+  });
+equal(llmsExitCodes, expectedExitCodes, "llms.txt exit codes must match runtime metadata");
 
 const docsIndex = read("website/docs/index.html");
 const contentNames = readdirSync(resolve(root, "website/docs/content"))
@@ -200,9 +218,8 @@ const sidebarPages = [...docsIndex.matchAll(/class="sidebar-link" data-page="([^
 equal(sidebarPages, contentNames, "every docs content file must appear once in sidebar navigation");
 equal([...new Set(sidebarPages)], sidebarPages, "docs sidebar page entries must be unique");
 
-const docsMain = read("website/docs/src/main.ts");
 for (const key of [...docsIndex.matchAll(/data-i18n(?:-placeholder)?="([^"]+)"/g)].map((match) => match[1])) {
-  check(docsMain.includes(`"${key}"`), `missing docs translation key: ${key}`);
+  check(Object.hasOwn(translations, key), `missing docs translation key: ${key}`);
 }
 
 const expectedPageHeader = "> example.com/search | 0/1200 800vh";
@@ -289,15 +306,14 @@ equal(
 const budgetFixture = compressionExpectations.fixtures.find(
   (fixture) => fixture.name === compressionExpectations.tokenBudget.fixture
 );
-check(budgetFixture !== undefined, "token-budget snapshot must reference a fixture");
-if (budgetFixture) {
+if (!budgetFixture) {
+  check(false, "token-budget snapshot must reference a fixture");
+} else {
   equal(
     compressionExpectations.tokenBudget.fullTokens,
     budgetFixture.tideSurfTokens,
     "token-budget full count must match its fixture"
   );
-}
-if (budgetFixture) {
   const embeddedSource = landing.match(/class="tokens-before">([^<]+)</)?.[1];
   const embeddedTideSurf = landing.match(/class="specimen-shift"[\s\S]*?<strong>([^<]+)<\/strong>/)?.[1];
   equal(
@@ -308,33 +324,35 @@ if (budgetFixture) {
     ],
     "landing benchmark embed must match the executable snapshot"
   );
+  const budgetPhrase = `${compressionExpectations.tokenBudget.fullTokens}-token ${budgetFixture.label.toLowerCase()} state to ${compressionExpectations.tokenBudget.budgetedTokens} tokens with a ${compressionExpectations.tokenBudget.maxTokens}-token target`;
+  check(
+    benchmarkDocs.includes(budgetPhrase),
+    "benchmark docs must include the current deterministic token-budget result"
+  );
 }
-const budgetPhrase = budgetFixture
-  ? `${compressionExpectations.tokenBudget.fullTokens}-token ${budgetFixture.label.toLowerCase()} state to ${compressionExpectations.tokenBudget.budgetedTokens} tokens with a ${compressionExpectations.tokenBudget.maxTokens}-token target`
-  : "";
-check(
-  benchmarkDocs.includes(budgetPhrase),
-  "benchmark docs must include the current deterministic token-budget result"
-);
-const liveBenchmark = read("scripts/benchmark-live.ts");
-for (const [constant, label] of [
-  ["MIN_RAW_TOKENS", "rendered tokens"],
-  ["MIN_COMPRESSED_TOKENS", "TideSurf tokens"],
-  ["MIN_ACTION_IDS", "action IDs"],
+for (const [value, label] of [
+  [LIVE_BENCHMARK_THRESHOLDS.rawTokens, "rendered tokens"],
+  [LIVE_BENCHMARK_THRESHOLDS.tideSurfTokens, "TideSurf tokens"],
+  [LIVE_BENCHMARK_THRESHOLDS.actionIds, "action IDs"],
 ] as const) {
-  const literal = liveBenchmark.match(new RegExp(`const ${constant} = ([\\d_]+);`))?.[1];
-  check(literal !== undefined, `live benchmark must define ${constant}`);
-  if (literal !== undefined) {
-    const value = Number(literal.replaceAll("_", ""));
-    check(
-      benchmarkDocs.includes(`${value.toLocaleString("en-US")} ${label}`),
-      `benchmark docs must describe ${constant}`
-    );
-  }
+  check(
+    benchmarkDocs.includes(`${value.toLocaleString("en-US")} ${label}`),
+    `benchmark docs must describe the ${label} acceptance threshold`
+  );
 }
-check(
-  liveBenchmark.includes("const aggregateRatio = totalRaw / totalCompressed"),
-  "live benchmark must calculate an aggregate ratio"
+equal(
+  aggregateLiveResults([
+    { rawTokens: 900, tideSurfTokens: 100, ms: 10 },
+    { rawTokens: 100, tideSurfTokens: 100, ms: 30 },
+  ]),
+  {
+    avgMs: 20,
+    totalRaw: 1_000,
+    totalCompressed: 200,
+    ratio: 5,
+    reduction: 80,
+  },
+  "live benchmark aggregation must use totals"
 );
 check(
   benchmarkDocs.includes("divides total rendered tokens by total TideSurf tokens"),

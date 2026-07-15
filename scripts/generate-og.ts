@@ -1,5 +1,4 @@
 #!/usr/bin/env bun
-/** Generate synchronized website and repository social previews. */
 import { createHash } from "node:crypto";
 import { TideSurf } from "../src/index.js";
 import { resolve } from "node:path";

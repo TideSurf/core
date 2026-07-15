@@ -329,9 +329,6 @@ export async function runDaemon(
 
 function readSessionStateFromFile(stateFile: string): SessionState {
   const candidate = resolve(stateFile);
-  const name = candidate.split(/[\\/]/).pop();
-  if (!name?.endsWith(".json")) throw new Error("Invalid session state file");
-
   const raw = JSON.parse(readFileSync(candidate, "utf8")) as SessionState;
   if (
     raw.protocol !== SESSION_PROTOCOL_VERSION ||

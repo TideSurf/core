@@ -3,23 +3,13 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { once } from "node:events";
 import { createInterface } from "node:readline";
 import { join } from "node:path";
-import { resolveChromeExecutable } from "../../src/cdp/launcher.js";
 import { TOOL_REGISTRY } from "../../src/tools/registry.js";
+import { canResolveBrowser } from "../support/browser.js";
 
 const root = join(import.meta.dir, "..", "..");
 const cliPath = join(root, "src", "cli.ts");
 
-function browserAvailable(): boolean {
-  try {
-    resolveChromeExecutable();
-    return true;
-  } catch (error) {
-    if (process.env["CHROME_PATH"]) throw error;
-    return false;
-  }
-}
-
-const describeMcp = browserAvailable() ? describe : describe.skip;
+const describeMcp = canResolveBrowser() ? describe : describe.skip;
 
 describeMcp("MCP stdio parity", () => {
   it("lists canonical tools, calls them, and closes owned Chromium on EOF", async () => {

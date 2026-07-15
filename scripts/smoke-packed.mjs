@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -97,6 +97,21 @@ try {
     "dist",
     "cli.js"
   );
+  const packageRoot = join(
+    installRoot,
+    "node_modules",
+    "@tidesurf",
+    "core"
+  );
+  for (const stalePath of [
+    "dist/mcp/index.js",
+    "dist/tools/definitions.js",
+    "dist/tools/executor.js",
+  ]) {
+    if (existsSync(join(packageRoot, stalePath))) {
+      throw new Error(`Packed artifact contains removed module: ${stalePath}`);
+    }
+  }
 
   run(bin, ["--help"]);
   run(process.execPath, [cliPath, "--version"]);

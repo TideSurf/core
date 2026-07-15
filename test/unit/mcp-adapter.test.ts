@@ -3,7 +3,7 @@ import {
   type McpCallResult,
   type McpServerLike,
 } from "../../src/mcp/adapter.js";
-import { getToolDefinitions } from "../../src/tools/definitions.js";
+import { getToolDefinitions } from "../../src/tools/registry.js";
 import type { ToolExecutor } from "../../src/tools/registry.js";
 
 interface Registration {

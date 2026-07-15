@@ -1,11 +1,10 @@
 import type { OSNode } from "../types.js";
 import {
-  collectTextBounded,
-  countInteractiveChildren,
   interactiveSummary,
+  summarizeOffscreenNode,
 } from "./mode-filter.js";
 
-export interface ViewportFilterResult {
+interface ViewportFilterResult {
   nodes: OSNode[];
   aboveSummary?: OSNode;
   belowSummary?: OSNode;
@@ -24,8 +23,9 @@ function summarizeRegion(nodes: OSNode[], tag: "above" | "below"): OSNode | unde
     sectionCount++;
     if (parts.length >= SUMMARY_NODE_LIMIT) continue;
 
-    const countSummary = interactiveSummary(countInteractiveChildren(node));
-    const text = collectTextBounded(node, SUMMARY_TEXT_LIMIT).trim();
+    const summary = summarizeOffscreenNode(node, SUMMARY_TEXT_LIMIT);
+    const countSummary = interactiveSummary(summary.counts);
+    const text = summary.text.trim();
     let description = node.tag;
     if (text) description += `: ${text}`;
     if (countSummary) description += ` ${countSummary}`;

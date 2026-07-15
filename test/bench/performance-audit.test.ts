@@ -18,7 +18,7 @@ function node(tag: string, children: OSNode[], id?: string): OSNode {
   };
 }
 
-function medianRuntime(task: () => void, samples: number = 5): number {
+function medianRuntime(task: () => void, samples: number): number {
   task();
   const times: number[] = [];
   for (let index = 0; index < samples; index++) {

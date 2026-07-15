@@ -1,6 +1,6 @@
 # Error handling
 
-TideSurf exposes typed errors, avoiding message parsing. Every type extends `TideSurfError`, which extends the standard `Error` class.
+TideSurf exports typed domain errors for common failures. Unrelated page and CDP failures retain their original `Error` type. Every exported TideSurf error extends `TideSurfError`, which extends the standard `Error` class.
 
 ## Error types
 
@@ -45,10 +45,10 @@ try {
 |---|---|---|
 | `ChromeLaunchError` | Chrome binary not found, insufficient permissions, or explicit port already in use | Check `CHROME_PATH`, verify Chrome is installed, or remove the fixed port |
 | `CDPConnectionError` | The requested CDP endpoint is unavailable or setup failed | Check attach settings or start a new managed browser |
-| `CDPTimeoutError` | Navigation or another CDP operation exceeded its timeout | Raise the timeout or skip an unresponsive page |
-| `NavigationError` | DNS failure, invalid URL, CDP failure, or load timeout | Validate the URL, check network connectivity, or handle as a dead link |
+| `CDPTimeoutError` | A non-navigation CDP operation exceeded its timeout | Raise the timeout or skip an unresponsive page |
+| `NavigationError` | DNS failure, CDP navigation failure, or load timeout | Check network connectivity or handle the target as a dead link |
 | `ElementNotFoundError` | The element ID from a previous `getState()` no longer matches the current DOM | The page changed since the last state snapshot. Call `getState()` again to get fresh IDs |
-| `ValidationError` | Invalid input passed to a TideSurf method (e.g. empty string for URL) | Fix the input before retrying |
+| `ValidationError` | Invalid input passed to a TideSurf method, including a malformed or forbidden URL | Fix the input before retrying |
 | `ReadOnlyError` | A method would navigate, mutate, evaluate, access files/clipboard, or mutate tabs | Use an allowed observation method or start a separate writable session |
 
 ## Automatic retry behavior

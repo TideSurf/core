@@ -34,7 +34,7 @@ const PASS_THROUGH_ATTRS = new Set([
   "label",
 ]);
 
-export interface WalkResult {
+interface WalkResult {
   nodes: OSNode[];
   nodeMap: NodeMap;
 }

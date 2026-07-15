@@ -1,6 +1,6 @@
 import { walkDOM } from "../../src/parser/dom-walker.js";
 import { filterViewportOnly } from "../../src/parser/viewport-filter.js";
-import type { CDPNode } from "../../src/types.js";
+import type { CDPNode, OSNode } from "../../src/types.js";
 
 function makeNode(
   overrides: Partial<CDPNode> & { nodeName: string }
@@ -216,41 +216,23 @@ describe("walkDOM", () => {
     expect(nodeMap.get("B1")).toBe(402);
   });
 
-  // Depth limit prevents stack overflow.
-  it("handles deeply nested DOM without stack overflow", () => {
-    // Create a deeply nested structure (1000 levels)
-    let current: CDPNode = makeNode({ nodeName: "DIV", children: [makeText("deep content")] });
-    for (let i = 0; i < 1000; i++) {
-      current = makeNode({ nodeName: "DIV", children: [current] });
-    }
-    
-    const root = makeNode({
-      nodeName: "HTML",
-      children: [current],
-    });
-
-    // Should not throw stack overflow
-    const { nodes } = walkDOM(root);
-    // The content should be truncated at MAX_DEPTH (500)
-    expect(nodes.length).toBeGreaterThanOrEqual(0);
-  });
-
   it("truncates at MAX_DEPTH with [truncated] marker", () => {
-    // Create a structure deeper than MAX_DEPTH (500)
-    let current: CDPNode = makeNode({ nodeName: "DIV", children: [makeText("bottom")] });
+    let current: CDPNode = makeNode({
+      nodeName: "DIV",
+      children: [makeText("bottom")],
+    });
     for (let i = 0; i < 600; i++) {
       current = makeNode({ nodeName: "DIV", children: [current] });
     }
-    
+
     const root = makeNode({
       nodeName: "HTML",
       children: [current],
     });
 
     const { nodes } = walkDOM(root);
-    // Find the [truncated] marker
-    const findTruncated = (n: any[]): boolean => {
-      for (const node of n) {
+    const findTruncated = (nodeList: OSNode[]): boolean => {
+      for (const node of nodeList) {
         if (node.tag === "#text" && node.text === "[truncated]") return true;
         if (findTruncated(node.children)) return true;
       }
@@ -259,7 +241,6 @@ describe("walkDOM", () => {
     expect(findTruncated(nodes)).toBe(true);
   });
 
-  // Text merging adds spaces only when needed.
   it("merges adjacent text nodes without extra spaces", () => {
     const root = makeNode({
       nodeName: "HTML",
@@ -280,7 +261,6 @@ describe("walkDOM", () => {
 
     expect(nodes).toHaveLength(1);
     expect(nodes[0].children).toHaveLength(1);
-    // Original text had space, so no double space should be added
     expect(nodes[0].children[0].text).toBe("Hello World");
   });
 
@@ -305,9 +285,7 @@ describe("walkDOM", () => {
     expect(nodes[0].children[0].text).toBe("Hello World");
   });
 
-  // Truncation preserves Unicode graphemes.
   it("handles unicode emoji correctly in truncation", () => {
-    // Each emoji is 2 UTF-16 code units but 1 grapheme
     const longEmojiText = "👍".repeat(100);
     const root = makeNode({
       nodeName: "HTML",
@@ -325,11 +303,9 @@ describe("walkDOM", () => {
     });
 
     const { nodes } = walkDOM(root);
-    // Should be truncated without breaking emoji
     expect(nodes.length).toBeGreaterThan(0);
   });
 
-  // Edge case: empty children arrays
   it("handles empty children arrays gracefully", () => {
     const root = makeNode({
       nodeName: "HTML",

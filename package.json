@@ -1,7 +1,7 @@
 {
   "name": "@tidesurf/core",
   "version": "0.5.4",
-  "description": "Connect Chromium to LLM agents via token-efficient DOM compression",
+  "description": "Stateful Chromium tools with compact DOM text for browser agents",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -21,8 +21,9 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
+    "typecheck:examples": "tsc -p tsconfig.examples.json",
     "test": "bun test test/unit",
     "test:integration": "bun test test/integration",
     "test:bench": "bun test test/bench",
@@ -31,7 +32,7 @@
     "smoke:pack": "node scripts/smoke-packed.mjs",
     "build:web:landing": "bun run --cwd website/landing build",
     "build:web:docs": "bun run --cwd website/docs build",
-    "verify:release": "bun run typecheck && bun run check:docs && bun run test && bun run test:integration && bun run test:bench && bun run build && bun run build:web:landing && bun run build:web:docs && npm_config_cache=.tmp-npm-cache npm pack --dry-run && bun run smoke:pack"
+    "verify:release": "bun run build && bun run typecheck:examples && bun run check:docs && bun run test && bun run test:integration && bun run test:bench && bun run build:web:landing && bun run build:web:docs && npm_config_cache=.tmp-npm-cache npm pack --dry-run && bun run smoke:pack"
   },
   "repository": {
     "type": "git",

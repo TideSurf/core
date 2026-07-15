@@ -5,12 +5,12 @@ import {
   type ToolSpec,
 } from "../tools/registry.js";
 
-export interface McpTextContent {
+interface McpTextContent {
   type: "text";
   text: string;
 }
 
-export interface McpImageContent {
+interface McpImageContent {
   type: "image";
   data: string;
   mimeType: "image/png";
@@ -29,7 +29,7 @@ export interface McpServerLike {
   ): unknown;
 }
 
-export interface LaunchBrowserResult {
+interface LaunchBrowserResult {
   alreadyRunning: boolean;
   headless: boolean;
   source: "launched" | "attached";
@@ -39,16 +39,16 @@ export interface LaunchBrowserResult {
  * Owns browser startup and executor reuse for an MCP server. The adapter stays
  * independent of the optional MCP SDK and of the CLI session implementation.
  */
-export interface McpBrowserCoordinator {
+interface McpBrowserCoordinator {
   executor(): Promise<ToolExecutor>;
   launchBrowser(options: { headless?: boolean }): Promise<LaunchBrowserResult>;
 }
 
-export type McpInputSchemaFactory = (
+type McpInputSchemaFactory = (
   schema: ToolDefinition["input_schema"]
 ) => unknown;
 
-export interface RegisterMcpToolsOptions {
+interface RegisterMcpToolsOptions {
   server: McpServerLike;
   coordinator: McpBrowserCoordinator;
   createInputSchema: McpInputSchemaFactory;

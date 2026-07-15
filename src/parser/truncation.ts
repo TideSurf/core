@@ -28,7 +28,7 @@ function graphemeSegments(text: string): Iterable<GraphemeSegment> {
   };
 }
 
-export function graphemeCount(text: string, stopAt = Infinity): number {
+export function graphemeCount(text: string, stopAt: number): number {
   const inspectedLength = Math.min(text.length, stopAt);
   if (asciiPrefix(text, inspectedLength)) {
     return inspectedLength;

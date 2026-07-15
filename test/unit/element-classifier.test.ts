@@ -243,7 +243,6 @@ describe("classify", () => {
     });
   });
 
-  // CSS detection uses complete token matches.
   describe("CSS style detection", () => {
     it("discards display:none with no spaces", () => {
       expect(classify("DIV", { style: "display:none" })).toEqual({
@@ -276,7 +275,6 @@ describe("classify", () => {
     });
 
     it("does NOT discard display:nonexistent (word boundary check)", () => {
-      // "nonexistent" starts with "none" but isn't the same as "none"
       expect(classify("DIV", { style: "display:nonexistent" })).toEqual({
         action: "COLLAPSE",
       });

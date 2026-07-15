@@ -6,7 +6,7 @@ import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
-import { resolveChromeExecutable } from "../../src/cdp/launcher.js";
+import { canResolveBrowser } from "../support/browser.js";
 
 const root = join(import.meta.dir, "..", "..");
 const cliPath = join(root, "src", "cli.ts");
@@ -17,17 +17,7 @@ const finalTabSession = `cli-final-tab-${randomUUID()}`;
 let server: Server;
 let url: string;
 
-function chromeAvailable(): boolean {
-  try {
-    resolveChromeExecutable();
-    return true;
-  } catch (error) {
-    if (process.env["CHROME_PATH"]) throw error;
-    return false;
-  }
-}
-
-const describeCli = chromeAvailable() ? describe : describe.skip;
+const describeCli = canResolveBrowser() ? describe : describe.skip;
 
 function runCli(namedSession: string, ...args: string[]): Promise<{
   code: number | null;

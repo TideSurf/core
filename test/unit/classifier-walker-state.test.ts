@@ -1,6 +1,5 @@
 import { walkDOM } from "../../src/parser/dom-walker.js";
-import { hasComputedState } from "../../src/parser/element-classifier.js";
-import type { CDPNode, OSNode, GetStateOptions } from "../../src/types.js";
+import type { CDPNode, OSNode } from "../../src/types.js";
 
 function makeElement(
   nodeName: string,
@@ -31,268 +30,62 @@ function makeText(text: string, id: number = 0): CDPNode {
   };
 }
 
-describe("DOM walker — data-os-state reading", () => {
-  it("node with data-os-state='disabled' populates state=['disabled']", () => {
-    const btn = makeElement("BUTTON", 10, [makeText("Click", 11)], [
+function walkMappedNode(
+  nodeName: string,
+  mappedTag: string,
+  attributes: string[] = []
+): OSNode {
+  const element = makeElement(nodeName, 10, [makeText("Content", 11)], attributes);
+  const node = walkDOM(makeElement("BODY", 1, [element])).nodes.find(
+    (candidate) => candidate.tag === mappedTag
+  );
+  expect(node).toBeDefined();
+  return node!;
+}
+
+describe("DOM walker marker state", () => {
+  it("keeps supported flags and removes parser markers", () => {
+    const node = walkMappedNode("BUTTON", "button", [
+      "title",
+      "Action",
       "data-os-state",
-      "disabled",
+      ",disabled,obscured,",
     ]);
-    const root = makeElement("BODY", 1, [btn]);
-    const { nodes } = walkDOM(root);
 
-    const buttonNode = nodes.find((n) => n.tag === "button");
-    expect(buttonNode).toBeDefined();
-    expect((buttonNode as OSNode & { state?: string[] }).state).toEqual([
-      "disabled",
-    ]);
+    expect(node.state).toEqual(["disabled", "obscured"]);
+    expect(node.attributes).toEqual({ id: "B1", title: "Action" });
   });
 
-  it("node with data-os-state='disabled,obscured' populates state=['disabled','obscured']", () => {
-    const btn = makeElement("BUTTON", 10, [makeText("Submit", 11)], [
-      "data-os-state",
-      "disabled,obscured",
-    ]);
-    const root = makeElement("BODY", 1, [btn]);
-    const { nodes } = walkDOM(root);
-
-    const buttonNode = nodes.find((n) => n.tag === "button");
-    expect(buttonNode).toBeDefined();
-    expect((buttonNode as OSNode & { state?: string[] }).state).toEqual([
-      "disabled",
-      "obscured",
-    ]);
+  it("ignores absent, empty, and unsupported state values", () => {
+    for (const value of [undefined, "", "unknown_flag"]) {
+      const attributes = value === undefined ? [] : ["data-os-state", value];
+      expect(walkMappedNode("BUTTON", "button", attributes).state).toBeUndefined();
+    }
   });
 
-  it("node without data-os-state has state=undefined", () => {
-    const btn = makeElement("BUTTON", 10, [makeText("Click", 11)]);
-    const root = makeElement("BODY", 1, [btn]);
-    const { nodes } = walkDOM(root);
+  it("applies state to mapped interactive elements", () => {
+    const cases = [
+      ["A", "link", "disabled"],
+      ["INPUT", "input", "disabled,inert"],
+      ["SELECT", "select", "obscured"],
+    ] as const;
 
-    const buttonNode = nodes.find((n) => n.tag === "button");
-    expect(buttonNode).toBeDefined();
-    expect((buttonNode as OSNode & { state?: string[] }).state).toBeUndefined();
+    for (const [nodeName, mappedTag, value] of cases) {
+      expect(
+        walkMappedNode(nodeName, mappedTag, ["data-os-state", value]).state
+      ).toEqual(value.split(","));
+    }
   });
 
-  it("data-os-state does NOT appear in filteredAttrs", () => {
-    const btn = makeElement("BUTTON", 10, [makeText("Click", 11)], [
-      "data-os-state",
-      "disabled",
-    ]);
-    const root = makeElement("BODY", 1, [btn]);
-    const { nodes } = walkDOM(root);
-
-    const buttonNode = nodes.find((n) => n.tag === "button");
-    expect(buttonNode).toBeDefined();
-    expect(buttonNode!.attributes["data-os-state"]).toBeUndefined();
-  });
-
-  it("data-os-state on a link element", () => {
-    const link = makeElement("A", 10, [makeText("Link", 11)], [
-      "href",
-      "/about",
-      "data-os-state",
-      "disabled",
-    ]);
-    const root = makeElement("BODY", 1, [link]);
-    const { nodes } = walkDOM(root);
-
-    const linkNode = nodes.find((n) => n.tag === "link");
-    expect(linkNode).toBeDefined();
-    expect(linkNode!.attributes["href"]).toBe("/about");
-    expect(linkNode!.attributes["data-os-state"]).toBeUndefined();
-    expect((linkNode as OSNode & { state?: string[] }).state).toEqual([
-      "disabled",
-    ]);
-  });
-
-  it("data-os-state on an input element", () => {
-    const inp = makeElement("INPUT", 10, [], [
-      "type",
-      "text",
-      "data-os-state",
-      "disabled,inert",
-    ]);
-    const root = makeElement("BODY", 1, [inp]);
-    const { nodes } = walkDOM(root);
-
-    const inputNode = nodes.find((n) => n.tag === "input");
-    expect(inputNode).toBeDefined();
-    expect((inputNode as OSNode & { state?: string[] }).state).toEqual([
-      "disabled",
-      "inert",
-    ]);
-  });
-
-  it("data-os-state on a select element", () => {
-    const sel = makeElement("SELECT", 10, [], [
-      "data-os-state",
-      "obscured",
-    ]);
-    const root = makeElement("BODY", 1, [sel]);
-    const { nodes } = walkDOM(root);
-
-    const selectNode = nodes.find((n) => n.tag === "select");
-    expect(selectNode).toBeDefined();
-    expect((selectNode as OSNode & { state?: string[] }).state).toEqual([
-      "obscured",
-    ]);
-  });
-
-  it("data-os-state='' (empty string) results in state=undefined", () => {
-    const btn = makeElement("BUTTON", 10, [makeText("Click", 11)], [
-      "data-os-state",
-      "",
-    ]);
-    const root = makeElement("BODY", 1, [btn]);
-    const { nodes } = walkDOM(root);
-
-    const buttonNode = nodes.find((n) => n.tag === "button");
-    expect(buttonNode).toBeDefined();
-    expect((buttonNode as OSNode & { state?: string[] }).state).toBeUndefined();
-  });
-
-  it("data-os-state='disabled,' (trailing comma) results in state=['disabled']", () => {
-    const btn = makeElement("BUTTON", 10, [makeText("Click", 11)], [
-      "data-os-state",
-      "disabled,",
-    ]);
-    const root = makeElement("BODY", 1, [btn]);
-    const { nodes } = walkDOM(root);
-
-    const buttonNode = nodes.find((n) => n.tag === "button");
-    expect(buttonNode).toBeDefined();
-    expect((buttonNode as OSNode & { state?: string[] }).state).toEqual([
-      "disabled",
-    ]);
-  });
-
-  it("data-os-state=',disabled' (leading comma) results in state=['disabled']", () => {
-    const btn = makeElement("BUTTON", 10, [makeText("Click", 11)], [
-      "data-os-state",
-      ",disabled",
-    ]);
-    const root = makeElement("BODY", 1, [btn]);
-    const { nodes } = walkDOM(root);
-
-    const buttonNode = nodes.find((n) => n.tag === "button");
-    expect(buttonNode).toBeDefined();
-    expect((buttonNode as OSNode & { state?: string[] }).state).toEqual([
-      "disabled",
-    ]);
-  });
-
-  it("data-os-state='unknown_flag' results in state=undefined (filtered by whitelist)", () => {
-    const btn = makeElement("BUTTON", 10, [makeText("Click", 11)], [
-      "data-os-state",
-      "unknown_flag",
-    ]);
-    const root = makeElement("BODY", 1, [btn]);
-    const { nodes } = walkDOM(root);
-
-    const buttonNode = nodes.find((n) => n.tag === "button");
-    expect(buttonNode).toBeDefined();
-    expect((buttonNode as OSNode & { state?: string[] }).state).toBeUndefined();
-  });
-});
-
-describe("hasComputedState utility", () => {
-  it("returns true when flag is present", () => {
-    expect(hasComputedState(["disabled", "obscured"], "disabled")).toBe(true);
-  });
-
-  it("returns true when flag is the only element", () => {
-    expect(hasComputedState(["disabled"], "disabled")).toBe(true);
-  });
-
-  it("returns false when flag is absent", () => {
-    expect(hasComputedState(["disabled"], "obscured")).toBe(false);
-  });
-
-  it("returns false when state is undefined", () => {
-    expect(hasComputedState(undefined, "disabled")).toBe(false);
-  });
-
-  it("returns false when state is empty array", () => {
-    expect(hasComputedState([], "disabled")).toBe(false);
-  });
-
-  it("returns true for 'inert' flag", () => {
-    expect(hasComputedState(["inert"], "inert")).toBe(true);
-  });
-
-  it("handles multiple flags correctly", () => {
-    const state = ["disabled", "obscured", "inert"];
-    expect(hasComputedState(state, "disabled")).toBe(true);
-    expect(hasComputedState(state, "obscured")).toBe(true);
-    expect(hasComputedState(state, "inert")).toBe(true);
-    expect(hasComputedState(state, "hidden")).toBe(false);
-  });
-});
-
-describe("GetStateOptions — includeHidden", () => {
-  it("accepts includeHidden: true", () => {
-    const opts: GetStateOptions = {
-      includeHidden: true,
-    };
-    expect(opts.includeHidden).toBe(true);
-  });
-
-  it("accepts includeHidden: undefined (default)", () => {
-    const opts: GetStateOptions = {};
-    expect(opts.includeHidden).toBeUndefined();
-  });
-
-  it("accepts includeHidden: false", () => {
-    const opts: GetStateOptions = {
-      includeHidden: false,
-    };
-    expect(opts.includeHidden).toBe(false);
-  });
-
-  it("works alongside existing options", () => {
-    const opts: GetStateOptions = {
-      maxTokens: 1000,
-      viewport: true,
-      mode: "full",
-      includeHidden: true,
-    };
-    expect(opts.maxTokens).toBe(1000);
-    expect(opts.viewport).toBe(true);
-    expect(opts.mode).toBe("full");
-    expect(opts.includeHidden).toBe(true);
-  });
-});
-
-describe("DOM walker — data-os-state coexists with data-os-visible", () => {
-  it("node with both data-os-visible and data-os-state", () => {
-    const btn = makeElement("BUTTON", 10, [makeText("Click", 11)], [
+  it("combines visibility and state markers", () => {
+    const node = walkMappedNode("BUTTON", "button", [
       "data-os-visible",
       "1",
       "data-os-state",
       "disabled",
     ]);
-    const root = makeElement("BODY", 1, [btn]);
-    const { nodes } = walkDOM(root);
 
-    const buttonNode = nodes.find((n) => n.tag === "button");
-    expect(buttonNode).toBeDefined();
-    expect(buttonNode!.visible).toBe(true);
-    expect((buttonNode as OSNode & { state?: string[] }).state).toEqual([
-      "disabled",
-    ]);
-  });
-
-  it("node with data-os-visible but no data-os-state", () => {
-    const btn = makeElement("BUTTON", 10, [makeText("Click", 11)], [
-      "data-os-visible",
-      "1",
-    ]);
-    const root = makeElement("BODY", 1, [btn]);
-    const { nodes } = walkDOM(root);
-
-    const buttonNode = nodes.find((n) => n.tag === "button");
-    expect(buttonNode).toBeDefined();
-    expect(buttonNode!.visible).toBe(true);
-    expect((buttonNode as OSNode & { state?: string[] }).state).toBeUndefined();
+    expect(node.visible).toBe(true);
+    expect(node.state).toEqual(["disabled"]);
   });
 });

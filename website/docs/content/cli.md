@@ -24,14 +24,14 @@ Every tool call in a session runs serially. The daemon preserves the exact eleme
 
 | Command | Behavior |
 |---|---|
-| `tidesurf start` | Start the selected session and browser |
-| `tidesurf status` | Report state without starting a session |
-| `tidesurf stop` | Stop the session; repeated calls succeed |
-| `tidesurf tools` | List the 18 tools from the canonical registry |
-| `tidesurf call <tool> --input <json\|->` | Call a tool by MCP name; `-` reads stdin |
-| `tidesurf help [command]` | Show global or generated command help |
-| `tidesurf inspect <url>` | Run the retained one-shot inspection flow |
-| `tidesurf mcp` | Serve the MCP adapter over stdio |
+| `tidesurf start [startup options]` | Start the session and browser |
+| `tidesurf status [--session <name>] [--json]` | Show session and browser state |
+| `tidesurf stop [--session <name>] [--json]` | Stop the session |
+| `tidesurf tools [--json]` | List browser tools |
+| `tidesurf call <tool> --input <json\|-> [global options]` | Call a tool with JSON input |
+| `tidesurf inspect <url>` | Print a one-shot compressed page |
+| `tidesurf mcp [startup options]` | Run the MCP stdio adapter |
+| `tidesurf help [command]` | Show command help |
 
 No arguments and `--help` show global help. `--version` prints the package version. Direct commands also accept `--help`.
 
@@ -73,27 +73,29 @@ printf '%s' '{"url":"https://example.com"}' | tidesurf call navigate --input -
 
 The tool name may use its canonical underscore name or hyphenated CLI alias. Input must be one JSON object.
 
-## Session startup policy
+## Global options
 
-Startup flags apply when the session daemon starts. The policy remains fixed until `stop`. Later commands can omit the flags or repeat matching standalone values without restating unrelated flags. Browser-selection combinations must resolve to the stored mode, and repeating `--file-access-root` requires the complete stored root list. Supplying a conflicting value returns an error and leaves the current session unchanged.
+Global flags may appear before or after the command. Startup flags set daemon policy on the first call. That policy remains fixed until `stop`. Later commands may omit startup flags or repeat matching values. Browser-selection combinations must resolve to the stored mode, and a repeated `--file-access-root` list must match the complete stored list.
 
 | Option | Purpose |
 |---|---|
-| `--session NAME` | Select a session; default `default` |
+| `--session NAME` | Select a named session (default: default) |
+| `--json` | Emit the ToolResult JSON shape |
+| `--quiet` | Suppress the MCP ready message |
 | `--headful` | Show the managed browser window |
-| `--auto-connect` | Attach when possible, otherwise launch locally |
-| `--connect-only` | Attach and fail if no browser is available |
-| `--browser-url URL` | Use an explicit `http://` CDP discovery origin |
-| `--host HOST` | Select a CDP host |
-| `--port PORT` | Select a fixed port; launch otherwise uses an ephemeral port and attach defaults to `9222` |
-| `--chrome-path FILE` | Use a specific executable |
-| `--channel NAME` | Select `stable`, `beta`, `dev`, `canary`, or `chromium` |
-| `--user-data-dir DIR` | Use a specific browser profile directory |
-| `--read-only` | Fix the session to observation operations |
+| `--auto-connect` | Try attach discovery, then launch locally |
+| `--connect-only` | Attach without launching a browser |
+| `--browser-url URL` | Use an explicit browser HTTP endpoint |
+| `--host HOST` | Use an explicit CDP host |
+| `--port PORT` | Use a fixed CDP port (launch or attach by mode) |
+| `--chrome-path FILE` | Use a Chrome or Chromium executable |
+| `--channel NAME` | Select stable, beta, dev, canary, or chromium |
+| `--user-data-dir DIRECTORY` | Use a browser profile directory |
+| `--read-only` | Disable mutating and sensitive browser tools |
 | `--allow-localhost` | Permit loopback navigation |
-| `--allow-private-hosts` | Permit private and link-local navigation, including loopback |
-| `--file-access-root DIR` | Add an upload/download root; repeat as needed |
-| `--timeout MS` | Set the operation and startup timeout |
+| `--allow-private-hosts` | Permit private, link-local, and loopback navigation |
+| `--file-access-root PATH` | Add an upload/download root; repeatable |
+| `--timeout MS` | Set browser startup and operation timeout |
 
 Session names contain letters, numbers, dots, dashes, or underscores. Use different names when workflows need different browser or security policies.
 
@@ -138,8 +140,6 @@ Errors go to stderr. Exit codes are stable:
 | `3` | Session or browser startup/connection error |
 | `4` | Tool execution failed |
 | `5` | Daemon authentication, transport, or protocol error |
-
-`--quiet` suppresses the MCP ready message.
 
 ## Screenshots
 

@@ -8,8 +8,7 @@ import {
 import { connect, disconnect, type CDPConnection } from "./cdp/connection.js";
 import { SurfingPage } from "./cdp/page.js";
 import { TabManager, type TabInfo } from "./cdp/tab-manager.js";
-import { createToolExecutor } from "./tools/executor.js";
-import { getToolDefinitions } from "./tools/definitions.js";
+import { createToolExecutor, getToolDefinitions } from "./tools/registry.js";
 import { rmSync } from "node:fs";
 import { applyViewport } from "./cdp/viewport.js";
 import {
@@ -68,6 +67,24 @@ async function rollbackCDP(
     });
   }
   throw primaryError;
+}
+
+async function initializePage(
+  conn: CDPConnection,
+  options: Pick<TideSurfOptions, "defaultViewport" | "readOnly" | "timeout">,
+  fileAccessRoots: string[],
+  urlValidationOptions: UrlValidationOptions
+): Promise<SurfingPage> {
+  if (options.defaultViewport) {
+    await applyViewport(conn, options.defaultViewport, options.timeout);
+  }
+  return new SurfingPage(
+    conn,
+    fileAccessRoots,
+    urlValidationOptions,
+    options.readOnly ?? false,
+    options.timeout
+  );
 }
 
 export function getTideSurfConnectionInfo(
@@ -135,7 +152,7 @@ export class TideSurf {
     this.urlValidationOptions = { ...urlValidationOptions };
     this.timeout = timeout;
     CONNECTION_INFO.set(this, { host: connectionHost, port: connectionPort });
-    this.executor = createToolExecutor(this, this.readOnly);
+    this.executor = createToolExecutor(this);
 
     if (activeTabId) {
       this.pages.set(activeTabId, page);
@@ -181,15 +198,11 @@ export class TideSurf {
     let conn: CDPConnection | null = null;
     try {
       conn = await connect({ port, host, tab: targetId, timeout: options.timeout });
-      if (options.defaultViewport) {
-        await applyViewport(conn, options.defaultViewport, options.timeout);
-      }
-      const page = new SurfingPage(
+      const page = await initializePage(
         conn,
+        options,
         fileAccessRoots,
-        urlValidationOptions,
-        options.readOnly ?? false,
-        options.timeout
+        urlValidationOptions
       );
       const tabManager = new TabManager(port, host);
 
@@ -276,15 +289,11 @@ export class TideSurf {
 
     const conn = await connect({ port, host, tab: targetId, timeout: options.timeout });
     try {
-      if (options.defaultViewport) {
-        await applyViewport(conn, options.defaultViewport, options.timeout);
-      }
-      const page = new SurfingPage(
+      const page = await initializePage(
         conn,
+        options,
         fileAccessRoots,
-        urlValidationOptions,
-        options.readOnly ?? false,
-        options.timeout
+        urlValidationOptions
       );
       const tabManager = new TabManager(port, host);
 

@@ -1,10 +1,16 @@
 import { resolve } from "node:path";
 import {
   getToolCommandNames,
+  getToolSpec,
   getToolSpecByCommand,
   type ToolSpec,
 } from "../tools/registry.js";
 import type { ChromeChannel } from "../types.js";
+import {
+  GLOBAL_OPTIONS,
+  LIFECYCLE_COMMANDS,
+  type GlobalOptionSpec,
+} from "./metadata.js";
 import type { SessionConfig } from "./session.js";
 import { isValidSessionName, SESSION_NAME_ERROR } from "./session-name.js";
 
@@ -15,48 +21,16 @@ export class CliUsageError extends Error {
   }
 }
 
-type ValueKind = "string" | "number" | "boolean";
+type OptionDefinition = Pick<
+  GlobalOptionSpec,
+  "flag" | "property" | "kind" | "repeat" | "startup"
+>;
 
-interface OptionDefinition {
-  flag: string;
-  property: string;
-  kind: ValueKind;
-  repeat?: boolean;
-  startup?: boolean;
-}
-
-const GLOBAL_OPTIONS: readonly OptionDefinition[] = [
-  { flag: "--session", property: "session", kind: "string" },
-  { flag: "--json", property: "json", kind: "boolean" },
-  { flag: "--quiet", property: "quiet", kind: "boolean" },
-  { flag: "--headful", property: "headful", kind: "boolean", startup: true },
-  { flag: "--auto-connect", property: "autoConnect", kind: "boolean", startup: true },
-  { flag: "--connect-only", property: "connectOnly", kind: "boolean", startup: true },
-  { flag: "--browser-url", property: "browserUrl", kind: "string", startup: true },
-  { flag: "--host", property: "host", kind: "string", startup: true },
-  { flag: "--port", property: "port", kind: "number", startup: true },
-  { flag: "--chrome-path", property: "chromePath", kind: "string", startup: true },
-  { flag: "--channel", property: "channel", kind: "string", startup: true },
-  { flag: "--user-data-dir", property: "userDataDir", kind: "string", startup: true },
-  { flag: "--read-only", property: "readOnly", kind: "boolean", startup: true },
-  { flag: "--allow-localhost", property: "allowLocalhost", kind: "boolean", startup: true },
-  { flag: "--allow-private-hosts", property: "allowPrivateHosts", kind: "boolean", startup: true },
-  { flag: "--file-access-root", property: "fileAccessRoots", kind: "string", repeat: true, startup: true },
-  { flag: "--timeout", property: "sessionTimeout", kind: "number", startup: true },
-] as const;
-
-const GLOBAL_BY_FLAG = new Map(GLOBAL_OPTIONS.map((option) => [option.flag, option]));
-const LIFECYCLE_COMMAND_NAMES = [
-  "start",
-  "status",
-  "stop",
-  "tools",
-  "call",
-  "inspect",
-  "mcp",
-  "help",
-] as const;
-const LIFECYCLE_COMMANDS = new Set<string>(LIFECYCLE_COMMAND_NAMES);
+const GLOBAL_BY_FLAG = new Map<string, GlobalOptionSpec>(
+  GLOBAL_OPTIONS.map((option) => [option.flag, option])
+);
+const LIFECYCLE_COMMAND_NAMES = LIFECYCLE_COMMANDS.map(({ name }) => name);
+const LIFECYCLE_COMMAND_SET = new Set<string>(LIFECYCLE_COMMAND_NAMES);
 
 function availableCommandNames(): string[] {
   return [...LIFECYCLE_COMMAND_NAMES, ...getToolCommandNames()];
@@ -165,7 +139,7 @@ function toolOptionDefinitions(tool?: ToolSpec): OptionDefinition[] {
 export function parseInvocation(argv: string[]): ParsedInvocation {
   const { command, index: commandIndex } = findCommand(argv);
   const tool = command ? getToolSpecByCommand(command) : undefined;
-  if (command && !tool && !LIFECYCLE_COMMANDS.has(command)) {
+  if (command && !tool && !LIFECYCLE_COMMAND_SET.has(command)) {
     throw unknownCommandError(command);
   }
 
@@ -175,14 +149,13 @@ export function parseInvocation(argv: string[]): ParsedInvocation {
   }
   if (command === "inspect") {
     localDefinitions.push(
-      { flag: "--max-tokens", property: "maxTokens", kind: "number" },
-      { flag: "--mode", property: "mode", kind: "string" },
-      { flag: "--full-page", property: "fullPage", kind: "boolean" },
-      { flag: "--include-hidden", property: "includeHidden", kind: "boolean" }
+      ...toolOptionDefinitions(getToolSpec("get_state")).filter(
+        ({ property }) => property !== "viewport"
+      )
     );
   }
 
-  const localByFlag = new Map(
+  const localByFlag = new Map<string, OptionDefinition>(
     localDefinitions.map((definition) => [definition.flag, definition])
   );
   const values: Record<string, unknown> = {};
@@ -347,23 +320,13 @@ export function parseInvocation(argv: string[]): ParsedInvocation {
   if (explicitStartupProperties.has("headful")) {
     startupConfig.headless = sessionConfig.headless;
   }
-  const directStartupProperties = [
-    ["host", "host"],
-    ["port", "port"],
-    ["browserUrl", "browserUrl"],
-    ["chromePath", "chromePath"],
-    ["channel", "channel"],
-    ["userDataDir", "userDataDir"],
-    ["sessionTimeout", "timeout"],
-    ["readOnly", "readOnly"],
-    ["allowLocalhost", "allowLocalhost"],
-    ["allowPrivateHosts", "allowPrivateHosts"],
-    ["fileAccessRoots", "fileAccessRoots"],
-  ] as const;
-  for (const [parsedProperty, configProperty] of directStartupProperties) {
-    if (explicitStartupProperties.has(parsedProperty)) {
+  for (const option of GLOBAL_OPTIONS) {
+    if (
+      option.configProperty &&
+      explicitStartupProperties.has(option.property)
+    ) {
       Object.assign(startupConfig, {
-        [configProperty]: sessionConfig[configProperty],
+        [option.configProperty]: sessionConfig[option.configProperty],
       });
     }
   }

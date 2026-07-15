@@ -11,17 +11,17 @@ import {
   validateUrl,
 } from "../validation.js";
 
-export type ToolOutputKind = "text" | "json" | "image";
-export type CliValueKind = "string" | "number" | "boolean";
+type ToolOutputKind = "text" | "json" | "image";
+type CliValueKind = "string" | "number" | "boolean";
 
-export interface ToolCliPositional {
+interface ToolCliPositional {
   readonly name: string;
   readonly description: string;
   readonly required?: boolean;
   readonly resolvePath?: boolean;
 }
 
-export interface ToolCliOption {
+interface ToolCliOption {
   readonly property: string;
   readonly flag: string;
   readonly kind: CliValueKind;
@@ -32,7 +32,7 @@ export interface ToolCliOption {
   readonly metavar?: string;
 }
 
-export interface ToolCliSpec {
+interface ToolCliSpec {
   readonly command: string;
   readonly aliases: readonly string[];
   readonly positionals: readonly ToolCliPositional[];
@@ -56,7 +56,7 @@ export interface ToolSpec {
   ) => Promise<unknown>;
 }
 
-export interface ToolInput {
+interface ToolInput {
   name: string;
   input: Record<string, unknown>;
 }
@@ -153,8 +153,8 @@ function validateUrlInput(
   validateUrl(url ?? "", options);
 }
 
-function validateId(input: Record<string, unknown>, key = "id"): void {
-  validateElementId(stringInput(input, key));
+function validateId(input: Record<string, unknown>): void {
+  validateElementId(stringInput(input, "id"));
 }
 
 function validateExpressionInput(input: Record<string, unknown>): void {
@@ -596,18 +596,20 @@ export function getToolSpecByCommand(command: string): ToolSpec | undefined {
   return TOOL_BY_COMMAND.get(command);
 }
 
-export function getToolSpecs(options?: { readOnly?: boolean }): ToolSpec[] {
+export function getToolSpecs(options?: {
+  readOnly?: boolean;
+}): readonly ToolSpec[] {
   return options?.readOnly
     ? TOOL_REGISTRY.filter((tool) => tool.readOnlyAllowed)
-    : [...TOOL_REGISTRY];
+    : TOOL_REGISTRY;
 }
 
-function getToolNames(options?: { readOnly?: boolean }): string[] {
-  return getToolSpecs(options).map((tool) => tool.name);
+function getToolNames(): string[] {
+  return TOOL_REGISTRY.map((tool) => tool.name);
 }
 
-export function getToolCommandNames(options?: { readOnly?: boolean }): string[] {
-  return getToolSpecs(options).flatMap((tool) => [
+export function getToolCommandNames(): string[] {
+  return TOOL_REGISTRY.flatMap((tool) => [
     tool.cli.command,
     ...tool.cli.aliases,
   ]);
@@ -687,10 +689,8 @@ function failure(error: unknown): ToolResult {
   return { success: false, error: message, errorType, stack };
 }
 
-export function createToolExecutor(
-  instance: TideSurf,
-  readOnly = false
-): ToolExecutor {
+export function createToolExecutor(instance: TideSurf): ToolExecutor {
+  const readOnly = instance.isReadOnly();
   return async (request): Promise<ToolResult> => {
     const tool = getToolSpec(request.name);
     if (!tool) {

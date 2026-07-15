@@ -30,7 +30,7 @@ async function execOne(cmd: { name: string; input?: Record<string, unknown> }) {
   return executor({ name: cmd.name, input: cmd.input ?? {} });
 }
 
-const app = new Elysia()
+new Elysia()
   .get("/health", () => ({ status: "ok" }))
   .post("/quit", async () => {
     setTimeout(async () => {

@@ -41,7 +41,7 @@ Underscore aliases match MCP names, such as `get_state` and `switch_tab`. `tides
 
 Managed launch is the default. TideSurf finds Chrome stable, Beta, Dev, Canary, or Chromium and uses an ephemeral debugging port. It checks `--chrome-path`, `CHROME_PATH`, `PATH`, then platform install locations. It never downloads a browser. Use `--auto-connect` to attach when possible and launch locally as a fallback, or `--connect-only` to forbid launch.
 
-Read-only mode fixes the policy for the lifetime of a session:
+Read-only policy remains fixed for the session lifetime:
 
 ```sh
 bunx @tidesurf/core --session audit --read-only get-state
@@ -94,7 +94,7 @@ SDK uploads and downloads default to the working directory and OS temporary dire
 
 ## MCP
 
-MCP remains available as a thin adapter over the same registry and executor:
+MCP is a thin adapter over the same registry and executor:
 
 ```json
 {

@@ -1,4 +1,4 @@
-import { getToolDefinitions } from "../../src/tools/definitions.js";
+import { getToolDefinitions } from "../../src/tools/registry.js";
 import {
   TOOL_REGISTRY,
   getToolSpecByCommand,

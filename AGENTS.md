@@ -11,7 +11,8 @@ TideSurf is a TypeScript library and stateful CLI that connects Chromium to agen
 ```text
 src/
   tidesurf.ts              main TideSurf class
-  cli.ts                   CLI entrypoint and MCP stdio mode
+  cli.ts                   lightweight CLI and daemon bootstrap
+  cli-program.ts           command dispatch and MCP stdio mode
   cli/                     argument parsing, browser controller, session IPC, daemon
   index.ts                 public API exports
   types.ts                 shared CDP, parser, and tool types
@@ -19,7 +20,7 @@ src/
   validation.ts            URL, selector, expression, and element ID validation
   cdp/                     Chrome launch, connection, page, tabs, retries, timeouts
   parser/                  DOM walk, classify, assign IDs, serialize, budget tokens
-  tools/                   canonical tool registry and compatibility exports
+  tools/                   canonical tool registry and executor
   mcp/                     thin optional-dependency adapter
 website/
   landing/                 TideSurf landing page
@@ -34,6 +35,7 @@ Run from the repo root unless a command says otherwise.
 bun install
 bun run build
 bun run typecheck
+bun run typecheck:examples
 bun run test
 bun run test:integration
 bun run test:bench
@@ -58,7 +60,7 @@ The website follows the design philosophy of `../mercuriusdream.github.io`.
 - Use greyscale paper fields, ink text, and restrained accent fills.
 - Prefer flat color differences over rule strokes, borders, shadows, gradients, glass, glow, or decorative chrome.
 - Keep the TideSurf name readable in the first viewport.
-- Use humane editorial rhythm: generous reading space, compact utility controls, and copy that sounds like a person wrote it.
+- Use humane editorial rhythm: generous reading space, compact utility controls, and direct, specific product language.
 - Avoid em dashes and repetitive negation chains. Explain the product directly.
 - Do not make temporary preview folders or side-spec files part of normal website work. Shape the real source files in `website/landing` and `website/docs`.
 - Landing and docs should feel related: same paper, ink, teal accent, square controls, and direct product language.

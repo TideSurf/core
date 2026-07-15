@@ -47,7 +47,7 @@ Choose a budget around the next task:
 |---|---|---|
 | Quick navigation checks | 200-400 | Links and buttons for the next action |
 | Form filling | 400-600 | Inputs, labels, and submission controls |
-| Full page understanding | 600-1000 | Headings, copy, and all controls |
-| No budget (default) | Unlimited | TideSurf returns the complete compressed page |
+| Broader page context | 600-1000 | More headings, copy, and controls from the selected page view |
+| No budget (default) | Unlimited | No token pruning; viewport, hidden-node, and mode filters still apply |
 
 Long loops can start at 300–500 tokens and grow only as the agent needs more context.

@@ -57,7 +57,7 @@ const browser = await TideSurf.connect({ port: 9222 });
 
 ```bash
 tidesurf mcp --auto-connect
-tidesurf mcp --port 9333
+tidesurf mcp --connect-only --port 9333
 ```
 
 ## Deprecation policy

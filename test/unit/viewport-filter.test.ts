@@ -1,8 +1,6 @@
 import { filterViewportOnly } from "../../src/parser/viewport-filter.js";
 import type { OSNode } from "../../src/types.js";
 
-// --- Helpers ---
-
 const makeText = (text: string, visible?: boolean): OSNode => ({
   tag: "#text",
   attributes: {},
@@ -194,16 +192,16 @@ describe("filterViewportOnly", () => {
     expect(belowSummary).toBeUndefined();
   });
 
-  // Depth limits protect the stack.
   it("handles deeply nested trees without stack overflow", () => {
-    // Create a deeply nested structure with a visible node at the bottom (within MAX_FILTER_DEPTH = 500)
-    let deepNode = makeNode("button", [makeText("Deep")], { id: "B1", visible: true });
+    let deepNode = makeNode("button", [makeText("Deep")], {
+      id: "B1",
+      visible: true,
+    });
     for (let i = 0; i < 400; i++) {
       deepNode = makeNode("div", [deepNode]);
     }
     const nodes: OSNode[] = [deepNode];
-    
-    // Should not throw
+
     const { nodes: result } = filterViewportOnly(nodes);
     expect(result.length).toBeGreaterThan(0);
   });

@@ -117,7 +117,7 @@ export class BrowserController {
     return this.opening;
   }
 
-  private commonOptions(timeout = this.config.timeout) {
+  private commonOptions(timeout: number | undefined) {
     return {
       readOnly: this.config.readOnly,
       timeout,
@@ -130,8 +130,8 @@ export class BrowserController {
   private async attach(
     host: string,
     port: number,
-    targetId?: string,
-    timeout = this.config.timeout
+    targetId: string | undefined,
+    timeout: number | undefined
   ): Promise<TideSurf> {
     const options = { ...this.commonOptions(timeout), host, port };
     const browser = targetId

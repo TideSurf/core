@@ -82,7 +82,6 @@ describe("serialize", () => {
       },
     ];
     const result = serialize(nodes);
-    // HTML entities should be escaped to prevent XSS
     expect(result).toContain("A &amp; B &lt; C &gt; D &quot;E&quot;");
   });
 
@@ -97,7 +96,6 @@ describe("serialize", () => {
       },
     ];
     const result = serialize(nodes);
-    // Script tags should be escaped
     expect(result).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
     expect(result).not.toContain("<script>");
   });
@@ -296,7 +294,6 @@ describe("serialize", () => {
     expect(result).toBe("Email:");
   });
 
-  // Input values escape quotes.
   it("escapes quotes in input values", () => {
     const nodes: OSNode[] = [
       {

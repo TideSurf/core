@@ -151,7 +151,7 @@ Resolves one current TideSurf ID and clicks it. A stale or missing ID throws `El
 type(id: string, text: string, clear?: boolean): Promise<void>
 ```
 
-Types into a text-editable input, textarea, or contenteditable element. `clear: true` replaces the current value.
+Types into a text input, textarea, or contenteditable textbox with a current TideSurf ID. `clear: true` replaces the current value.
 
 ### `select(id, value)`
 
@@ -159,7 +159,7 @@ Types into a text-editable input, textarea, or contenteditable element. `clear: 
 select(id: string, value: string): Promise<void>
 ```
 
-Selects an option by its value.
+Selects an option by value on a native `<select>`. ARIA listboxes can appear in page state but are not action targets for this method.
 
 ### `scroll(direction, amount?)`
 
@@ -347,7 +347,7 @@ One registry supplies SDK definitions, executor dispatch, CLI parsing/help, MCP 
 
 CLI underscore aliases match tool names. MCP also registers `launch_browser` as a compatibility lifecycle tool; it is not one of the 18 registry tools.
 
-The executor returns page text for state-oriented actions, formatted values for structured tools, and base64 PNG for `screenshot`. The CLI and MCP adapters convert those values for their transports.
+The executor returns page text for state actions, raw objects or arrays for structured tools, and a base64 PNG for `screenshot`. The CLI and MCP adapters format those values for their transports.
 
 ## Public helpers
 

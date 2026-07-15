@@ -154,35 +154,24 @@ const LANDMARK_TAGS = new Set([
   "aside",
 ]);
 
-/** Count interactive descendants without allocating a list of IDs. */
-export function countInteractiveChildren(node: OSNode): Record<string, number> {
+export function summarizeOffscreenNode(
+  node: OSNode,
+  textLimit: number
+): { counts: Record<string, number>; text: string } {
   const counts = emptyCounts();
+  const text = summarizeText(node.text, textLimit);
 
   const visit = (current: OSNode, depth: number): void => {
     if (depth > MAX_FILTER_DEPTH) return;
     addInteractiveId(counts, current.id);
+    if (!isFull(text, textLimit)) {
+      appendText(text, summarizeText(current.text, textLimit), textLimit);
+    }
     for (const child of current.children) visit(child, depth + 1);
   };
 
   for (const child of node.children) visit(child, 0);
-  return counts;
-}
-
-/** Collect at most `limit` graphemes, stopping before unrelated tail content. */
-export function collectTextBounded(node: OSNode, limit: number): string {
-  const text = emptyText();
-
-  const visit = (current: OSNode, depth: number): void => {
-    if (depth > MAX_FILTER_DEPTH || isFull(text, limit)) return;
-    appendText(text, summarizeText(current.text, limit), limit);
-    for (const child of current.children) {
-      visit(child, depth + 1);
-      if (isFull(text, limit)) break;
-    }
-  };
-
-  visit(node, 0);
-  return text.value;
+  return { counts, text: text.value };
 }
 
 export function interactiveSummary(counts: Record<string, number>): string {

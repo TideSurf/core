@@ -1,5 +1,5 @@
 export { TideSurf } from "./tidesurf.js";
-export { getToolDefinitions } from "./tools/definitions.js";
+export { getToolDefinitions } from "./tools/registry.js";
 export { SurfingPage } from "./cdp/page.js";
 export { TabManager } from "./cdp/tab-manager.js";
 export { discoverBrowser } from "./cdp/launcher.js";

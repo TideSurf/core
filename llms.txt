@@ -58,7 +58,7 @@ Direct tool commands, in registry order:
 17. `clipboard-write` (`clipboard_write`)
 18. `download`
 
-Use `tidesurf help <command>` for exact positionals and flags. Important state flags:
+Use `tidesurf help <command>` for exact positionals and flags. Page-state flags:
 
 - `get-state --max-tokens <n> --mode <full|minimal|interactive>`
 - `get-state --full-page` disables normal viewport filtering
@@ -75,7 +75,7 @@ Default output is readable text or pretty JSON. `--json` returns the ToolResult 
 { "success": true, "data": "..." }
 ```
 
-Exit codes: 2 usage, 3 session/browser, 4 tool failure, 5 daemon/protocol.
+Exit codes: 0 Success; 2 CLI usage or input parsing error; 3 Session or browser startup/connection error; 4 Tool execution failed; 5 Daemon authentication, transport, or protocol error.
 
 ## Browser startup
 

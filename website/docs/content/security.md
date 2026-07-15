@@ -12,7 +12,7 @@ TideSurf never downloads a browser. It automatically selects only Chrome stable,
 
 ## Read-only mode
 
-`readOnly: true` or CLI `--read-only` allows six observation tools:
+`readOnly: true` or CLI `--read-only` allows these observation tools:
 
 - `get_state`
 - `extract`
@@ -100,4 +100,4 @@ A page handles one TideSurf download operation at a time. TideSurf waits for fil
 
 ## Chromium sandbox
 
-TideSurf keeps the Chromium sandbox enabled under normal user accounts. Running as root may require Chromium's no-sandbox flags. `TIDESURF_NO_SANDBOX=1` also disables sandbox isolation and prints a security warning. Avoid both modes for untrusted pages.
+TideSurf keeps the Chromium sandbox enabled under normal user accounts. When run as root, TideSurf automatically disables Chromium sandboxing and prints a warning. `TIDESURF_NO_SANDBOX=1` does the same explicitly. Avoid both modes for untrusted pages.

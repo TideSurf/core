@@ -6,6 +6,7 @@ import { createServer, type Server } from "node:http";
 import { TideSurf } from "../../src/index.js";
 import { getTideSurfConnectionInfo } from "../../src/tidesurf.js";
 import { ElementNotFoundError } from "../../src/errors.js";
+import { canLaunchBrowser } from "../support/browser.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixturesDir = join(__dirname, "..", "fixtures");
@@ -13,19 +14,6 @@ const fixturesDir = join(__dirname, "..", "fixtures");
 let surfing: TideSurf;
 let fixtureUrls: Record<string, string> = {};
 let fixtureServer: Server | null = null;
-
-async function canLaunchBrowser(): Promise<boolean> {
-  let browser: TideSurf | null = null;
-  try {
-    browser = await TideSurf.launch({ headless: true });
-    return true;
-  } catch (error) {
-    if (process.env["CHROME_PATH"]) throw error;
-    return false;
-  } finally {
-    await browser?.close().catch(() => {});
-  }
-}
 
 const browserAvailable = await canLaunchBrowser();
 const describeBrowser = browserAvailable ? describe : describe.skip;
@@ -98,16 +86,13 @@ describeBrowser("Browser integration", () => {
     expect(state.content).toContain("# ");
     expect(state.content).toContain(">");
 
-    // Interactive elements retain IDs.
     expect(state.content).toContain("L1");
     expect(state.content).toContain("B1");
     expect(state.content).toContain("I1");
 
-    // Scripts are excluded.
     expect(state.content).not.toContain("alert");
     expect(state.content).not.toContain("<script");
 
-    // ARIA-hidden content is excluded.
     expect(state.content).not.toContain("Hidden content");
   }, 15000);
 

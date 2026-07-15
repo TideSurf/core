@@ -308,11 +308,8 @@ export function validateDownloadDirectory(
     "Download directory"
   );
 
-  if (existsSync(absolute)) {
-    const resolved = realpathSync.native(absolute);
-    ensureAllowedPath(downloadDir, allowedRoots, resolved, "Download directory");
-
-    const stats = statSync(resolved);
+  if (existingAncestor === absolute) {
+    const stats = statSync(ancestorRealPath);
     if (!stats.isDirectory()) {
       throw new ValidationError(
         `Download path must be a directory: "${downloadDir}"`

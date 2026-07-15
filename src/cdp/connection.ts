@@ -329,7 +329,6 @@ export async function navigate(
       await withTimeout(loaded, operationTimeout, "navigate:load");
     }
   } catch (err) {
-    if (err instanceof NavigationError) throw err;
     throw new NavigationError(
       url,
       err instanceof Error ? err.message : String(err),
@@ -395,9 +394,6 @@ function isRemoteObjectGone(error: unknown): boolean {
   return false;
 }
 
-/**
- * Click a node by backendNodeId
- */
 export async function clickNode(
   conn: CDPConnection,
   backendNodeId: number,

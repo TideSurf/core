@@ -137,10 +137,3 @@ export function classify(
 
   return { action: "COLLAPSE" };
 }
-
-/**
- * Check if computed state includes a specific flag
- */
-export function hasComputedState(state: string[] | undefined, flag: string): boolean {
-  return state?.includes(flag) ?? false;
-}

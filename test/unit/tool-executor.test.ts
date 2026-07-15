@@ -1,5 +1,9 @@
-import { createToolExecutor } from "../../src/tools/executor.js";
+import { createToolExecutor } from "../../src/tools/registry.js";
 import { ElementNotFoundError } from "../../src/errors.js";
+
+function mockInstance<T extends object>(value: T, readOnly = false): T {
+  return Object.assign(value, { isReadOnly: () => readOnly });
+}
 
 describe("createToolExecutor", () => {
   it("blocks evaluate in read-only mode", async () => {
@@ -10,7 +14,7 @@ describe("createToolExecutor", () => {
       getPage: () => page,
     };
 
-    const executor = createToolExecutor(instance as never, true);
+    const executor = createToolExecutor(mockInstance(instance, true) as never);
     const result = await executor({
       name: "evaluate",
       input: { expression: "document.title" },
@@ -31,7 +35,7 @@ describe("createToolExecutor", () => {
       getPage: () => page,
     };
 
-    const executor = createToolExecutor(instance as never, true);
+    const executor = createToolExecutor(mockInstance(instance, true) as never);
     const result = await executor({
       name: "clipboard_read",
       input: {},
@@ -51,7 +55,7 @@ describe("createToolExecutor", () => {
       getState: jest.fn().mockResolvedValue({ content: "switched state" }),
     };
 
-    const executor = createToolExecutor(instance as never, true);
+    const executor = createToolExecutor(mockInstance(instance, true) as never);
     const result = await executor({
       name: "switch_tab",
       input: { tabId: "tab-1" },
@@ -73,7 +77,7 @@ describe("createToolExecutor", () => {
         getPage: () => page,
       };
 
-      const executor = createToolExecutor(instance as never, false);
+      const executor = createToolExecutor(mockInstance(instance) as never);
       const result = await executor({
         name: "click",
         input: { id: "B1" },
@@ -96,7 +100,7 @@ describe("createToolExecutor", () => {
         getPage: () => page,
       };
 
-      const executor = createToolExecutor(instance as never, false);
+      const executor = createToolExecutor(mockInstance(instance) as never);
       const result = await executor({
         name: "click",
         input: { id: "B1" },
@@ -121,7 +125,7 @@ describe("createToolExecutor", () => {
         getPage: () => page,
       };
 
-      const executor = createToolExecutor(instance as never, false);
+      const executor = createToolExecutor(mockInstance(instance) as never);
       const result = await executor({
         name: "click",
         input: { id: "B1" },
@@ -141,7 +145,7 @@ describe("createToolExecutor", () => {
         getPage: () => page,
       };
 
-      const executor = createToolExecutor(instance as never, false);
+      const executor = createToolExecutor(mockInstance(instance) as never);
       const result = await executor({
         name: "click",
         input: { id: "B1" },
@@ -164,7 +168,7 @@ describe("createToolExecutor", () => {
         getPage: () => page,
       };
 
-      const executor = createToolExecutor(instance as never, false);
+      const executor = createToolExecutor(mockInstance(instance) as never);
       const result = await executor({
         name: "click",
         input: { id: "invalid-id" },
@@ -183,7 +187,7 @@ describe("createToolExecutor", () => {
         getState: jest.fn(),
       };
 
-      const executor = createToolExecutor(instance as never, false);
+      const executor = createToolExecutor(mockInstance(instance) as never);
       const result = await executor({
         name: "navigate",
         input: { url: "not-a-url" },
@@ -199,7 +203,7 @@ describe("createToolExecutor", () => {
         getState: jest.fn().mockResolvedValue({ content: "test" }),
       };
 
-      const executor = createToolExecutor(instance as never, false);
+      const executor = createToolExecutor(mockInstance(instance) as never);
       const result = await executor({
         name: "get_state",
         input: { maxTokens: -1 },
@@ -215,7 +219,7 @@ describe("createToolExecutor", () => {
         getPage: () => page,
       };
 
-      const executor = createToolExecutor(instance as never, false);
+      const executor = createToolExecutor(mockInstance(instance) as never);
       const result = await executor({
         name: "type",
         input: { id: "I1" },
@@ -231,7 +235,7 @@ describe("createToolExecutor", () => {
       type: jest.fn().mockResolvedValue(undefined),
       clipboardWrite: jest.fn().mockResolvedValue(undefined),
     };
-    const instance = { getPage: () => page };
+    const instance = mockInstance({ getPage: () => page });
     const executor = createToolExecutor(instance as never);
 
     const typed = await executor({
@@ -250,7 +254,7 @@ describe("createToolExecutor", () => {
   });
 
   it("generates unknown-tool help from the registry", async () => {
-    const executor = createToolExecutor({} as never);
+    const executor = createToolExecutor(mockInstance({}) as never);
     const result = await executor({ name: "missing", input: {} });
 
     expect(result.success).toBe(false);

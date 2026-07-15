@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "declaration": false,
+    "noEmit": true,
+    "rootDir": ".",
+    "types": ["bun"]
+  },
+  "include": ["examples/**/*.ts", "src/cdp/chrome-remote-interface.d.ts"],
+  "exclude": ["node_modules", "dist", "test"]
+}

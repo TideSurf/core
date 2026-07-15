@@ -23,7 +23,7 @@ if (!model) {
 const surfing = await TideSurf.launch({ headless: true });
 const executor = surfing.getToolExecutor();
 
-// Convert our tool definitions to Anthropic format
+// Anthropic names the JSON Schema field input_schema.
 const tools = surfing.getToolDefinitions().map((t) => ({
   name: t.name,
   description: t.description,
@@ -37,37 +37,41 @@ const messages: Anthropic.MessageParam[] = [
 console.log(`\nTask: ${task}\n`);
 
 try {
-  // Agent loop
   for (let step = 0; step < 20; step++) {
     const response = await client.messages.create({
       model,
       max_tokens: 4096,
-      system:
-        "You are a web browsing agent. Use the provided tools to navigate and interact with web pages. " +
-        "Always call get_state first to see the page. Be concise in your responses.",
+      system: "Call get_state before choosing current IDs. Use the tools to complete the task, then return a concise answer.",
       tools,
       messages,
     });
 
-    // Collect assistant text + tool calls
     messages.push({ role: "assistant", content: response.content });
 
-    // Print any text the model says
     for (const block of response.content) {
       if (block.type === "text") {
         console.log(`Agent: ${block.text}`);
       }
     }
 
-    // If the model is done (no tool use), break
-    if (response.stop_reason === "end_turn") break;
+    const toolCalls = response.content.filter(
+      (block): block is Anthropic.ToolUseBlock => block.type === "tool_use"
+    );
+    if (toolCalls.length === 0) {
+      if (
+        response.stop_reason === "end_turn" ||
+        response.stop_reason === "stop_sequence"
+      ) {
+        break;
+      }
+      throw new Error(
+        `Agent stopped without a tool call: ${response.stop_reason ?? "unknown"}`
+      );
+    }
 
-    // Execute tool calls
     const toolResults: Anthropic.ToolResultBlockParam[] = [];
 
-    for (const block of response.content) {
-      if (block.type !== "tool_use") continue;
-
+    for (const block of toolCalls) {
       console.log(`  → ${block.name}(${JSON.stringify(block.input)})`);
 
       const result = await executor({

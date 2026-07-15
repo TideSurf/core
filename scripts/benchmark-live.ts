@@ -1,11 +1,4 @@
 #!/usr/bin/env bun
-/**
- * Live-site token benchmark — compares raw HTML vs TideSurf compressed output
- * on real-world pages to demonstrate compression ratios.
- *
- * Usage: bun scripts/benchmark-live.ts
- */
-
 import { TideSurf } from "../src/index.js";
 import { estimateTokens } from "../src/parser/token-budget.js";
 
@@ -44,9 +37,11 @@ const INTERSTITIAL_TEXT = [
   /verify (?:that )?you are human/i,
 ];
 
-const MIN_RAW_TOKENS = 1_000;
-const MIN_COMPRESSED_TOKENS = 100;
-const MIN_ACTION_IDS = 3;
+export const LIVE_BENCHMARK_THRESHOLDS = {
+  rawTokens: 1_000,
+  tideSurfTokens: 100,
+  actionIds: 3,
+} as const;
 
 class RejectedSampleError extends Error {}
 
@@ -61,78 +56,109 @@ function rejectInvalidSample(
   if (INTERSTITIAL_TEXT.some((pattern) => pattern.test(sample))) {
     throw new RejectedSampleError("interstitial or bot challenge detected");
   }
-  if (rawTokens < MIN_RAW_TOKENS) {
+  if (rawTokens < LIVE_BENCHMARK_THRESHOLDS.rawTokens) {
     throw new RejectedSampleError(
-      `rendered DOM is too small (${rawTokens} < ${MIN_RAW_TOKENS} tokens)`
+      `rendered DOM is too small (${rawTokens} < ${LIVE_BENCHMARK_THRESHOLDS.rawTokens} tokens)`
     );
   }
-  if (compressedTokens < MIN_COMPRESSED_TOKENS) {
+  if (compressedTokens < LIVE_BENCHMARK_THRESHOLDS.tideSurfTokens) {
     throw new RejectedSampleError(
-      `TideSurf output is too small (${compressedTokens} < ${MIN_COMPRESSED_TOKENS} tokens)`
+      `TideSurf output is too small (${compressedTokens} < ${LIVE_BENCHMARK_THRESHOLDS.tideSurfTokens} tokens)`
     );
   }
-  if (interactive < MIN_ACTION_IDS) {
+  if (interactive < LIVE_BENCHMARK_THRESHOLDS.actionIds) {
     throw new RejectedSampleError(
-      `too few action IDs (${interactive} < ${MIN_ACTION_IDS})`
+      `too few action IDs (${interactive} < ${LIVE_BENCHMARK_THRESHOLDS.actionIds})`
     );
   }
 }
 
-async function main() {
+export function aggregateLiveResults(
+  results: readonly Pick<Result, "rawTokens" | "tideSurfTokens" | "ms">[]
+): {
+  avgMs: number;
+  totalRaw: number;
+  totalCompressed: number;
+  ratio: number;
+  reduction: number;
+} {
+  if (results.length === 0) {
+    throw new Error("Cannot aggregate an empty benchmark result set");
+  }
+  const totalRaw = results.reduce((sum, result) => sum + result.rawTokens, 0);
+  const totalCompressed = results.reduce(
+    (sum, result) => sum + result.tideSurfTokens,
+    0
+  );
+  return {
+    avgMs: results.reduce((sum, result) => sum + result.ms, 0) / results.length,
+    totalRaw,
+    totalCompressed,
+    ratio: totalRaw / totalCompressed,
+    reduction: (1 - totalCompressed / totalRaw) * 100,
+  };
+}
+
+async function main(): Promise<void> {
   console.log("Launching browser...\n");
   const surf = await TideSurf.launch({ headless: true });
-
   const results: Result[] = [];
+  const failures: string[] = [];
 
-  for (const site of SITES) {
-    process.stdout.write(`  ${site.name.padEnd(18)} `);
-    try {
-      await surf.navigate(site.url);
+  try {
+    for (const site of SITES) {
+      process.stdout.write(`  ${site.name.padEnd(18)} `);
+      try {
+        await surf.navigate(site.url);
 
-      const rawHtml = await surf.getPage().evaluate("document.documentElement.outerHTML") as string;
-      const rawTokens = estimateTokens(rawHtml);
+        const rawHtml = await surf.getPage().evaluate("document.documentElement.outerHTML") as string;
+        const rawTokens = estimateTokens(rawHtml);
 
-      // Compare the complete rendered page with complete TideSurf state. The
-      // production default is viewport-filtered, which is not a fair full-DOM
-      // compression denominator.
-      const start = performance.now();
-      const state = await surf.getState({ viewport: false });
-      const ms = performance.now() - start;
-      const tideSurfTokens = estimateTokens(state.content);
+        // Use full-page visible state so both sides cover the same rendered page.
+        const start = performance.now();
+        const state = await surf.getState({ viewport: false });
+        const ms = performance.now() - start;
+        const tideSurfTokens = estimateTokens(state.content);
 
-      const interactive = state.nodeMap.size;
-      rejectInvalidSample(
-        state.title,
-        state.content,
-        rawTokens,
-        tideSurfTokens,
-        interactive
-      );
-      const ratio = rawTokens / tideSurfTokens;
-      const reduction = (1 - tideSurfTokens / rawTokens) * 100;
+        const interactive = state.nodeMap.size;
+        rejectInvalidSample(
+          state.title,
+          state.content,
+          rawTokens,
+          tideSurfTokens,
+          interactive
+        );
+        const ratio = rawTokens / tideSurfTokens;
+        const reduction = (1 - tideSurfTokens / rawTokens) * 100;
 
-      results.push({ name: site.name, url: site.url, rawTokens, tideSurfTokens, ratio, reduction, interactive, ms });
+        results.push({ name: site.name, url: site.url, rawTokens, tideSurfTokens, ratio, reduction, interactive, ms });
 
-      console.log(
-        `${rawTokens.toLocaleString().padStart(8)} → ${tideSurfTokens.toLocaleString().padStart(6)} tok` +
-        `  (${reduction.toFixed(0)}%, ${ratio.toFixed(1)}x)` +
-        `  ${interactive} IDs  ${ms.toFixed(0)}ms`
-      );
-    } catch (err) {
-      const label = err instanceof RejectedSampleError ? "SKIPPED" : "FAILED";
-      console.log(`${label}: ${err instanceof Error ? err.message : String(err)}`);
+        console.log(
+          `${rawTokens.toLocaleString().padStart(8)} → ${tideSurfTokens.toLocaleString().padStart(6)} tok` +
+          `  (${reduction.toFixed(0)}%, ${ratio.toFixed(1)}x)` +
+          `  ${interactive} IDs  ${ms.toFixed(0)}ms`
+        );
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        if (error instanceof RejectedSampleError) {
+          console.log(`SKIPPED: ${detail}`);
+        } else {
+          failures.push(`${site.name}: ${detail}`);
+          console.log(`FAILED: ${detail}`);
+        }
+      }
     }
+  } finally {
+    await surf.close();
   }
 
-  await surf.close();
-
-  if (results.length === 0) return;
-
-  const avgMs = results.reduce((s, r) => s + r.ms, 0) / results.length;
-  const totalRaw = results.reduce((s, r) => s + r.rawTokens, 0);
-  const totalCompressed = results.reduce((s, r) => s + r.tideSurfTokens, 0);
-  const aggregateRatio = totalRaw / totalCompressed;
-  const aggregateReduction = (1 - totalCompressed / totalRaw) * 100;
+  const {
+    avgMs,
+    totalRaw,
+    totalCompressed,
+    ratio: aggregateRatio,
+    reduction: aggregateReduction,
+  } = aggregateLiveResults(results);
 
   console.log("\n" + "═".repeat(80));
   console.log("  TIDESURF LIVE BENCHMARK");
@@ -173,20 +199,14 @@ async function main() {
   );
   console.log("═".repeat(80));
 
-  console.log("\n\n--- MARKDOWN (for README) ---\n");
-  console.log("| Site | Raw HTML | TideSurf | Reduction | Ratio |");
-  console.log("|------|----------|----------|-----------|-------|");
-  for (const r of results) {
-    console.log(
-      `| ${r.name} | ${r.rawTokens.toLocaleString()} tokens | ${r.tideSurfTokens.toLocaleString()} tokens | ${r.reduction.toFixed(0)}% | **${r.ratio.toFixed(0)}x** |`
-    );
+  if (failures.length > 0) {
+    throw new Error(`Live benchmark failures:\n${failures.join("\n")}`);
   }
-  console.log(
-    `| **Total / aggregate** | ${totalRaw.toLocaleString()} tokens | ${totalCompressed.toLocaleString()} tokens | **${aggregateReduction.toFixed(0)}%** | **${aggregateRatio.toFixed(1)}x** |`
-  );
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+if (import.meta.main) {
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}

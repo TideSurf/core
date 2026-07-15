@@ -7,8 +7,12 @@ import {
   type ParsedInvocation,
 } from "./cli/args.js";
 import { commandHelp, generalHelp } from "./cli/help.js";
+import {
+  CLI_EXIT_CODES,
+  type LifecycleCommandName,
+} from "./cli/metadata.js";
 import type { SessionState } from "./cli/session.js";
-import type { McpServerLike } from "./mcp/index.js";
+import type { McpServerLike } from "./mcp/adapter.js";
 import {
   getToolDefinitions,
   getToolSpec,
@@ -22,10 +26,6 @@ import {
 import type { ToolResult } from "./types.js";
 import { VERSION } from "./version.js";
 
-const EXIT_USAGE = 2;
-const EXIT_BROWSER = 3;
-const EXIT_TOOL = 4;
-const EXIT_PROTOCOL = 5;
 const DAEMON_STARTUP_TIMEOUT = 10_000;
 const SESSION_STATUS_TIMEOUT = 500;
 
@@ -60,17 +60,19 @@ function errorExitCode(error: unknown): number {
   const code = typeof error === "object" && error !== null
     ? (error as NodeJS.ErrnoException).code ?? ""
     : "";
-  if (error instanceof CliUsageError) return EXIT_USAGE;
-  if (name === "SessionStateError") return EXIT_BROWSER;
-  if (/Chrome|CDPConnection|Navigation/.test(name)) return EXIT_BROWSER;
+  if (error instanceof CliUsageError) return CLI_EXIT_CODES.usage.code;
+  if (name === "SessionStateError") return CLI_EXIT_CODES.browser.code;
+  if (/Chrome|CDPConnection|Navigation/.test(name)) {
+    return CLI_EXIT_CODES.browser.code;
+  }
   if (
     name === "SessionProtocolError" ||
     /Protocol|Socket|ECONN|EPIPE/.test(name) ||
     /^(?:ECONN|EPIPE|ENOENT)/.test(code)
   ) {
-    return EXIT_PROTOCOL;
+    return CLI_EXIT_CODES.protocol.code;
   }
-  return EXIT_TOOL;
+  return CLI_EXIT_CODES.tool.code;
 }
 
 function printError(error: unknown): void {
@@ -184,7 +186,7 @@ function printToolResult(result: ToolResult, json: boolean): number {
   } else {
     writeLine(result.error ?? "Tool failed", process.stderr);
   }
-  return result.success ? 0 : EXIT_TOOL;
+  return result.success ? CLI_EXIT_CODES.success.code : CLI_EXIT_CODES.tool.code;
 }
 
 async function runTool(invocation: ParsedInvocation): Promise<number> {
@@ -347,12 +349,13 @@ async function inspect(invocation: ParsedInvocation): Promise<number> {
   const denied = readOnlyFailure(policy, navigationSpec);
   if (denied) return printToolResult(denied, invocation.json);
   preflightToolInput(navigationSpec, { url }, policy);
-  const input: Record<string, unknown> = {};
-  if (invocation.values["maxTokens"] !== undefined) input["maxTokens"] = invocation.values["maxTokens"];
-  if (invocation.values["mode"] !== undefined) input["mode"] = invocation.values["mode"];
-  if (invocation.values["fullPage"]) input["viewport"] = false;
-  if (invocation.values["includeHidden"] !== undefined) input["includeHidden"] = invocation.values["includeHidden"];
-  preflightToolInput(getToolSpec("get_state")!, input, policy);
+  const stateSpec = getToolSpec("get_state")!;
+  const input = buildToolInput({
+    ...invocation,
+    tool: stateSpec,
+    positionals: [],
+  });
+  preflightToolInput(stateSpec, input, policy);
   const { BrowserController } = await import("./cli/browser-controller.js");
   const controller = new BrowserController(invocation.sessionConfig);
   try {
@@ -370,8 +373,12 @@ async function runMcp(invocation: ParsedInvocation): Promise<number> {
   const mcpPath = "@modelcontextprotocol/sdk/server/mcp.js";
   const stdioPath = "@modelcontextprotocol/sdk/server/stdio.js";
   const zodPath = "zod";
+  type McpRuntimeServer = McpServerLike & {
+    connect(transport: unknown): Promise<void>;
+    close(): Promise<void>;
+  };
   let externalModules: [
-    { McpServer: new (info: { name: string; version: string }) => unknown },
+    { McpServer: new (info: { name: string; version: string }) => McpRuntimeServer },
     { StdioServerTransport: new () => unknown },
     { z: { fromJSONSchema(schema: unknown): unknown } },
   ];
@@ -393,13 +400,13 @@ async function runMcp(invocation: ParsedInvocation): Promise<number> {
     { createZodInputSchemaFactory, registerMcpTools },
     { BrowserController },
   ] = await Promise.all([
-    import("./mcp/index.js"),
+    import("./mcp/adapter.js"),
     import("./cli/browser-controller.js"),
   ]);
   const server = new McpServer({ name: "tidesurf", version: VERSION });
   const controller = new BrowserController(invocation.sessionConfig);
   registerMcpTools({
-    server: server as McpServerLike,
+    server,
     coordinator: controller,
     createInputSchema: createZodInputSchemaFactory(z),
     readOnly: invocation.sessionConfig.readOnly,
@@ -409,7 +416,7 @@ async function runMcp(invocation: ParsedInvocation): Promise<number> {
   const close = () => {
     closingPromise ??= Promise.all([
       controller.close(),
-      (server as { close?(): Promise<void> }).close?.() ?? Promise.resolve(),
+      server.close(),
     ]).then(() => undefined);
     return closingPromise;
   };
@@ -424,7 +431,7 @@ async function runMcp(invocation: ParsedInvocation): Promise<number> {
     inputEnded = true;
     void close().catch((error) => {
       printError(error);
-      process.exitCode = EXIT_PROTOCOL;
+      process.exitCode = CLI_EXIT_CODES.protocol.code;
     });
   };
   process.once("SIGINT", () => shutdown(130));
@@ -432,9 +439,7 @@ async function runMcp(invocation: ParsedInvocation): Promise<number> {
   process.stdin.once("end", closeOnInputEnd);
   process.stdin.once("close", closeOnInputEnd);
   try {
-    await (server as { connect(transport: unknown): Promise<void> }).connect(
-      new StdioServerTransport()
-    );
+    await server.connect(new StdioServerTransport());
   } catch (error) {
     try {
       await close();
@@ -464,6 +469,21 @@ function showHelp(invocation: ParsedInvocation): number {
   return 0;
 }
 
+type LifecycleHandler = (
+  invocation: ParsedInvocation
+) => number | Promise<number>;
+
+const LIFECYCLE_HANDLERS = {
+  start: startSession,
+  status: statusSession,
+  stop: stopSession,
+  tools: listTools,
+  call: callTool,
+  inspect,
+  mcp: runMcp,
+  help: showHelp,
+} satisfies Record<LifecycleCommandName, LifecycleHandler>;
+
 async function dispatch(invocation: ParsedInvocation): Promise<number> {
   if (invocation.version) {
     writeLine(VERSION);
@@ -473,18 +493,9 @@ async function dispatch(invocation: ParsedInvocation): Promise<number> {
     writeLine(generalHelp());
     return 0;
   }
-  if (invocation.help || invocation.command === "help") return showHelp(invocation);
+  if (invocation.help) return showHelp(invocation);
   if (invocation.tool) return runTool(invocation);
-  switch (invocation.command) {
-    case "start": return startSession(invocation);
-    case "status": return statusSession(invocation);
-    case "stop": return stopSession(invocation);
-    case "tools": return listTools(invocation);
-    case "call": return callTool(invocation);
-    case "inspect": return inspect(invocation);
-    case "mcp": return runMcp(invocation);
-    default: throw unknownCommandError(invocation.command);
-  }
+  return LIFECYCLE_HANDLERS[invocation.command as LifecycleCommandName](invocation);
 }
 
 async function main(argv: string[]): Promise<number> {

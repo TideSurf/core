@@ -10,6 +10,7 @@ import { readFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { TideSurf } from "../../src/index.js";
 import { estimateTokens } from "../../src/parser/token-budget.js";
+import { canLaunchBrowser } from "../support/browser.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixturesDir = join(__dirname, "..", "fixtures");
@@ -62,19 +63,6 @@ const expectedFixtures = new Map(
 function countInteractiveIds(content: string): number {
   const matches = content.match(/\b[LBISTFD]\d+\b/g);
   return matches ? matches.length : 0;
-}
-
-async function canLaunchBrowser(): Promise<boolean> {
-  let browser: TideSurf | null = null;
-  try {
-    browser = await TideSurf.launch({ headless: true });
-    return true;
-  } catch (error) {
-    if (process.env["CHROME_PATH"]) throw error;
-    return false;
-  } finally {
-    await browser?.close().catch(() => {});
-  }
 }
 
 const browserAvailable = await canLaunchBrowser();

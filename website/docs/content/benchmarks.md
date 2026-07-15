@@ -46,14 +46,14 @@ bun scripts/benchmark-live.ts
 bun run test:bench
 ```
 
-The live diagnostic covers eight sites by default. It uses `viewport: false` so both sides represent the complete page. A sample is skipped when it is an interstitial or bot challenge, has fewer than 1,000 rendered tokens, has fewer than 100 TideSurf tokens, or has fewer than 3 action IDs. The summary divides total rendered tokens by total TideSurf tokens; it does not average per-site ratios. Live numbers change with page content and bot policy, so do not copy them into release claims without a dated rerun. Unit benchmarks use trusted local HTTP fixtures under the normal navigation policy.
+The live diagnostic covers eight sites by default. It uses `viewport: false` so offscreen visible content remains on the TideSurf side of the comparison. A sample is skipped when it is an interstitial or bot challenge, has fewer than 1,000 rendered tokens, has fewer than 100 TideSurf tokens, or has fewer than 3 action IDs. The summary divides total rendered tokens by total TideSurf tokens; it does not average per-site ratios. Live numbers change with page content and bot policy, so do not copy them into release claims without a dated rerun. Unit benchmarks use trusted local HTTP fixtures under the normal navigation policy.
 
 ## Methodology
 
 - **Browser:** Headless Chrome via CDP (same as production usage)
-- **Token estimation:** `cl100k_base`-approximate character-based estimator (4 chars ≈ 1 token)
+- **Token estimation:** Four-character heuristic (≈4 characters per token); no model tokenizer runs
 - **Raw HTML:** `document.documentElement.outerHTML` after full page load
-- **TideSurf output:** `getState({ viewport: false }).content` with no token budget limit for the live full-DOM comparison; local acceptance tests exercise the production viewport default separately
+- **TideSurf output:** `getState({ viewport: false }).content` with no token budget limit for the live full-page visible-state comparison; local acceptance tests exercise the production viewport default separately
 - **Parse time:** Wall-clock time for `getState()` call only (excludes navigation)
 
 Fixture results are deterministic for a given parser revision. Live results vary with content, geography, authentication, experiments, and anti-automation pages.

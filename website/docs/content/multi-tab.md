@@ -43,13 +43,13 @@ await page.click("B1");
 
 ## Tab lifecycle
 
-Tabs persist until `closeTab()` or `browser.close()`. Close unused tabs to release resources.
+TideSurf tracks each tab until `closeTab()` or `browser.close()`. Closing a managed instance stops its owned browser and tabs. Closing an attached instance only disconnects; the external tabs remain open.
 
 Closing a tab discards its state and invalidates its ID. A later `switchTab()` with that ID throws an error.
 
 ## Tool definitions for multi-tab
 
-The LLM tool surface includes four tab operations:
+The agent tool surface includes four tab operations:
 
 | Tool | Parameters | What it does |
 |---|---|---|

@@ -1,12 +1,9 @@
 import {
-  collectTextBounded,
   filterInteractive,
   filterMinimal,
 } from "../../src/parser/mode-filter.js";
 import { serialize } from "../../src/parser/serializer.js";
 import type { OSNode } from "../../src/types.js";
-
-// --- Helpers ---
 
 const makeText = (text: string): OSNode => ({
   tag: "#text",
@@ -27,8 +24,6 @@ const makeNode = (
   text: opts?.text,
   visible: opts?.visible,
 });
-
-// --- filterInteractive ---
 
 describe("filterInteractive", () => {
   it("truncates labels without splitting a grapheme", () => {
@@ -70,10 +65,8 @@ describe("filterInteractive", () => {
     const result = filterInteractive(nodes);
     expect(result).toHaveLength(1);
     expect(result[0].tag).toBe("form");
-    // Ancestor node should not have the text child
     const hasTextChild = result[0].children.some((c) => c.tag === "#text");
     expect(hasTextChild).toBe(false);
-    // But interactive child should survive
     const button = result[0].children.find((c) => c.id === "B1");
     expect(button).toBeDefined();
   });
@@ -104,7 +97,6 @@ describe("filterInteractive", () => {
     ];
     const result = filterInteractive(nodes);
     expect(result).toHaveLength(1);
-    // Drill down to find the link
     const json = JSON.stringify(result);
     expect(json).toContain('"id":"L1"');
     expect(json).toContain("Home");
@@ -143,8 +135,6 @@ describe("filterInteractive", () => {
   });
 });
 
-// --- filterMinimal ---
-
 describe("filterMinimal", () => {
   it("truncates summaries without splitting a grapheme", () => {
     const expected = `${"a".repeat(99)}😀`;
@@ -163,7 +153,6 @@ describe("filterMinimal", () => {
     expect(result).toHaveLength(1);
     expect(result[0].tag).toBe("heading");
     expect(result[0].text).toContain("Welcome to the site");
-    // Landmark nodes should have no children (flattened to summary)
     expect(result[0].children).toHaveLength(0);
   });
 
@@ -253,7 +242,6 @@ describe("filterMinimal", () => {
       makeNode("heading", [makeText(longText)]),
     ];
     const result = filterMinimal(nodes);
-    // The text portion (before any interactive summary) should be at most 100 chars
     expect(result[0].text!.length).toBeLessThanOrEqual(100);
   });
 
@@ -288,45 +276,29 @@ describe("filterMinimal", () => {
     ];
     const result = filterMinimal(nodes);
     expect(result[0].text).toContain("1 link");
-    // Should NOT say "1 links"
     expect(result[0].text).not.toMatch(/1 links/);
   });
 
-  // Depth limits protect the stack.
   it("handles deeply nested trees without stack overflow (filterInteractive)", () => {
-    // Create a deeply nested structure (within MAX_FILTER_DEPTH = 500)
     let deepNode = makeNode("button", [makeText("Deep")], { id: "B1" });
     for (let i = 0; i < 400; i++) {
       deepNode = makeNode("div", [deepNode]);
     }
     const nodes: OSNode[] = [deepNode];
-    
-    // Should not throw
+
     const result = filterInteractive(nodes);
     expect(result.length).toBeGreaterThan(0);
     expect(result[0].children.length).toBeGreaterThan(0);
   });
 
   it("handles deeply nested trees without stack overflow (filterMinimal)", () => {
-    // Create a deeply nested structure with landmarks (within MAX_FILTER_DEPTH = 500)
     let deepNode = makeNode("nav", [makeText("Navigation")]);
     for (let i = 0; i < 400; i++) {
       deepNode = makeNode("div", [deepNode]);
     }
     const nodes: OSNode[] = [deepNode];
-    
-    // Should not throw
+
     const result = filterMinimal(nodes);
-    // Landmark should still be found despite deep nesting
-    expect(result.some(n => n.tag === "nav")).toBe(true);
-  });
-});
-
-describe("collectTextBounded", () => {
-  it("stops at a grapheme boundary", () => {
-    const expected = `${"a".repeat(99)}😀`;
-    const node = makeNode("main", [makeText(`${expected}tail`)]);
-
-    expect(collectTextBounded(node, 100)).toBe(expected);
+    expect(result.some((node) => node.tag === "nav")).toBe(true);
   });
 });

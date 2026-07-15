@@ -42,7 +42,7 @@ FORM F1
 
 ## Element ID scheme
 
-Every interactive element receives a short ID for actions such as `click("B1")` and `type("I1", "query")`. Its prefix identifies the element type:
+Supported controls and selected structural containers receive short IDs. Control IDs identify targets for compatible actions such as `click("B1")` and `type("I1", "query")`. Structural IDs preserve relationships and can anchor search results; they do not imply a matching form, table, or dialog action. The prefix identifies the element type:
 
 | Prefix | Element type | Example |
 |---|---|---|
@@ -143,9 +143,9 @@ Inputs display their validation constraints inline:
 ```
 I1 ~Placeholder ="value"
 I2:number ~Amount ="10" min=0 max=100 step=5
-I3:text ~Code ="" pattern=[A-Z]{3}
+I3:text ~Code pattern=[A-Z]{3}
 I4 ~Notes ="..." readonly
-I5 ~Email ="" required
+I5 ~Email required
 I6:checkbox checked
 ```
 
@@ -172,7 +172,8 @@ TideSurf checks computed styles before serialization:
 |---|---|
 | `display` | `none` |
 | `visibility` | `hidden` or `collapse` |
-| `opacity` | `0` |
+| `content-visibility` | `hidden` |
+| `opacity` | Below `0.01` |
 | `clip-path` | Element is clipped to zero area |
 | `pointer-events` | `none` (element is marked as inert/`~~strikethrough~~` instead of removed) |
 

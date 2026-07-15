@@ -1,13 +1,13 @@
 # Contributing to TideSurf
 
-Thanks for your interest in contributing.
-
 ## Setup
 
 ```bash
 git clone https://github.com/TideSurf/core.git
 cd core
 bun install
+bun install --cwd website/landing
+bun install --cwd website/docs
 ```
 
 ## Development
