@@ -38,6 +38,7 @@ jobs:
       - run: bun run verify:release
         env:
           CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
+          TIDESURF_NO_SANDBOX: "1"
       - run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

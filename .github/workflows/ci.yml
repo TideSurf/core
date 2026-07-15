@@ -53,6 +53,7 @@ jobs:
       - run: bun run test:integration
         env:
           CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
+          TIDESURF_NO_SANDBOX: "1"
 
   cross-platform-runtime:
     strategy:
@@ -108,6 +109,7 @@ jobs:
       - run: bun run test:bench
         env:
           CHROME_PATH: ${{ steps.setup-chrome.outputs.chrome-path }}
+          TIDESURF_NO_SANDBOX: "1"
       - run: bun run build
       - run: node dist/cli.js --version
       - run: bun dist/cli.js --version

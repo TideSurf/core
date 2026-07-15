@@ -116,7 +116,11 @@ describeBench("Compression benchmarks", () => {
       pageFiles.map((name) => [name, `http://127.0.0.1:${address.port}/${name}`] as const)
     );
 
-    surfing = await TideSurf.launch({ headless: true, allowLocalhost: true });
+    surfing = await TideSurf.launch({
+      headless: true,
+      allowLocalhost: true,
+      defaultViewport: { width: 756, height: 469 },
+    });
   }, 30000);
 
   afterAll(async () => {

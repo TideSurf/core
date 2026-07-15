@@ -625,7 +625,7 @@ setInterval(() => {}, 1000);
         await launchChrome({
           chromePath: fakeChrome,
           userDataDir: profile,
-          timeout: 500,
+          timeout: 2_000,
         });
       } catch (error) {
         failure = error;
