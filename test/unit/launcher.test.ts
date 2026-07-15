@@ -376,7 +376,7 @@ describe("CDP discovery", () => {
     const server = createDevToolsServer("/devtools/browser/profile-browser", [
       { id: "profile-page", type: "page" },
     ]);
-    const port = await listen(server, "localhost");
+    const port = await listen(server, "127.0.0.1");
     const profile = mkdtempSync(join(tmpdir(), "tidesurf-active-profile-"));
     writeFileSync(
       join(profile, "DevToolsActivePort"),
@@ -385,7 +385,7 @@ describe("CDP discovery", () => {
     try {
       await expect(
         discoverActiveBrowser({ userDataDir: profile, timeout: 500 })
-      ).resolves.toEqual({ host: "localhost", port, targetId: "profile-page" });
+      ).resolves.toEqual({ host: "127.0.0.1", port, targetId: "profile-page" });
     } finally {
       await closeServer(server);
       rmSync(profile, { recursive: true, force: true });
@@ -396,7 +396,7 @@ describe("CDP discovery", () => {
     const server = createDevToolsServer("/devtools/browser/current-browser", [
       { id: "other-page", type: "page" },
     ]);
-    const port = await listen(server, "localhost");
+    const port = await listen(server, "127.0.0.1");
     const profile = mkdtempSync(join(tmpdir(), "tidesurf-stale-profile-"));
     writeFileSync(
       join(profile, "DevToolsActivePort"),
@@ -481,7 +481,7 @@ describe("managed launch failures", () => {
 
   it("keeps an active profile marker when the endpoint has no page target", async () => {
     const server = createDevToolsServer("/devtools/browser/active", []);
-    const port = await listen(server, "localhost");
+    const port = await listen(server, "127.0.0.1");
     const root = mkdtempSync(join(tmpdir(), "tidesurf-active-empty-profile-"));
     const profile = join(root, "profile");
     const sentinel = join(root, "launched");
@@ -516,7 +516,7 @@ describe("managed launch failures", () => {
       response.writeHead(503, { "content-type": "text/plain" });
       response.end("unavailable");
     });
-    const port = await listen(server, "localhost");
+    const port = await listen(server, "127.0.0.1");
     const root = mkdtempSync(join(tmpdir(), "tidesurf-unverified-profile-"));
     const profile = join(root, "profile");
     const sentinel = join(root, "launched");
@@ -551,7 +551,7 @@ describe("managed launch failures", () => {
     const server = createDevToolsServer("/devtools/browser/started", [
       { id: "started-page", type: "page" },
     ]);
-    const port = await listen(server, "localhost");
+    const port = await listen(server, "127.0.0.1");
     const root = mkdtempSync(join(tmpdir(), "tidesurf-transient-marker-"));
     const profile = join(root, "profile");
     const fakeChrome = join(root, "fake-chrome");
@@ -596,7 +596,7 @@ setInterval(() => {}, 1000);
     const server = createDevToolsServer("/devtools/browser/other", [
       { id: "other-page", type: "page" },
     ]);
-    const port = await listen(server, "localhost");
+    const port = await listen(server, "127.0.0.1");
     const root = mkdtempSync(join(tmpdir(), "tidesurf-launch-identity-"));
     const profile = join(root, "profile");
     const fakeChrome = join(root, "fake-chrome");

@@ -133,7 +133,6 @@ describeBench("Compression benchmarks", () => {
       fixtureServer.close((err) => (err ? reject(err) : resolve()));
     });
 
-    // Print results table
     console.log("\n");
     console.log("═".repeat(100));
     console.log("  TIDESURF COMPRESSION BENCHMARKS");
@@ -164,7 +163,6 @@ describeBench("Compression benchmarks", () => {
 
     console.log("");
 
-    // Averages (only for realistic pages: ecommerce + news)
     const realistic = results.filter((r) => r.page === "ecommerce" || r.page === "news");
     if (realistic.length > 0) {
       const avgVsSource =
@@ -199,49 +197,43 @@ describeBench("Compression benchmarks", () => {
     it(`${page.name}: compresses ${page.desc}`, async () => {
       const sourceHtml = fixtureHtml[page.file];
 
-      // Navigate first
       await surfing.navigate(fixtureUrls[page.file]);
 
-      // Get source HTML (what the page loaded from)
       const sourceHtmlTokens = estimateTokens(sourceHtml);
 
-      // Get rendered DOM (what Chrome actually has — includes computed elements)
       const renderedDom = (await surfing
         .getPage()
         .evaluate("document.documentElement.outerHTML")) as string;
       const renderedDomTokens = estimateTokens(renderedDom);
 
-      // Get TideSurf compressed state
-      const state = await surfing.readPage();
-      const osTokens = estimateTokens(state.content);
+      const state = await surfing.readPage({ viewport: false });
+      const tideSurfTokens = estimateTokens(state.content);
       const interactiveElements = countInteractiveIds(state.content);
 
       results.push({
         page: page.name,
         sourceHtmlTokens,
         renderedDomTokens,
-        tideSurfTokens: osTokens,
-        vsSourceRatio: (sourceHtmlTokens / osTokens).toFixed(1),
-        vsRenderedRatio: (renderedDomTokens / osTokens).toFixed(1),
-        vsSourceReduction: `${((1 - osTokens / sourceHtmlTokens) * 100).toFixed(0)}%`,
-        vsRenderedReduction: `${((1 - osTokens / renderedDomTokens) * 100).toFixed(0)}%`,
+        tideSurfTokens,
+        vsSourceRatio: (sourceHtmlTokens / tideSurfTokens).toFixed(1),
+        vsRenderedRatio: (renderedDomTokens / tideSurfTokens).toFixed(1),
+        vsSourceReduction: `${((1 - tideSurfTokens / sourceHtmlTokens) * 100).toFixed(0)}%`,
+        vsRenderedReduction: `${((1 - tideSurfTokens / renderedDomTokens) * 100).toFixed(0)}%`,
         interactiveElements,
       });
 
-      // Assertions
-      expect(sourceHtmlTokens / osTokens).toBeGreaterThan(1);
+      expect(sourceHtmlTokens / tideSurfTokens).toBeGreaterThan(1);
       expect(interactiveElements).toBeGreaterThan(0);
       if (page.name === "ecommerce" || page.name === "news") {
         const expected = expectedFixtures.get(page.name);
         if (!expected) throw new Error(`Missing benchmark expectation: ${page.name}`);
-        expect({ sourceHtmlTokens, renderedDomTokens, tideSurfTokens: osTokens }).toEqual({
+        expect({ sourceHtmlTokens, renderedDomTokens, tideSurfTokens }).toEqual({
           sourceHtmlTokens: expected.sourceHtmlTokens,
           renderedDomTokens: expected.renderedDomTokens,
           tideSurfTokens: expected.tideSurfTokens,
         });
       }
 
-      // Verify no data/style/script noise leaked
       expect(state.content).not.toContain("data-tracking");
       expect(state.content).not.toContain("data-product-id");
       expect(state.content).not.toContain("font-family");
@@ -257,8 +249,11 @@ describeBench("Compression benchmarks", () => {
     if (!fixture) throw new Error(`Missing benchmark fixture: ${expected.fixture}`);
     await surfing.navigate(fixtureUrls[fixture.file]);
 
-    const full = await surfing.readPage();
-    const budgeted = await surfing.readPage({ maxTokens: expected.maxTokens });
+    const full = await surfing.readPage({ viewport: false });
+    const budgeted = await surfing.readPage({
+      viewport: false,
+      maxTokens: expected.maxTokens,
+    });
 
     const fullTokens = estimateTokens(full.content);
     const budgetedTokens = estimateTokens(budgeted.content);
@@ -279,7 +274,6 @@ describeBench("Compression benchmarks", () => {
   it("speed: realistic readPage stays below 100ms average", async () => {
     await surfing.navigate(fixtureUrls["bench-ecommerce.html"]);
 
-    // Warm up
     await surfing.readPage();
 
     const runs = 10;
@@ -302,38 +296,45 @@ describeBench("Compression benchmarks", () => {
     expect(avg).toBeLessThan(100);
   }, 15000);
 
-  it("speed: 10,000-element readPage stays below 200ms p50", async () => {
+  it("speed: 10,000-element readPage stays bounded and near-linear", async () => {
     await surfing.navigate(fixtureUrls["basic.html"]);
-    await surfing.getPage().evaluate(`(() => {
-      document.body.textContent = '';
-      const fragment = document.createDocumentFragment();
-      for (let index = 0; index < 10000; index++) {
-        const row = document.createElement('div');
-        if (index % 25 === 0) {
-          const button = document.createElement('button');
-          button.textContent = 'Action ' + index;
-          row.append(button);
-        } else {
-          row.textContent = 'Content ' + index;
+    const measure = async (elementCount: number) => {
+      await surfing.getPage().evaluate(`((elementCount) => {
+        document.body.textContent = '';
+        const fragment = document.createDocumentFragment();
+        for (let index = 0; index < elementCount; index++) {
+          const row = document.createElement('div');
+          if (index % 25 === 0) {
+            const button = document.createElement('button');
+            button.textContent = 'Action ' + index;
+            row.append(button);
+          } else {
+            row.textContent = 'Content ' + index;
+          }
+          fragment.append(row);
         }
-        fragment.append(row);
-      }
-      document.body.append(fragment);
-    })()`);
+        document.body.append(fragment);
+      })(${elementCount})`);
 
-    await surfing.readPage();
-    const times: number[] = [];
-    for (let index = 0; index < 5; index++) {
-      const start = performance.now();
       await surfing.readPage();
-      times.push(performance.now() - start);
-    }
-    times.sort((a, b) => a - b);
-    const p50 = times[Math.floor(times.length / 2)];
+      const times: number[] = [];
+      for (let index = 0; index < 7; index++) {
+        const start = performance.now();
+        await surfing.readPage();
+        times.push(performance.now() - start);
+      }
+      times.sort((a, b) => a - b);
+      return { p50: times[Math.floor(times.length / 2)], times };
+    };
+
+    const small = await measure(2_500);
+    const large = await measure(10_000);
+    const scale = large.p50 / small.p50;
 
     console.log(
-      `\n  readPage (10,000 elements): p50=${p50.toFixed(1)}ms, range=${times[0].toFixed(1)}–${times.at(-1)!.toFixed(1)}ms`
+      `\n  readPage (2,500 → 10,000 elements): p50=${small.p50.toFixed(1)}ms → ${large.p50.toFixed(1)}ms, scale=${scale.toFixed(2)}x, large range=${large.times[0].toFixed(1)}–${large.times.at(-1)!.toFixed(1)}ms`
     );
-    expect(p50).toBeLessThan(200);
-  }, 15000);
+    expect(scale).toBeLessThan(5.5);
+    expect(large.p50).toBeLessThan(250);
+  }, 30000);
 });

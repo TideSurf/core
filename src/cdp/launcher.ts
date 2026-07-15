@@ -19,6 +19,8 @@ import { CDPConnectionError, ChromeLaunchError } from "../errors.js";
 import { validatePort } from "../validation.js";
 import { withTimeout } from "./timeout.js";
 
+const LOCAL_CDP_HOST = "127.0.0.1";
+
 const EXECUTABLE_NAMES: Record<ChromeChannel, Record<string, readonly string[]>> = {
   stable: {
     darwin: ["google-chrome", "chrome"],
@@ -366,7 +368,7 @@ async function assertPortAvailable(port: number): Promise<void> {
         );
       }
     });
-    server.listen({ host: "127.0.0.1", port, exclusive: true }, () => {
+    server.listen({ host: LOCAL_CDP_HOST, port, exclusive: true }, () => {
       server.close((error) => (error ? reject(error) : resolve()));
     });
   });
@@ -444,8 +446,8 @@ async function inspectMarkedEndpoint(
 ): Promise<Awaited<ReturnType<typeof CDP.List>>> {
   const [version, targets] = await withTimeout(
     Promise.all([
-      CDP.Version({ port: active.port, host: "localhost", useHostName: true }),
-      CDP.List({ port: active.port, host: "localhost", useHostName: true }),
+      CDP.Version({ port: active.port, host: LOCAL_CDP_HOST, useHostName: true }),
+      CDP.List({ port: active.port, host: LOCAL_CDP_HOST, useHostName: true }),
     ]),
     timeout,
     operation
@@ -541,14 +543,14 @@ async function waitForLaunchedBrowser(
         const targets = active
           ? await inspectMarkedEndpoint(active, probeTimeout, "Chrome readiness")
           : await withTimeout(
-            CDP.List({ port, host: "localhost", useHostName: true }),
+            CDP.List({ port, host: LOCAL_CDP_HOST, useHostName: true }),
             probeTimeout,
             "Chrome readiness"
           );
         const page = targets.find(
           (target) => target.type === "page"
         );
-        if (page) return { port, host: "localhost", targetId: page.id };
+        if (page) return { port, host: LOCAL_CDP_HOST, targetId: page.id };
       } catch (error) {
         if (error instanceof DevToolsEndpointMismatchError) throw error;
         lastError = error;
@@ -749,7 +751,7 @@ export async function discoverActiveBrowser(
           `Chrome is available on localhost:${active.port}, but it has no page target`
         );
       }
-      return { port: active.port, host: "localhost", targetId: page.id };
+      return { port: active.port, host: LOCAL_CDP_HOST, targetId: page.id };
     } catch (error) {
       lastError = error;
     }
