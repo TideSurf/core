@@ -449,6 +449,63 @@ describe("walkDOM", () => {
     expect(output).not.toContain("DIRECT OFFSCREEN");
   });
 
+  it("does not merge across an offscreen direct-text sibling", () => {
+    const markers = {
+      visible: "data-test-visible",
+      hidden: "data-test-hidden",
+      state: "data-test-state",
+      text: "data-test-text",
+    };
+    const root = makeNode({
+      nodeName: "HTML",
+      children: [
+        makeNode({
+          nodeName: "H1",
+          attributes: [markers.visible, "1", markers.text, "0,2"],
+          children: [
+            makeText("First"),
+            makeText("OFFSCREEN"),
+            makeText("Second"),
+          ],
+        }),
+      ],
+    });
+
+    const walked = walkDOM(root, {
+      markerAttributes: markers,
+      viewportMarked: true,
+    });
+    const nodes = filterViewportOnly(walked.nodes).nodes;
+
+    expect(nodes[0].children.map((child) => child.text)).toEqual([
+      "First",
+      "Second",
+    ]);
+  });
+
+  it("keeps a removed semantic node as an adjacent-text merge barrier", () => {
+    const root = makeNode({
+      nodeName: "HTML",
+      children: [
+        makeNode({
+          nodeName: "H1",
+          children: [
+            makeText("First"),
+            makeNode({ nodeName: "LI", children: [] }),
+            makeText("Second"),
+          ],
+        }),
+      ],
+    });
+
+    const { nodes } = walkDOM(root);
+
+    expect(nodes[0].children.map((child) => child.text)).toEqual([
+      "First",
+      "Second",
+    ]);
+  });
+
   it("tracks shadow-root direct text independently from its host", () => {
     const markers = {
       visible: "data-test-visible",

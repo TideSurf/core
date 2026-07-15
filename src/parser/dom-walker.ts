@@ -250,7 +250,7 @@ function walkNode(
   const result = classify(
     node.nodeName,
     attrs,
-    children.map((c) => ({ nodeName: c.nodeName, attributes: c.attributes })),
+    children,
     {
       includeHidden,
       computedVisibility: markerContext.markers !== undefined,
@@ -468,39 +468,47 @@ function walkChildren(
 
 /** Merge adjacent text and remove empty non-semantic nodes. */
 function postProcess(nodes: OSNode[]): OSNode[] {
-  // Merge adjacent text nodes
-  const merged: OSNode[] = [];
+  const result: OSNode[] = [];
+  // A removed node still separates neighboring text, matching source order.
+  let mergeBarrier = false;
   for (const node of nodes) {
-    if (
-      node.tag === "#text" &&
-      merged.length > 0 &&
-      merged[merged.length - 1].tag === "#text" &&
-      merged[merged.length - 1].visible === node.visible
-    ) {
-      const prevText = merged[merged.length - 1].text ?? "";
+    if (node.tag === "#text") {
+      if (!node.text?.trim()) {
+        mergeBarrier = true;
+        continue;
+      }
+      const previous = result[result.length - 1];
+      if (
+        mergeBarrier ||
+        !previous ||
+        previous.tag !== "#text" ||
+        previous.visible !== node.visible
+      ) {
+        result.push(node);
+        mergeBarrier = false;
+        continue;
+      }
+      const prevText = previous.text ?? "";
       const currText = node.text ?? "";
-      // Only add space if previous or current text had whitespace
       const needsSpace = prevText.length > 0 && currText.length > 0 &&
         !prevText.endsWith(" ") && !currText.startsWith(" ");
-      merged[merged.length - 1].text = prevText + (needsSpace ? " " : "") + currText;
+      previous.text = prevText + (needsSpace ? " " : "") + currText;
+      continue;
+    }
+
+    const keep =
+      node.id ||
+      node.children.length > 0 ||
+      node.text ||
+      node.tag === "img" ||
+      node.tag === "iframe";
+    if (keep) {
+      result.push(node);
+      mergeBarrier = false;
     } else {
-      merged.push(node);
+      mergeBarrier = true;
     }
   }
 
-  // Remove empty non-text nodes with no children and no text
-  const filtered = merged.filter((node) => {
-    if (node.tag === "#text") return !!node.text?.trim();
-    // Keep nodes with IDs (interactive), children, or text content
-    if (node.id) return true;
-    if (node.children.length > 0) return true;
-    if (node.text) return true;
-    // Keep img tags (self-closing, may have alt/src)
-    if (node.tag === "img") return true;
-    // Keep iframe tags (may be inaccessible marker)
-    if (node.tag === "iframe") return true;
-    return false;
-  });
-
-  return filtered;
+  return result;
 }

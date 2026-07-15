@@ -35,6 +35,12 @@ interface FittedList {
   collectibleText: boolean;
 }
 
+interface Candidate {
+  node: OSNode;
+  index: number;
+  metrics: NodeMetrics;
+}
+
 const STRUCTURAL_CONTAINERS = new Set([
   "form",
   "nav",
@@ -47,6 +53,7 @@ const STRUCTURAL_CONTAINERS = new Set([
   "aside",
   "dialog",
 ]);
+const TRUNCATION_SIZE_WITHOUT_COUNT = formatTruncation("").length + 1;
 
 function stateSize(node: OSNode): number {
   let size = 0;
@@ -63,22 +70,42 @@ function stateSize(node: OSNode): number {
 }
 
 function escapedQuoteSize(text: string): number {
-  let size = 0;
-  for (const character of text) {
-    size += character === '"' ? 2 : character.length;
+  let size = text.length;
+  for (let index = 0; index < text.length; index++) {
+    if (text.charCodeAt(index) === 34) size++;
   }
   return size;
 }
 
 function escapedTextSize(text: string | undefined): number {
-  let size = 0;
-  for (const character of text ?? "") {
-    if (character === "&") size += 5;
-    else if (character === "<" || character === ">") size += 4;
-    else if (character === '"') size += 6;
-    else size += character.length;
+  if (!text) return 0;
+  let size = text.length;
+  for (let index = 0; index < text.length; index++) {
+    const code = text.charCodeAt(index);
+    if (code === 38) size += 4;
+    else if (code === 60 || code === 62) size += 3;
+    else if (code === 34) size += 5;
   }
   return size;
+}
+
+function hasText(text: string | undefined): boolean {
+  if (!text) return false;
+  // Match String.trim whitespace while keeping already-trimmed parser text fast.
+  const first = text.charCodeAt(0);
+  const startsWithWhitespace =
+    (first >= 0x09 && first <= 0x0d) ||
+    first === 0x20 ||
+    first === 0xa0 ||
+    first === 0x1680 ||
+    (first >= 0x2000 && first <= 0x200a) ||
+    first === 0x2028 ||
+    first === 0x2029 ||
+    first === 0x202f ||
+    first === 0x205f ||
+    first === 0x3000 ||
+    first === 0xfeff;
+  return !startsWithWhitespace || text.trim().length > 0;
 }
 
 /** Estimate only the characters contributed by this node, excluding children. */
@@ -86,7 +113,7 @@ function estimateOwnSize(
   node: OSNode,
   depth = 0,
   pageUrl?: string,
-  hasNonInteractiveText = Boolean(node.text?.trim())
+  hasNonInteractiveText = hasText(node.text)
 ): number {
   const idSize = node.id?.length ?? 0;
   const attributes = node.attributes;
@@ -94,7 +121,8 @@ function estimateOwnSize(
 
   if (node.tag === "#text") return indentation + escapedTextSize(node.text) + 1;
   if (node.tag === "truncated") {
-    return indentation + formatTruncation(attributes["count"] ?? "?").length + 1;
+    return indentation + TRUNCATION_SIZE_WITHOUT_COUNT +
+      String(attributes["count"] ?? "?").length;
   }
   if (node.tag === "link") {
     const href = attributes["href"];
@@ -151,16 +179,11 @@ function estimateOwnSize(
   if (STRUCTURAL_CONTAINERS.has(node.tag)) {
     const ariaLabel = attributes["aria-label"];
     const summary = node.text?.trim();
-    const descriptions = [ariaLabel, summary].filter(
-      (value, index, values): value is string =>
-        Boolean(value) && values.indexOf(value) === index
-    );
-    const descriptionSize = descriptions.length === 0
-      ? 0
-      : 2 + descriptions.reduce(
-        (size, description) => size + escapedTextSize(description),
-        0
-      ) + (descriptions.length - 1) * 3;
+    let descriptionSize = 0;
+    if (ariaLabel) descriptionSize = escapedTextSize(ariaLabel) + 2;
+    if (summary && summary !== ariaLabel) {
+      descriptionSize += escapedTextSize(summary) + (descriptionSize > 0 ? 3 : 2);
+    }
     return indentation + node.tag.length + (idSize > 0 ? idSize + 1 : 0) +
       descriptionSize + 1;
   }
@@ -206,7 +229,7 @@ function measureTree(nodes: OSNode[], pageUrl?: string): Map<OSNode, NodeMetrics
     let visibleCount = node.visible ? 1 : 0;
     let textLength = node.text?.length ?? 0;
     let hasNonInteractiveText = node.tag === "truncated" ||
-      Boolean(node.text?.trim());
+      hasText(node.text);
 
     const nextDepth = childDepth(node, depth);
     for (const child of node.children) {
@@ -240,12 +263,11 @@ function measureTree(nodes: OSNode[], pageUrl?: string): Map<OSNode, NodeMetrics
 }
 
 function comparePriority(
-  left: { node: OSNode; index: number },
-  right: { node: OSNode; index: number },
-  metrics: Map<OSNode, NodeMetrics>
+  left: Candidate,
+  right: Candidate
 ): number {
-  const a = metrics.get(left.node)!;
-  const b = metrics.get(right.node)!;
+  const a = left.metrics;
+  const b = right.metrics;
   const aInteractive = a.interactiveCount > 0 ? 1 : 0;
   const bInteractive = b.interactiveCount > 0 ? 1 : 0;
   if (aInteractive !== bInteractive) return bInteractive - aInteractive;
@@ -367,7 +389,7 @@ function fitNode(
     return node.id ? fitInteractiveShell(node, budget, depth, pageUrl) : undefined;
   }
 
-  const hasNonInteractiveText = Boolean(base.text?.trim()) ||
+  const hasNonInteractiveText = hasText(base.text) ||
     childResult.collectibleText;
   let fittedNode = { ...base, children: childResult.nodes };
   ownSize = estimateOwnSize(
@@ -400,33 +422,37 @@ function fitList(
   depth: number,
   pageUrl?: string
 ): FittedList {
-  const totalSize = nodes.reduce(
-    (total, node) => total + metrics.get(node)!.totalSize,
-    0
-  );
+  let totalSize = 0;
+  let collectibleText = false;
+  for (const node of nodes) {
+    const measured = metrics.get(node)!;
+    totalSize += measured.totalSize;
+    if (!node.id && measured.hasNonInteractiveText) collectibleText = true;
+  }
   if (totalSize <= budget) {
     return {
       nodes,
       size: totalSize,
-      collectibleText: nodes.some(
-        (node) => !node.id && metrics.get(node)!.hasNonInteractiveText
-      ),
+      collectibleText,
     };
   }
 
   const largestMarker = truncationNode(nodes.length);
   const markerSize = estimateOwnSize(largestMarker, depth, pageUrl, true);
   const contentBudget = Math.max(0, budget - markerSize);
-  const candidates = nodes
-    .map((node, index) => ({ node, index }))
-    .sort((left, right) => comparePriority(left, right, metrics));
-  const kept: Array<{ index: number; fitted: FittedNode }> = [];
+  const candidates = new Array<Candidate>(nodes.length);
+  for (let index = 0; index < nodes.length; index++) {
+    const node = nodes[index];
+    candidates[index] = { node, index, metrics: metrics.get(node)! };
+  }
+  candidates.sort(comparePriority);
+  const kept = new Array<FittedNode | undefined>(nodes.length);
   let usedSize = 0;
   let removedCount = 0;
 
   for (const candidate of candidates) {
     const remaining = contentBudget - usedSize;
-    const measured = metrics.get(candidate.node)!;
+    const measured = candidate.metrics;
     let fitted: FittedNode | undefined;
 
     if (measured.totalSize <= remaining) {
@@ -440,15 +466,20 @@ function fitList(
     }
 
     if (fitted) {
-      kept.push({ index: candidate.index, fitted });
+      kept[candidate.index] = fitted;
       usedSize += fitted.size;
     } else {
       removedCount++;
     }
   }
 
-  kept.sort((left, right) => left.index - right.index);
-  const result = kept.map(({ fitted }) => fitted.node);
+  const result: OSNode[] = [];
+  collectibleText = false;
+  for (const fitted of kept) {
+    if (!fitted) continue;
+    result.push(fitted.node);
+    if (!fitted.node.id && fitted.hasNonInteractiveText) collectibleText = true;
+  }
   let markerAdded = false;
   if (removedCount > 0 && markerSize <= budget - usedSize) {
     result.push(truncationNode(removedCount));
@@ -458,9 +489,7 @@ function fitList(
   return {
     nodes: result,
     size: usedSize,
-    collectibleText: kept.some(
-      ({ fitted }) => !fitted.node.id && fitted.hasNonInteractiveText
-    ) || markerAdded,
+    collectibleText: collectibleText || markerAdded,
   };
 }
 

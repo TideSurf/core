@@ -10,11 +10,24 @@ function escapeQuotes(text: string): string {
 
 /** Escape text that could otherwise look like markup in agent output. */
 function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+  let result = "";
+  let chunkStart = 0;
+  for (let index = 0; index < text.length; index++) {
+    let replacement: string | undefined;
+    const code = text.charCodeAt(index);
+    if (code === 38) replacement = "&amp;";
+    else if (code === 60) replacement = "&lt;";
+    else if (code === 62) replacement = "&gt;";
+    else if (code === 34) replacement = "&quot;";
+    if (!replacement) continue;
+    result += text.slice(chunkStart, index) + replacement;
+    chunkStart = index + 1;
+  }
+  return chunkStart === 0 ? text : result + text.slice(chunkStart);
+}
+
+function pushIfNotEmpty(parts: string[], value: string): void {
+  if (value.length > 0) parts.push(value);
 }
 
 function serializableText(node: OSNode): string | undefined {
@@ -150,7 +163,10 @@ function serializeNodes(
       parts.push(struck ? `${pad}~~${line.trim()}~~` : `${pad}${line}`);
       const nestedActions = collectInteractiveDescendants(node);
       if (nestedActions.length > 0) {
-        parts.push(serializeNodes(nestedActions, indent + 1, pageUrl, textCache));
+        pushIfNotEmpty(
+          parts,
+          serializeNodes(nestedActions, indent + 1, pageUrl, textCache)
+        );
       }
       continue;
     }
@@ -164,7 +180,10 @@ function serializeNodes(
       parts.push(struck ? `${pad}~~${line.trim()}~~` : `${pad}${line}`);
       const nestedActions = collectInteractiveDescendants(node);
       if (nestedActions.length > 0) {
-        parts.push(serializeNodes(nestedActions, indent + 1, pageUrl, textCache));
+        pushIfNotEmpty(
+          parts,
+          serializeNodes(nestedActions, indent + 1, pageUrl, textCache)
+        );
       }
       continue;
     }
@@ -203,7 +222,10 @@ function serializeNodes(
       const header = `${id}:select${flags}`;
       parts.push(struck ? `${pad}~~${header.trim()}~~` : `${pad}${header}`);
       if (node.children.length > 0) {
-        parts.push(serializeSelectChildren(node.children, indent + 1, pageUrl, textCache));
+        pushIfNotEmpty(
+          parts,
+          serializeSelectChildren(node.children, indent + 1, pageUrl, textCache)
+        );
       }
       continue;
     }
@@ -221,7 +243,10 @@ function serializeNodes(
         // Same-origin iframe with content
         const src = node.attributes["src"];
         parts.push(`${pad}[iframe: ${src ? compressUrl(src, pageUrl) : "inline"}]`);
-        parts.push(serializeNodes(node.children, indent + 1, pageUrl, textCache));
+        pushIfNotEmpty(
+          parts,
+          serializeNodes(node.children, indent + 1, pageUrl, textCache)
+        );
       } else {
         const status = node.attributes["status"];
         if (status === "inaccessible") {
@@ -243,7 +268,7 @@ function serializeNodes(
         } else if (child.tag === "#text" && child.text?.trim()) {
           parts.push(`${pad}${child.text}`);
         } else {
-          parts.push(serializeNodes([child], indent, pageUrl, textCache));
+          pushIfNotEmpty(parts, serializeNodes([child], indent, pageUrl, textCache));
         }
       }
       continue;
@@ -264,7 +289,10 @@ function serializeNodes(
       parts.push(`${pad}| ${cells.join(" | ")} |`);
       const interactiveChildren = collectInteractiveRoots(node);
       if (interactiveChildren.length > 0) {
-        parts.push(serializeNodes(interactiveChildren, indent + 1, pageUrl, textCache));
+        pushIfNotEmpty(
+          parts,
+          serializeNodes(interactiveChildren, indent + 1, pageUrl, textCache)
+        );
       }
       continue;
     }
@@ -275,7 +303,10 @@ function serializeNodes(
       if (text) parts.push(`${pad}${text}`);
       const interactiveChildren = collectInteractiveRoots(node);
       if (interactiveChildren.length > 0) {
-        parts.push(serializeNodes(interactiveChildren, indent + 1, pageUrl, textCache));
+        pushIfNotEmpty(
+          parts,
+          serializeNodes(interactiveChildren, indent + 1, pageUrl, textCache)
+        );
       }
       continue;
     }
@@ -288,7 +319,10 @@ function serializeNodes(
       }
       const interactiveChildren = collectInteractiveRoots(node);
       if (interactiveChildren.length > 0) {
-        parts.push(serializeNodes(interactiveChildren, indent + 1, pageUrl, textCache));
+        pushIfNotEmpty(
+          parts,
+          serializeNodes(interactiveChildren, indent + 1, pageUrl, textCache)
+        );
       }
       continue;
     }
@@ -312,30 +346,33 @@ function serializeNodes(
       const id = node.id ? ` ${node.id}` : "";
       const ariaLabel = node.attributes["aria-label"];
       const summary = node.text?.trim();
-      const description = [ariaLabel, summary]
-        .filter((value, index, values): value is string =>
-          Boolean(value) && values.indexOf(value) === index
-        )
-        .map(escapeHtml)
-        .join(" — ");
+      let description = ariaLabel ? escapeHtml(ariaLabel) : "";
+      if (summary && summary !== ariaLabel) {
+        const escapedSummary = escapeHtml(summary);
+        description = description
+          ? `${description} — ${escapedSummary}`
+          : escapedSummary;
+      }
       const desc = description ? `: ${description}` : "";
-      parts.push("");
       parts.push(`${pad}${label}${id}${desc}`);
       if (node.children.length > 0) {
-        parts.push(serializeNodes(node.children, indent + 1, pageUrl, textCache));
+        pushIfNotEmpty(
+          parts,
+          serializeNodes(node.children, indent + 1, pageUrl, textCache)
+        );
       }
       continue;
     }
 
     // Fallback: just serialize children
     if (node.children.length > 0) {
-      parts.push(serializeNodes(node.children, indent, pageUrl, textCache));
+      pushIfNotEmpty(parts, serializeNodes(node.children, indent, pageUrl, textCache));
     } else if (node.text) {
       parts.push(`${pad}${node.text}`);
     }
   }
 
-  return parts.filter((p) => p.length > 0).join("\n");
+  return parts.join("\n");
 }
 
 /**
@@ -362,7 +399,8 @@ function serializeSelectChildren(
       const label = node.attributes["aria-label"] || node.attributes["label"] || "";
       if (label) parts.push(`${pad}${label}:`);
       if (node.children.length > 0) {
-        parts.push(
+        pushIfNotEmpty(
+          parts,
           serializeSelectChildren(node.children, indent + 1, pageUrl, textCache)
         );
       }
@@ -374,7 +412,7 @@ function serializeSelectChildren(
     parts.push(`${pad}${isSelected ? "> " : ""}${text}`);
   }
 
-  return parts.filter((p) => p.length > 0).join("\n");
+  return parts.join("\n");
 }
 
 /**

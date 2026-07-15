@@ -123,6 +123,7 @@ export async function runDaemon(
 
   const controller = options.controllerFactory?.(initial.config) ??
     new BrowserController(initial.config);
+  const expectedSecret = Buffer.from(initial.secret);
   let server!: Server;
   let closing: Promise<void> | null = null;
   let queue: Promise<void> = Promise.resolve();
@@ -222,7 +223,7 @@ export async function runDaemon(
           requestId = value["id"];
         }
         incoming = parseIncomingRequest(value);
-        if (!secretsMatch(initial.secret, incoming.secret)) {
+        if (!secretsMatch(expectedSecret, incoming.secret)) {
           throw new SessionProtocolError("Session authentication failed");
         }
       } catch (error) {

@@ -284,7 +284,7 @@ describeBench("Compression benchmarks", () => {
     expect(budgeted.content).toContain("truncated");
   }, 15000);
 
-  it("speed: getState < 500ms average", async () => {
+  it("speed: realistic getState stays below 100ms average", async () => {
     await surfing.navigate(fixtureUrls["bench-ecommerce.html"]);
 
     // Warm up
@@ -307,6 +307,41 @@ describeBench("Compression benchmarks", () => {
       `\n  getState (${runs} runs): avg=${avg.toFixed(1)}ms, p50=${p50.toFixed(1)}ms, p99=${p99.toFixed(1)}ms`
     );
 
-    expect(avg).toBeLessThan(500);
+    expect(avg).toBeLessThan(100);
+  }, 15000);
+
+  it("speed: 10,000-element getState stays below 200ms p50", async () => {
+    await surfing.navigate(fixtureUrls["basic.html"]);
+    await surfing.getPage().evaluate(`(() => {
+      document.body.textContent = '';
+      const fragment = document.createDocumentFragment();
+      for (let index = 0; index < 10000; index++) {
+        const row = document.createElement('div');
+        if (index % 25 === 0) {
+          const button = document.createElement('button');
+          button.textContent = 'Action ' + index;
+          row.append(button);
+        } else {
+          row.textContent = 'Content ' + index;
+        }
+        fragment.append(row);
+      }
+      document.body.append(fragment);
+    })()`);
+
+    await surfing.getState();
+    const times: number[] = [];
+    for (let index = 0; index < 5; index++) {
+      const start = performance.now();
+      await surfing.getState();
+      times.push(performance.now() - start);
+    }
+    times.sort((a, b) => a - b);
+    const p50 = times[Math.floor(times.length / 2)];
+
+    console.log(
+      `\n  getState (10,000 elements): p50=${p50.toFixed(1)}ms, range=${times[0].toFixed(1)}–${times.at(-1)!.toFixed(1)}ms`
+    );
+    expect(p50).toBeLessThan(200);
   }, 15000);
 });

@@ -39,6 +39,8 @@ Browser startup, tools, and stop requests enter one serialized queue. Concurrent
 
 The transport uses a Unix domain socket on Unix and a named pipe on Windows. Session metadata lives in a private runtime directory. Each session receives a random handshake secret and protocol version. Atomic state files, a startup lock, PID checks, and socket probes handle simultaneous starts and stale files.
 
+The CLI bootstrap defers session and browser modules until a command needs them. A warm command sends its requested operation as the first authenticated socket request. TideSurf retries only stale-endpoint failures detected before that request is sent; an ambiguous post-send failure returns to the caller without replaying a possible mutation.
+
 Sessions have no idle timeout. `stop` ends the daemon and its browser relationship.
 
 This state-preserving background-process model follows the [Chrome DevTools CLI session design](https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/main/docs/cli.md).
@@ -85,7 +87,7 @@ rendered DOM
 
 Visibility and page metadata are calculated before marker attributes mutate the DOM. Normal viewport mode removes offscreen descendants even when a visible structural container spans the page. `includeHidden: true` skips both hidden-node and viewport filtering for full-DOM debugging.
 
-Interactive and minimal filters use post-order traversal. Serialization shares text memoization. Token pruning retains useful children inside oversized containers, clones only changed paths, and keeps source order.
+Browser inspection caches each ancestor clip region once and skips descendants of hidden subtrees that CSS descendants cannot override. Interactive and minimal filters use post-order traversal. Serialization shares text memoization. Token pruning retains useful children inside oversized containers, clones only changed paths, and keeps source order.
 
 ## Agent-to-browser data flow
 

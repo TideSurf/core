@@ -5,7 +5,8 @@ import {
   type ToolSpec,
 } from "../tools/registry.js";
 import type { ChromeChannel } from "../types.js";
-import { validateSessionName, type SessionConfig } from "./session.js";
+import type { SessionConfig } from "./session.js";
+import { isValidSessionName, SESSION_NAME_ERROR } from "./session-name.js";
 
 export class CliUsageError extends Error {
   constructor(message: string) {
@@ -289,12 +290,8 @@ export function parseInvocation(argv: string[]): ParsedInvocation {
   }
 
   const rawSession = String(values["session"] ?? "default");
-  let session: string;
-  try {
-    session = validateSessionName(rawSession);
-  } catch (error) {
-    throw new CliUsageError(error instanceof Error ? error.message : String(error));
-  }
+  if (!isValidSessionName(rawSession)) throw new CliUsageError(SESSION_NAME_ERROR);
+  const session = rawSession;
 
   const explicitConnection = values["browserUrl"] !== undefined || values["host"] !== undefined;
   const browserMode: SessionConfig["browserMode"] = values["connectOnly"]

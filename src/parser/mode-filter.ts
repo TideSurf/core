@@ -3,8 +3,16 @@ import { graphemeCount, truncateGraphemes } from "./truncation.js";
 
 const MAX_FILTER_DEPTH = 500;
 const SUMMARY_TEXT_LIMIT = 100;
+const INTERACTIVE_LABELS = [
+  ["links", "link"],
+  ["buttons", "button"],
+  ["inputs", "input"],
+  ["selects", "select"],
+  ["interactive", "interactive"],
+] as const;
 
 interface InteractiveCounts {
+  [key: string]: number;
   links: number;
   buttons: number;
   inputs: number;
@@ -33,42 +41,75 @@ function mergeCounts(target: InteractiveCounts, source: InteractiveCounts): void
   target.interactive += source.interactive;
 }
 
-function toRecord(counts: InteractiveCounts): Record<string, number> {
-  return {
-    links: counts.links,
-    buttons: counts.buttons,
-    inputs: counts.inputs,
-    selects: counts.selects,
-    interactive: counts.interactive,
-  };
+interface TextSummary {
+  value: string;
+  count?: number;
+}
+
+function summarizeText(text: string | undefined, limit: number): TextSummary {
+  const value = truncateGraphemes(text ?? "", limit);
+  return { value, count: value ? undefined : 0 };
+}
+
+function emptyText(): TextSummary {
+  return { value: "", count: 0 };
+}
+
+function appendText(
+  current: TextSummary,
+  next: TextSummary,
+  limit: number
+): void {
+  if (!next.value) return;
+  const currentCount = current.count ?? graphemeCount(current.value, limit);
+  current.count = currentCount;
+  if (currentCount >= limit) return;
+  const separator = current.value.length > 0 ? " " : "";
+  const separatorSize = separator ? 1 : 0;
+  const remaining = limit - currentCount - separatorSize;
+  if (remaining <= 0) return;
+  const appended = truncateGraphemes(next.value, remaining);
+  current.value += separator + appended;
+  if (appended !== next.value) {
+    current.count = limit;
+  } else if (next.count !== undefined) {
+    current.count = currentCount + separatorSize + next.count;
+  } else {
+    current.count = undefined;
+  }
+}
+
+function isFull(text: TextSummary, limit: number): boolean {
+  text.count ??= graphemeCount(text.value, limit);
+  return text.count >= limit;
 }
 
 interface InteractiveResult {
   node?: OSNode;
-  text: string;
+  text: TextSummary;
 }
 
 function filterInteractiveNode(node: OSNode, depth: number): InteractiveResult {
-  if (depth > MAX_FILTER_DEPTH) return { text: "" };
+  if (depth > MAX_FILTER_DEPTH) return { text: emptyText() };
   if (node.tag === "#text") {
-    return { text: truncateGraphemes(node.text ?? "", SUMMARY_TEXT_LIMIT) };
+    return { text: summarizeText(node.text, SUMMARY_TEXT_LIMIT) };
   }
 
   const children: OSNode[] = [];
-  let label = truncateGraphemes(node.text ?? "", SUMMARY_TEXT_LIMIT);
+  const label = summarizeText(node.text, SUMMARY_TEXT_LIMIT);
   for (const child of node.children) {
     const filtered = filterInteractiveNode(child, depth + 1);
-    label = appendText(label, filtered.text, SUMMARY_TEXT_LIMIT);
+    appendText(label, filtered.text, SUMMARY_TEXT_LIMIT);
     if (filtered.node) children.push(filtered.node);
   }
 
   if (node.id) {
-    const labelNode = label
-      ? [{ tag: "#text", attributes: {}, children: [], text: label } satisfies OSNode]
+    const labelNode = label.value
+      ? [{ tag: "#text", attributes: {}, children: [], text: label.value } satisfies OSNode]
       : [];
     return {
       node: { ...node, children: [...labelNode, ...children], text: undefined },
-      text: "",
+      text: emptyText(),
     };
   }
   if (children.length === 0) return { text: label };
@@ -125,45 +166,42 @@ export function countInteractiveChildren(node: OSNode): Record<string, number> {
   };
 
   for (const child of node.children) visit(child, 0);
-  return toRecord(counts);
-}
-
-function appendText(current: string, next: string | undefined, limit: number): string {
-  if (!next) return current;
-  const currentCount = graphemeCount(current, limit);
-  if (currentCount >= limit) return current;
-  const separator = current.length > 0 ? " " : "";
-  const remaining = limit - currentCount - (separator ? 1 : 0);
-  if (remaining <= 0) return current;
-  return `${current}${separator}${truncateGraphemes(next, remaining)}`;
+  return counts;
 }
 
 /** Collect at most `limit` graphemes, stopping before unrelated tail content. */
 export function collectTextBounded(node: OSNode, limit: number): string {
-  let text = "";
+  const text = emptyText();
 
   const visit = (current: OSNode, depth: number): void => {
-    if (
-      depth > MAX_FILTER_DEPTH ||
-      graphemeCount(text, limit) >= limit
-    ) return;
-    text = appendText(text, current.text, limit);
+    if (depth > MAX_FILTER_DEPTH || isFull(text, limit)) return;
+    appendText(text, summarizeText(current.text, limit), limit);
     for (const child of current.children) {
       visit(child, depth + 1);
-      if (graphemeCount(text, limit) >= limit) break;
+      if (isFull(text, limit)) break;
     }
   };
 
   visit(node, 0);
-  return text;
+  return text.value;
 }
 
 export function interactiveSummary(counts: Record<string, number>): string {
+  if (
+    (counts["links"] ?? 0) +
+      (counts["buttons"] ?? 0) +
+      (counts["inputs"] ?? 0) +
+      (counts["selects"] ?? 0) +
+      (counts["interactive"] ?? 0) ===
+    0
+  ) {
+    return "";
+  }
   const parts: string[] = [];
-  for (const label of ["links", "buttons", "inputs", "selects", "interactive"]) {
+  for (const [label, singular] of INTERACTIVE_LABELS) {
     const count = counts[label] ?? 0;
     if (count > 0) {
-      parts.push(`${count} ${count === 1 ? label.replace(/s$/, "") : label}`);
+      parts.push(`${count} ${count === 1 ? singular : label}`);
     }
   }
   return parts.length > 0 ? `[${parts.join(", ")}]` : "";
@@ -171,7 +209,7 @@ export function interactiveSummary(counts: Record<string, number>): string {
 
 interface MinimalResult {
   counts: InteractiveCounts;
-  text: string;
+  text: TextSummary;
   landmarks?: LandmarkList;
 }
 
@@ -198,21 +236,21 @@ function appendLandmarks(
 
 function summarizeMinimal(node: OSNode, depth: number): MinimalResult {
   if (depth > MAX_FILTER_DEPTH) {
-    return { counts: emptyCounts(), text: "" };
+    return { counts: emptyCounts(), text: emptyText() };
   }
 
   const counts = emptyCounts();
   addInteractiveId(counts, node.id);
-  let text = truncateGraphemes(node.text ?? "", SUMMARY_TEXT_LIMIT);
-  const childCounts = emptyCounts();
   const isLandmark = LANDMARK_TAGS.has(node.tag);
+  const text = summarizeText(node.text, SUMMARY_TEXT_LIMIT);
+  const childCounts = isLandmark ? emptyCounts() : undefined;
   let childLandmarks: LandmarkList | undefined;
 
   for (const child of node.children) {
     const result = summarizeMinimal(child, depth + 1);
     mergeCounts(counts, result.counts);
-    mergeCounts(childCounts, result.counts);
-    text = appendText(text, result.text, SUMMARY_TEXT_LIMIT);
+    if (childCounts) mergeCounts(childCounts, result.counts);
+    appendText(text, result.text, SUMMARY_TEXT_LIMIT);
     childLandmarks = appendLandmarks(childLandmarks, result.landmarks);
   }
 
@@ -220,8 +258,11 @@ function summarizeMinimal(node: OSNode, depth: number): MinimalResult {
     return { counts, text, landmarks: childLandmarks };
   }
 
-  const countSummary = interactiveSummary(toRecord(childCounts));
-  const summary = [text.trim(), countSummary].filter(Boolean).join(" ");
+  const countSummary = interactiveSummary(childCounts!);
+  const trimmedText = text.value.trim();
+  const summary = trimmedText && countSummary
+    ? `${trimmedText} ${countSummary}`
+    : trimmedText || countSummary;
   const landmark: LandmarkLink = {
     node: {
       tag: node.tag,
@@ -237,7 +278,7 @@ function summarizeMinimal(node: OSNode, depth: number): MinimalResult {
 
   // A nested landmark owns its summary. Do not repeat its text and counts in
   // every ancestor landmark.
-  return { counts: emptyCounts(), text: "", landmarks };
+  return { counts: emptyCounts(), text: emptyText(), landmarks };
 }
 
 /** Summarize landmarks in one post-order traversal. */

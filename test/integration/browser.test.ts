@@ -315,6 +315,72 @@ describeBrowser("Browser integration", () => {
     expect(fullPage.content).toContain("OFFSCREEN COLLAPSED SENTINEL");
   }, 15000);
 
+  it("reuses ancestor clip geometry and skips hidden subtree styles", async () => {
+    await surfing.navigate(fixtureUrls["basic.html"]);
+    await surfing.getPage().evaluate(`(() => {
+      document.body.innerHTML = '';
+
+      const clipped = document.createElement('main');
+      clipped.style.cssText = 'height: 240px; overflow: hidden';
+      for (let index = 0; index < 200; index++) {
+        const button = document.createElement('button');
+        button.style.cssText = 'display: block; height: 20px';
+        button.textContent = 'VISIBLE ACTION ' + index;
+        clipped.append(button);
+      }
+      const nativeBounds = clipped.getBoundingClientRect.bind(clipped);
+      globalThis.__clipBoundsCalls = 0;
+      clipped.getBoundingClientRect = () => {
+        globalThis.__clipBoundsCalls++;
+        return nativeBounds();
+      };
+
+      const hidden = document.createElement('section');
+      hidden.style.display = 'none';
+      for (let index = 0; index < 200; index++) {
+        const button = document.createElement('button');
+        button.className = 'hidden-style-probe';
+        button.textContent = 'HIDDEN ACTION ' + index;
+        hidden.append(button);
+      }
+
+      const nativeComputedStyle = window.getComputedStyle.bind(window);
+      globalThis.__hiddenStyleCalls = 0;
+      globalThis.__nativeComputedStyle = window.getComputedStyle;
+      window.getComputedStyle = (element, pseudo) => {
+        if (element.classList && element.classList.contains('hidden-style-probe')) {
+          globalThis.__hiddenStyleCalls++;
+        }
+        return nativeComputedStyle(element, pseudo);
+      };
+
+      document.body.append(clipped, hidden);
+    })()`);
+
+    let state: Awaited<ReturnType<typeof surfing.getState>> | undefined;
+    let metrics!: { clipBoundsCalls: number; hiddenStyleCalls: number };
+    try {
+      state = await surfing.getState();
+    } finally {
+      metrics = await surfing.getPage().evaluate(`(() => {
+        window.getComputedStyle = globalThis.__nativeComputedStyle;
+        const result = {
+          clipBoundsCalls: globalThis.__clipBoundsCalls,
+          hiddenStyleCalls: globalThis.__hiddenStyleCalls
+        };
+        delete globalThis.__clipBoundsCalls;
+        delete globalThis.__hiddenStyleCalls;
+        delete globalThis.__nativeComputedStyle;
+        return result;
+      })()`) as { clipBoundsCalls: number; hiddenStyleCalls: number };
+    }
+
+    expect(state!.content).toContain("VISIBLE ACTION 0");
+    expect(state!.content).not.toContain("HIDDEN ACTION");
+    expect(metrics.clipBoundsCalls).toBeLessThanOrEqual(3);
+    expect(metrics.hiddenStyleCalls).toBe(0);
+  }, 15000);
+
   it("closing the initial active tab keeps the session usable", async () => {
     const initialTabs = await surfing.listTabs();
     expect(initialTabs).toHaveLength(1);

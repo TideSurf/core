@@ -177,6 +177,22 @@ describe("pruneToFit", () => {
     expect(estimateTokens(labelledOutput)).toBeLessThanOrEqual(20);
   });
 
+  it("treats ECMAScript whitespace-only children as empty fallback text", () => {
+    const whitespace =
+      " \t\n\u00a0\u1680\u2000\u2028\u2029\u202f\u205f\u3000\ufeff";
+    const button: OSNode = {
+      tag: "button",
+      id: "B1",
+      attributes: { "aria-label": "Accessible action ".repeat(100) },
+      children: [makeText(whitespace)],
+    };
+
+    const output = serialize(pruneToFit([button], { maxTokens: 10 }));
+
+    expect(output).toBe("[B1]");
+    expect(estimateTokens(output)).toBeLessThanOrEqual(10);
+  });
+
   it("does not reveal an oversized link fallback after pruning its child text", () => {
     const link: OSNode = {
       tag: "link",

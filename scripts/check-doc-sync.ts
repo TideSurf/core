@@ -154,7 +154,7 @@ for (const option of [...generalHelp().matchAll(/^  (--[a-z][a-z-]*)/gm)].map((m
   check(cliDocs.includes(option), `CLI docs must include global option ${option}`);
 }
 
-const cliSource = read("src/cli.ts");
+const cliSource = read("src/cli-program.ts");
 const exitCodes = Object.fromEntries(
   [...cliSource.matchAll(/^const EXIT_([A-Z]+) = (\d+);$/gm)].map((match) => [
     match[1].toLowerCase(),

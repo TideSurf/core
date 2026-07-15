@@ -13,14 +13,15 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { spawn } from "node:child_process";
 import { connect as connectSocket } from "node:net";
 import type { ChromeChannel, ToolResult } from "../types.js";
 import { VERSION } from "../version.js";
+import { isValidSessionName, SESSION_NAME_ERROR } from "./session-name.js";
 
 export const SESSION_PROTOCOL_VERSION = 1;
-const MAX_SESSION_NAME_LENGTH = 64;
 const MAX_RESPONSE_BYTES = 64 * 1024 * 1024;
+const READY_POLL_INTERVAL_MS = 10;
+const SENT_REQUEST_ERRORS = new WeakSet<object>();
 
 export interface SessionConfig {
   browserMode: "launch" | "auto" | "connect";
@@ -127,15 +128,7 @@ export class SessionStateError extends Error {
 }
 
 export function validateSessionName(name: string): string {
-  if (
-    name.length === 0 ||
-    name.length > MAX_SESSION_NAME_LENGTH ||
-    !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name)
-  ) {
-    throw new SessionProtocolError(
-      "Session names must start with a letter or number and contain at most 64 letters, numbers, dots, dashes, or underscores"
-    );
-  }
+  if (!isValidSessionName(name)) throw new SessionProtocolError(SESSION_NAME_ERROR);
   return name;
 }
 
@@ -168,7 +161,7 @@ export function getSessionPaths(sessionName: string): SessionPaths {
     if (uid !== undefined && stats.uid !== uid) {
       throw new SessionProtocolError(`Session runtime directory has the wrong owner: ${directory}`);
     }
-    chmodSync(directory, 0o700);
+    if ((stats.mode & 0o777) !== 0o700) chmodSync(directory, 0o700);
   }
   const key = createHash("sha256")
     .update(`${directory}\0${session}`)
@@ -220,8 +213,11 @@ export function removeSessionFiles(paths: SessionPaths, removeLog = false): void
   if (removeLog) rmSync(paths.logFile, { force: true });
 }
 
-export function secretsMatch(expected: string, received: string): boolean {
-  const a = Buffer.from(expected);
+export function secretsMatch(
+  expected: string | Uint8Array,
+  received: string
+): boolean {
+  const a = typeof expected === "string" ? Buffer.from(expected) : expected;
   const b = Buffer.from(received);
   return a.length === b.length && timingSafeEqual(a, b);
 }
@@ -238,7 +234,11 @@ export function isProcessRunning(pid: number): boolean {
 
 function isStaleEndpointError(error: unknown): boolean {
   const code = (error as NodeJS.ErrnoException).code;
-  return code === "ENOENT" || code === "ECONNREFUSED";
+  return !(
+    typeof error === "object" &&
+    error !== null &&
+    SENT_REQUEST_ERRORS.has(error)
+  ) && (code === "ENOENT" || code === "ECONNREFUSED");
 }
 
 export async function sendSessionRequest<T = unknown>(
@@ -261,6 +261,7 @@ export async function sendSessionRequest<T = unknown>(
 
   return new Promise<T>((resolveRequest, rejectRequest) => {
     let settled = false;
+    let requestSent = false;
     const chunks: string[] = [];
     let receivedBytes = 0;
     const socket = connectSocket(state.socketPath);
@@ -271,7 +272,10 @@ export async function sendSessionRequest<T = unknown>(
       settled = true;
       clearTimeout(timer);
       socket.destroy();
-      if (error) rejectRequest(error);
+      if (error) {
+        if (requestSent) SENT_REQUEST_ERRORS.add(error);
+        rejectRequest(error);
+      }
       else resolveRequest(value as T);
     };
 
@@ -281,7 +285,12 @@ export async function sendSessionRequest<T = unknown>(
     timer.unref?.();
 
     socket.once("connect", () => {
-      socket.write(`${JSON.stringify(payload)}\n`);
+      try {
+        requestSent = true;
+        socket.write(`${JSON.stringify(payload)}\n`);
+      } catch (error) {
+        finish(error instanceof Error ? error : new Error(String(error)));
+      }
     });
     socket.on("data", (chunk: string) => {
       receivedBytes += Buffer.byteLength(chunk);
@@ -335,7 +344,9 @@ async function waitForReady(
         lastError = error;
       }
     }
-    await new Promise((resolveDelay) => setTimeout(resolveDelay, 40));
+    await new Promise((resolveDelay) =>
+      setTimeout(resolveDelay, READY_POLL_INTERVAL_MS)
+    );
   }
   throw new SessionProtocolError(
     `Session did not start within ${timeoutMs}ms${
@@ -348,9 +359,15 @@ function matchesExpectedConfig(
   current: SessionConfig,
   expected: Partial<SessionConfig>
 ): boolean {
-  return (Object.keys(expected) as Array<keyof SessionConfig>).every(
-    (key) => JSON.stringify(current[key]) === JSON.stringify(expected[key])
-  );
+  return (Object.keys(expected) as Array<keyof SessionConfig>).every((key) => {
+    const actualValue = current[key];
+    const expectedValue = expected[key];
+    if (!Array.isArray(actualValue) || !Array.isArray(expectedValue)) {
+      return Object.is(actualValue, expectedValue);
+    }
+    return actualValue.length === expectedValue.length &&
+      actualValue.every((value, index) => value === expectedValue[index]);
+  });
 }
 
 function verifyCompatibleSession(
@@ -401,6 +418,11 @@ export interface EnsureSessionOptions {
   entryPath?: string;
   timeoutMs?: number;
   expectedConfig?: Partial<SessionConfig>;
+}
+
+export interface SessionRequestResult<T> {
+  state: SessionState;
+  data: T;
 }
 
 export async function ensureSession(
@@ -519,6 +541,7 @@ export async function ensureSession(
     const logFd = openSync(paths.logFile, "a", 0o600);
     if (process.platform !== "win32") chmodSync(paths.logFile, 0o600);
     try {
+      const { spawn } = await import("node:child_process");
       const child = spawn(
         process.execPath,
         [entryPath, "__daemon", "--state-file", paths.stateFile],
@@ -550,32 +573,73 @@ export async function ensureSession(
   }
 }
 
-export async function getLiveSession(session: string): Promise<SessionState | null> {
+/**
+ * Reuse a healthy session and make its requested operation the health check.
+ * Only connection failures known to happen before the request was sent may
+ * enter stale recovery; an ambiguously completed operation is never retried.
+ */
+export async function ensureSessionRequest<T>(
+  options: EnsureSessionOptions,
+  request: SessionRequest,
+  requestTimeoutMs = 60_000
+): Promise<SessionRequestResult<T>> {
+  const paths = getSessionPaths(options.session);
+  const current = readSessionState(paths);
+  if (current?.ready && isProcessRunning(current.pid)) {
+    const compatible = verifyCompatibleSession(current, options);
+    try {
+      return {
+        state: compatible,
+        data: await sendSessionRequest<T>(compatible, request, requestTimeoutMs),
+      };
+    } catch (error) {
+      if (!isStaleEndpointError(error)) throw error;
+      removeSessionFiles(paths, true);
+    }
+  }
+
+  const state = await ensureSession(options);
+  return {
+    state,
+    data: await sendSessionRequest<T>(state, request, requestTimeoutMs),
+  };
+}
+
+export async function sendLiveSessionRequest<T>(
+  session: string,
+  request: SessionRequest,
+  timeoutMs = 60_000
+): Promise<SessionRequestResult<T> | null> {
   const paths = getSessionPaths(session);
   const state = readSessionState(paths);
+  const running = state ? isProcessRunning(state.pid) : false;
   if (
     state &&
     state.protocol !== SESSION_PROTOCOL_VERSION &&
-    isProcessRunning(state.pid)
+    running
   ) {
     throw new SessionProtocolError(
       `Session ${session} uses protocol ${state.protocol}; expected ${SESSION_PROTOCOL_VERSION}`
     );
   }
-  if (!state?.ready || !isProcessRunning(state.pid)) {
-    if (state && !isProcessRunning(state.pid)) removeSessionFiles(paths);
+  if (!state?.ready || !running) {
+    if (state && !running) removeSessionFiles(paths);
     return null;
   }
   try {
-    await sendSessionRequest(state, { method: "ping" }, 500);
-    return state;
+    return {
+      state,
+      data: await sendSessionRequest<T>(state, request, timeoutMs),
+    };
   } catch (error) {
-    if (!isProcessRunning(state.pid) || isStaleEndpointError(error)) {
-      removeSessionFiles(paths);
-    }
-    if (isProcessRunning(state.pid) && !isStaleEndpointError(error)) throw error;
+    if (!isStaleEndpointError(error)) throw error;
+    removeSessionFiles(paths);
     return null;
   }
+}
+
+export async function getLiveSession(session: string): Promise<SessionState | null> {
+  return (await sendLiveSessionRequest(session, { method: "ping" }, 500))?.state ?? null;
 }
 
 export function toToolResult(value: unknown): ToolResult {

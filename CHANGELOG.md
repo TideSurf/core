@@ -15,6 +15,7 @@
 - **Lifecycle and policy** — Browser setup and shutdown now clean partial resources transactionally. Read-only policy also covers direct `SurfingPage` calls, while `switch_tab` stays available for observation.
 - **CDP action errors** — Page-side `Runtime.callFunctionOn` exceptions now fail their action instead of returning false success.
 - **Page processing** — Corrected viewport and hidden-node filtering, made `includeHidden` a full-DOM override, retained useful children and visible omission markers during bounded token pruning, and removed repeated parser work.
+- **Runtime performance** — Deferred CLI and browser modules until needed, reduced warm session calls to one authenticated request without replaying ambiguous mutations, cached browser ancestor clipping, and removed repeated parser allocations and metric lookups. Added 65,536-branch and 10,000-element performance gates.
 - **JavaScript evaluation** — `evaluate` now validates input shape and size without claiming to sandbox arbitrary page JavaScript, and preserves CDP unserializable values in JSON-safe form.
 - **Documentation and release checks** — Rewrote CLI, API, architecture, security, and troubleshooting guidance. Release verification now runs executable benchmarks and the packaged MCP/CLI path.
 

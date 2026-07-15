@@ -118,7 +118,9 @@ export async function clearInspectionMarkers(
       const pending = [first];
       while (pending.length > 0) {
         const el = pending.pop();
-        for (const name of names) el.removeAttribute(name);
+        for (const name of names) {
+          if (el.hasAttribute(name)) el.removeAttribute(name);
+        }
         if (el.shadowRoot) stack.push(el.shadowRoot);
         if (el.tagName === 'IFRAME') {
           try { if (el.contentDocument) stack.push(el.contentDocument); } catch {}
@@ -199,8 +201,11 @@ export async function inspectPage(
   while (stack.length > 0 && !overflow) {
     const el = stack.pop();
     if (!el || el.nodeType !== Node.ELEMENT_NODE) continue;
-    for (const attribute of Array.from(el.attributes)) {
-      if (staleMarker.test(attribute.name)) el.removeAttribute(attribute.name);
+    for (let index = el.attributes.length - 1; index >= 0; index--) {
+      const name = el.attributes[index].name;
+      if (name.startsWith('data-tidesurf-') && staleMarker.test(name)) {
+        el.removeAttribute(name);
+      }
     }
     elements.push(el);
 
@@ -236,7 +241,10 @@ export async function inspectPage(
     return style;
   };
 
-  const clipRegionCache = new WeakMap();
+  // Cache each element's complete descendant clip region. Caching the region
+  // inherited by an element would recalculate the same parent bounds once per
+  // sibling, which is costly for large lists inside an overflow container.
+  const descendantClipRegionCache = new WeakMap();
   const unboundedRegion = {
     top: -Infinity, bottom: Infinity,
     left: -Infinity, right: Infinity,
@@ -345,14 +353,16 @@ export async function inspectPage(
     return region;
   };
 
-  const inheritedClipRegion = element => {
-    if (clipRegionCache.has(element)) return clipRegionCache.get(element);
+  const clipRegionThrough = element => {
+    if (descendantClipRegionCache.has(element)) {
+      return descendantClipRegionCache.get(element);
+    }
     const unresolved = [];
     const visited = new Set();
     let current = element;
-    while (current && !clipRegionCache.has(current)) {
+    while (current && !descendantClipRegionCache.has(current)) {
       if (visited.has(current)) {
-        for (const item of unresolved) clipRegionCache.set(item, null);
+        for (const item of unresolved) descendantClipRegionCache.set(item, null);
         return null;
       }
       visited.add(current);
@@ -360,18 +370,20 @@ export async function inspectPage(
       current = composedParent(current);
     }
 
+    let region = current
+      ? descendantClipRegionCache.get(current)
+      : unboundedRegion;
     for (let index = unresolved.length - 1; index >= 0; index--) {
       const item = unresolved[index];
-      const ancestor = composedParent(item);
-      const inherited = ancestor
-        ? clipRegionCache.get(ancestor)
-        : unboundedRegion;
-      clipRegionCache.set(
-        item,
-        ancestor ? extendClipRegion(inherited, ancestor) : unboundedRegion
-      );
+      region = extendClipRegion(region, item);
+      descendantClipRegionCache.set(item, region);
     }
-    return clipRegionCache.get(element);
+    return descendantClipRegionCache.get(element);
+  };
+
+  const inheritedClipRegion = element => {
+    const parent = composedParent(element);
+    return parent ? clipRegionThrough(parent) : unboundedRegion;
   };
 
   const clipThroughAncestors = (initialRect, element) => {
@@ -484,24 +496,37 @@ export async function inspectPage(
 
   const decisions = [];
   const visibleDirectText = (parent, view) => {
-    const indices = [];
+    let indices;
+    let range;
     for (let index = 0; index < parent.childNodes.length; index++) {
       const child = parent.childNodes[index];
       if (child.nodeType !== Node.TEXT_NODE || !child.nodeValue.trim()) continue;
       try {
-        const range = parent.ownerDocument.createRange();
+        range ||= parent.ownerDocument.createRange();
         range.selectNodeContents(child);
-        const rects = Array.from(range.getClientRects());
-        if (rects.some(textRect => visibleThroughFrames(textRect, view, child))) {
-          indices.push(index);
+        const rects = range.getClientRects();
+        for (let rectIndex = 0; rectIndex < rects.length; rectIndex++) {
+          if (visibleThroughFrames(rects[rectIndex], view, child)) {
+            (indices ||= []).push(index);
+            break;
+          }
         }
       } catch {
         // Ignore text nodes without range geometry.
       }
     }
-    return indices;
+    return indices ? indices.join(',') : '';
   };
+  const hiddenSubtrees = new WeakSet();
   if (!overflow && (markViewport || markHidden)) for (const el of elements) {
+    const parent = composedParent(el);
+    const frame = !parent && el === el.ownerDocument.documentElement
+      ? el.ownerDocument.defaultView && el.ownerDocument.defaultView.frameElement
+      : null;
+    if ((parent && hiddenSubtrees.has(parent)) || (frame && hiddenSubtrees.has(frame))) {
+      hiddenSubtrees.add(el);
+      continue;
+    }
     const view = el.ownerDocument.defaultView || window;
     const style = computedStyle(el);
     const hidden = hiddenByStyle(style);
@@ -514,10 +539,11 @@ export async function inspectPage(
       clipPath === 'inset(100%)' || clipPath === 'circle(0)' ||
       clipPath === 'circle(0px)' || clipPath === 'polygon(00,00,00)'
     );
+    if (subtreeHidden) hiddenSubtrees.add(el);
     let visible = false;
-    const state = [];
-    const visibleText = [];
-    const visibleShadowText = [];
+    let state = '';
+    let visibleText = '';
+    let visibleShadowText = '';
 
     if (markViewport && !hidden) {
       let rect = el.getBoundingClientRect();
@@ -536,17 +562,18 @@ export async function inspectPage(
         }
       }
 
-      visibleText.push(...visibleDirectText(el, view));
+      visibleText = visibleDirectText(el, view);
       if (el.shadowRoot) {
-        visibleShadowText.push(...visibleDirectText(el.shadowRoot, view));
+        visibleShadowText = visibleDirectText(el.shadowRoot, view);
       }
 
       if (visible && el.matches('a, button, input, select, textarea, [role="button"], [role="link"], [role="textbox"], [role="listbox"]')) {
+        const states = [];
         if (el.matches(':disabled') || el.getAttribute('aria-disabled') === 'true') {
-          state.push('disabled');
+          states.push('disabled');
         }
         if (style.pointerEvents === 'none' || el.closest('[inert]')) {
-          state.push('inert');
+          states.push('inert');
         }
 
         const centerX = rect.left + rect.width / 2;
@@ -554,30 +581,42 @@ export async function inspectPage(
         if (centerX >= 0 && centerX <= view.innerWidth && centerY >= 0 && centerY <= view.innerHeight) {
           const top = el.ownerDocument.elementFromPoint(centerX, centerY);
           if (top && top !== el && !el.contains(top) && !top.contains(el)) {
-            state.push('obscured');
+            states.push('obscured');
           }
         }
+        state = states.join(',');
       }
     }
 
-    decisions.push({
-      el,
-      hidden: hidden ? (subtreeHidden ? 'subtree' : 'self') : undefined,
-      visible,
-      state,
-      visibleText,
-      visibleShadowText
-    });
+    const hiddenMarker = markHidden && hidden
+      ? (subtreeHidden ? 'subtree' : 'self')
+      : '';
+    if (hiddenMarker || visible || state || visibleText || visibleShadowText) {
+      decisions.push({
+        el,
+        hidden: hiddenMarker,
+        visible,
+        state,
+        visibleText,
+        visibleShadowText
+      });
+    }
   }
 
   for (const decision of decisions) {
-    if (markHidden && decision.hidden) decision.el.setAttribute(markerHidden, decision.hidden);
-    if (decision.visible) decision.el.setAttribute(markerVisible, '1');
-    if (decision.state.length > 0) decision.el.setAttribute(markerState, decision.state.join(','));
-    if (decision.visibleText.length > 0 || decision.visibleShadowText.length > 0) {
+    if (decision.hidden) {
+      decision.el.setAttribute(markerHidden, decision.hidden);
+    }
+    if (decision.visible) {
+      decision.el.setAttribute(markerVisible, '1');
+    }
+    if (decision.state) {
+      decision.el.setAttribute(markerState, decision.state);
+    }
+    if (decision.visibleText || decision.visibleShadowText) {
       decision.el.setAttribute(
         markerText,
-        decision.visibleText.join(',') + '|' + decision.visibleShadowText.join(',')
+        decision.visibleText + '|' + decision.visibleShadowText
       );
     }
   }

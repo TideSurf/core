@@ -1,7 +1,9 @@
+import { walkDOM } from "../../src/parser/dom-walker.js";
 import { filterInteractive, filterMinimal } from "../../src/parser/mode-filter.js";
+import { serialize } from "../../src/parser/serializer.js";
 import { pruneToFit } from "../../src/parser/token-budget.js";
 import { filterViewportOnly } from "../../src/parser/viewport-filter.js";
-import type { OSNode } from "../../src/types.js";
+import type { CDPNode, OSNode } from "../../src/types.js";
 
 function text(value: string): OSNode {
   return { tag: "#text", attributes: {}, children: [], text: value };
@@ -33,23 +35,28 @@ function expectNearLinear(small: number, large: number, inputGrowth: number): vo
   expect(ratio).toBeLessThan(inputGrowth * 2.5);
 }
 
+function expectWithinCeiling(runtime: number): void {
+  expect(runtime).toBeLessThan(5_000);
+}
+
 describe("parser scaling", () => {
   it("prunes large flat trees without quadratic serialization", () => {
     const build = (count: number) =>
       Array.from({ length: count }, (_, index) =>
         node("section", [text(`Content ${index} ${"x".repeat(40)}`)])
       );
-    const small = build(2_000);
-    const large = build(8_000);
+    const small = build(4_096);
+    const large = build(65_536);
 
     const smallTime = medianRuntime(() => {
       pruneToFit(small, { maxTokens: 2_000 });
-    });
+    }, 3);
     const largeTime = medianRuntime(() => {
       pruneToFit(large, { maxTokens: 2_000 });
-    });
+    }, 3);
 
-    expectNearLinear(smallTime, largeTime, 4);
+    expectNearLinear(smallTime, largeTime, 16);
+    expectWithinCeiling(largeTime);
   });
 
   it("filters interactive and minimal modes in near-linear time", () => {
@@ -63,17 +70,18 @@ describe("parser scaling", () => {
         )
       ),
     ];
-    const small = build(2_000);
-    const large = build(8_000);
+    const small = build(4_096);
+    const large = build(65_536);
 
     const run = (nodes: OSNode[]) => {
       filterInteractive(nodes);
       filterMinimal(nodes);
     };
-    const smallTime = medianRuntime(() => run(small));
-    const largeTime = medianRuntime(() => run(large));
+    const smallTime = medianRuntime(() => run(small), 3);
+    const largeTime = medianRuntime(() => run(large), 3);
 
-    expectNearLinear(smallTime, largeTime, 4);
+    expectNearLinear(smallTime, largeTime, 16);
+    expectWithinCeiling(largeTime);
   });
 
   it("filters viewport-spanning containers in near-linear time", () => {
@@ -89,16 +97,68 @@ describe("parser scaling", () => {
         visible: true,
       },
     ];
-    const small = build(2_000);
-    const large = build(8_000);
+    const small = build(4_096);
+    const large = build(65_536);
 
     const smallTime = medianRuntime(() => {
       filterViewportOnly(small);
-    });
+    }, 3);
     const largeTime = medianRuntime(() => {
       filterViewportOnly(large);
-    });
+    }, 3);
 
-    expectNearLinear(smallTime, largeTime, 4);
+    expectNearLinear(smallTime, largeTime, 16);
+    expectWithinCeiling(largeTime);
+  });
+
+  it("walks and serializes 65k DOM branches in near-linear time", () => {
+    const build = (count: number): CDPNode => {
+      let nextId = 0;
+      const element = (
+        nodeName: string,
+        children: CDPNode[] = []
+      ): CDPNode => ({
+        nodeId: ++nextId,
+        backendNodeId: nextId,
+        nodeType: 1,
+        nodeName,
+        localName: nodeName.toLowerCase(),
+        nodeValue: "",
+        children,
+      });
+      const textNode = (value: string): CDPNode => ({
+        nodeId: ++nextId,
+        backendNodeId: nextId,
+        nodeType: 3,
+        nodeName: "#text",
+        localName: "",
+        nodeValue: value,
+      });
+      return element("#document", [
+        element("HTML", [
+          element(
+            "BODY",
+            Array.from({ length: count }, (_, index) =>
+              element("DIV", [
+                index % 5 === 0
+                  ? element("BUTTON", [textNode(`Action ${index}`)])
+                  : element("P", [textNode(`Content ${index}`)]),
+              ])
+            )
+          ),
+        ]),
+      ]);
+    };
+    const small = build(4_096);
+    const large = build(65_536);
+    const run = (root: CDPNode) => {
+      serialize(walkDOM(root).nodes);
+    };
+
+    const smallTime = medianRuntime(() => run(small), 3);
+    const largeTime = medianRuntime(() => run(large), 3);
+
+    expectNearLinear(smallTime, largeTime, 16);
+    expectWithinCeiling(largeTime);
   });
 });

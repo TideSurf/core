@@ -1,13 +1,15 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { statSync, writeFileSync } from "node:fs";
-import { connect as connectSocket } from "node:net";
+import { connect as connectSocket, createServer } from "node:net";
 import { join } from "node:path";
 import {
   SESSION_PROTOCOL_VERSION,
   SessionProtocolError,
   ensureSession,
+  ensureSessionRequest,
   getSessionPaths,
   isProcessRunning,
   readSessionState,
@@ -19,6 +21,7 @@ import {
   type SessionState,
 } from "../../src/cli/session.js";
 import { runDaemon, type DaemonController } from "../../src/cli/daemon.js";
+import { VERSION } from "../../src/version.js";
 
 const root = join(import.meta.dir, "..", "..");
 const entryPath = join(root, "src", "cli.ts");
@@ -177,6 +180,88 @@ describe("named session daemon", () => {
 });
 
 describe("session recovery", () => {
+  it("uses the requested warm operation as the health check", async () => {
+    const name = `single-request-${randomUUID()}`;
+    const paths = getSessionPaths(name);
+    const missingEntryPath = join(root, "test", "fixtures", "missing-cli.ts");
+    const secret = "c".repeat(64);
+    const daemonProcess = spawn(
+      process.execPath,
+      ["-e", "setInterval(() => {}, 1000)"],
+      { stdio: "ignore" }
+    );
+    await once(daemonProcess, "spawn");
+    const daemonPid = daemonProcess.pid!;
+    let connections = 0;
+    const server = createServer((socket) => {
+      connections++;
+      socket.setEncoding("utf8");
+      let body = "";
+      socket.on("data", async (chunk: string) => {
+        body += chunk;
+        const newline = body.indexOf("\n");
+        if (newline === -1) return;
+        const request = JSON.parse(body.slice(0, newline)) as {
+          id: string;
+          request: { method: string };
+        };
+        if (request.request.method === "tool") {
+          const exited = once(daemonProcess, "exit");
+          daemonProcess.kill();
+          await exited;
+          socket.destroy();
+          return;
+        }
+        socket.end(`${JSON.stringify({
+          protocol: SESSION_PROTOCOL_VERSION,
+          id: request.id,
+          success: true,
+          data: { method: request.request.method },
+        })}\n`);
+      });
+    });
+
+    server.listen(paths.socketPath);
+    await once(server, "listening");
+    writeSessionState(paths, {
+      protocol: SESSION_PROTOCOL_VERSION,
+      version: VERSION,
+      session: name,
+      secret,
+      socketPath: paths.socketPath,
+      config,
+      pid: daemonPid,
+      ready: true,
+    });
+
+    try {
+      const response = await ensureSessionRequest<{ method: string }>(
+        { session: name, config, entryPath: missingEntryPath },
+        { method: "status" }
+      );
+      expect(response.data).toEqual({ method: "status" });
+      expect(connections).toBe(1);
+
+      await expect(
+        ensureSessionRequest(
+          { session: name, config, entryPath: missingEntryPath },
+          { method: "tool", name: "click", input: { id: "B1" } }
+        )
+      ).rejects.toThrow();
+      expect(connections).toBe(2);
+      expect(readSessionState(paths)?.secret).toBe(secret);
+    } finally {
+      if (isProcessRunning(daemonPid)) {
+        const exited = once(daemonProcess, "exit");
+        daemonProcess.kill();
+        await exited;
+      }
+      server.close();
+      await once(server, "close");
+      removeSessionFiles(paths, true);
+    }
+  });
+
   it("validates portable session names", () => {
     expect(validateSessionName("agent_1.prod")).toBe("agent_1.prod");
     expect(() => validateSessionName("../escape")).toThrow(SessionProtocolError);

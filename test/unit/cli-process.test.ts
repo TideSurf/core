@@ -37,16 +37,20 @@ function runCli(args: string[], stdin?: Uint8Array) {
 
 describe("CLI process behavior", () => {
   it("prints general help with no arguments", () => {
-    const result = cli();
-    expect(result.code).toBe(0);
-    expect(result.stdout).toContain("Stateful Chromium automation for agents");
-    expect(result.stdout).toContain("get-state");
+    const results = [cli(), cli("--help"), cli("help")];
+    for (const result of results) {
+      expect(result.code).toBe(0);
+      expect(result.stdout).toContain("Stateful Chromium automation for agents");
+      expect(result.stdout).toContain("get-state");
+    }
+    expect(new Set(results.map((result) => result.stdout)).size).toBe(1);
   });
 
   it("prints the package version", () => {
-    const result = cli("--version");
-    expect(result.code).toBe(0);
-    expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/);
+    for (const result of [cli("--version"), cli("-V")]) {
+      expect(result.code).toBe(0);
+      expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/);
+    }
   });
 
   it("generates tool help from registry metadata", () => {
