@@ -1,122 +1,42 @@
-<img src="https://tidesurf.org/logo.svg" width="180" height="48" alt="TideSurf">
+<p align="center">
+  <img src="https://tidesurf.org/mark.svg" width="80" height="80" alt="TideSurf">
+</p>
 
-# TideSurf
+<h2 align="center">TideSurf</h2>
 
-**Agents Surfing**
+<p align="center">
+  <a href="README.md">English</a> | <strong>日本語</strong> | <a href="README.ko.md">한국어</a>
+</p>
 
-[Webサイト](https://tidesurf.org) · [ドキュメント](https://tidesurf.org/docs) · [llms.txt](https://tidesurf.org/llms.txt) · [npm](https://www.npmjs.com/package/@tidesurf/core) · [スポンサー](https://github.com/sponsors/MercuriusDream)
+<p align="center">
+  <strong><a href="https://tidesurf.org">ウェブサイト</a></strong> |
+  <strong><a href="https://tidesurf.org/docs">ドキュメント</a></strong> |
+  <strong><a href="https://tidesurf.org/llms.txt">llms.txt</a></strong> |
+  <strong><a href="https://www.npmjs.com/package/@tidesurf/core">npm</a></strong> |
+  <strong><a href="https://github.com/sponsors/MercuriusDream">スポンサー</a></strong>
+</p>
 
-TideSurfは、実行中のChromiumページをエージェント向けのコンパクトなテキストへ変換します。操作可能な要素には、現在のDOMに結び付いた短いIDが付きます。CLI、SDK executor、MCPは同じ18ツールを使います。
-
-## インストール
+<p align="center"><strong>
+  ウェブブラウジングにオムニモーダルな視覚モデルは必要ありません。<br>
+  TideSurfはライブDOMをエージェント向けのコンパクトな構造化テキストに変換します。
+</strong><br><br>
+  TideSurfは<a href="https://chromedevtools.github.io/devtools-protocol">Chrome DevTools Protocol</a>を介してChromiumをエージェントに接続するTypeScriptライブラリです。
+  各ページを50〜200トークンのトークン効率の良い構造化表現に圧縮し、
+  エージェントCLI・SDK・MCPが共有する1つのレジストリから18個のツールを公開します。
+</p>
 
 ```sh
 brew install TideSurf/tap/tidesurf
-# または
+# or
 npm install --global @tidesurf/core
 ```
 
-## エージェントCLI
+<p align="center">
+  <img src="https://tidesurf.org/og.png" alt="TideSurf social preview">
+</p>
 
-ツールコマンドを直接実行できます。最初のコマンドが非公開のローカルセッションと、ヘッドレスの分離ブラウザーを起動します。次のシェル呼び出しでも、ブラウザー、タブ、アクティブタブ、要素IDマップが維持されます。
-
-```sh
-tidesurf navigate https://example.com
-tidesurf get_state
-tidesurf click L1
-tidesurf status
-tidesurf stop
-```
-
-並行する作業には名前付きセッションを使います。
-
-```sh
-tidesurf --session research navigate https://example.com
-tidesurf --session research get_state --mode interactive
-```
-
-直接実行できるコマンドは次の18個です。
-
-```text
-get_state       navigate        click           type
-select          scroll          extract         evaluate
-list_tabs       new_tab         switch_tab      close_tab
-search          screenshot      upload          clipboard_read
-clipboard_write download
-```
-
-直接コマンドには、レジストリおよびMCPと同じツール識別子を指定します。`tidesurf tools`はツール一覧、`tidesurf help <command>`はコマンド別ヘルプを表示します。`tidesurf call <tool> --input '<json>'`は生のツール呼び出しを実行します。
-
-既定では、TideSurfが管理ブラウザーを起動します。Chrome stable、Beta、Dev、Canary、Chromiumを検索し、動的なデバッグポートを使います。検索順は`--chrome-path`、`CHROME_PATH`、`PATH`、OSの標準インストール先です。ブラウザーをダウンロードすることはありません。既存ブラウザーを優先する場合は`--auto-connect`、起動を禁止する場合は`--connect-only`を指定します。明示したエンドポイントへの接続に失敗しても、別の実行中ブラウザーには切り替わりません。
-
-読み取り専用ポリシーはセッション終了まで固定されます。
-
-```sh
-tidesurf --session audit --read-only get_state
-```
-
-読み取り専用セッションでは、`get_state`、`extract`、`list_tabs`、`switch_tab`、`search`、`screenshot`だけを使用できます。ナビゲーション、ページ操作、JavaScript、クリップボード、アップロード/ダウンロード、タブの作成と終了はSDKとツールの全境界で拒否されます。
-
-起動ポリシーは変更できません。以降の呼び出しでは起動フラグを省略できます。`--read-only`のような独立したフラグは同じ値だけを繰り返せます。異なる値は拒否されます。
-
-## SDK
-
-```sh
-bun add @tidesurf/core
-```
-
-```ts
-import { TideSurf } from "@tidesurf/core";
-
-const browser = await TideSurf.launch();
-await browser.navigate("https://example.com");
-
-const state = await browser.readPage();
-console.log(state.content);
-
-await browser.getPage().click("B1");
-await browser.close();
-```
-
-ページは実際に操作できるハンドルを含むプレーンテキストになります。
-
-```text
-# Example Search
-> example.com/search | 0/1200 800vh
-
-NAV
-  [L1](/) Home
-  [L2](/about) About
-FORM F1
-  I1 ~Search... ="TideSurf"
-  [B1] Search
-```
-
-`B1`は現在のSearchボタンを指します。ページが変化した後は、もう一度状態を取得してください。
-
-`TideSurf.launch()`はChromiumを起動して所有します。`userDataDir`を指定しない場合は、分離された一時プロファイルを使います。`TideSurf.connect()`は既存のエンドポイントにだけ接続し、既定ポートは`9222`です。接続したインスタンスを閉じても、ユーザーのブラウザーは終了しません。
-
-`readPage()`は`full`、`interactive`、`minimal`モード、ビューポート絞り込み、`maxTokens`に対応します。`includeHidden: true`は非表示ノードを含め、ビューポート絞り込みを無効にします。非推奨の`getState()`はSDK互換用で、`readPage()`へ委譲します。
-
-SDKのアップロードとダウンロードは、既定で作業ディレクトリとOSの一時ディレクトリに限定されます。SDKのファイル操作を無効にするには`fileAccessRoots: []`を指定します。
-
-## MCP
-
-MCPは同じレジストリとexecutorを使う薄いアダプターとして利用できます。
-
-```json
-{
-  "mcpServers": {
-    "tidesurf": {
-      "command": "tidesurf",
-      "args": ["mcp"]
-    }
-  }
-}
-```
-
-MCPサーバーは標準18ツールと、ライフサイクル用の`launch_browser`を公開します。スクリーンショットはMCP画像ブロック、失敗は`isError`付きで返ります。
-
-続きは[Getting started](https://tidesurf.org/docs#getting-started)、[CLI](https://tidesurf.org/docs#cli)、[Security](https://tidesurf.org/docs#security)、[API reference](https://tidesurf.org/docs#api-reference)をご覧ください。
-
-[English](README.md) · [日本語](README.ja.md) · [한국어](README.ko.md) · [Apache 2.0](LICENSE)
+<p align="center">
+  <a href="https://github.com/TideSurf/core/actions/workflows/ci.yml"><img src="https://github.com/TideSurf/core/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://www.npmjs.com/package/@tidesurf/core"><img src="https://img.shields.io/npm/v/@tidesurf/core" alt="npm"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
+</p>

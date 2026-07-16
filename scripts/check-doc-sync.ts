@@ -168,15 +168,6 @@ for (const tool of TOOL_REGISTRY) {
   );
 }
 
-for (const readmePath of ["README.md", "README.ja.md", "README.ko.md"]) {
-  const firstTextFence = read(readmePath).match(/```text\n([\s\S]*?)```/)?.[1] ?? "";
-  equal(
-    firstTextFence.trim().split(/\s+/),
-    canonicalToolNames,
-    `${readmePath} direct-command block must match canonical registry names`
-  );
-}
-
 const expectedReadOnlyNames = TOOL_REGISTRY
   .filter((tool) => tool.readOnlyAllowed)
   .map((tool) => tool.name);
@@ -193,9 +184,6 @@ const securityAllowed = markdownSection(security, "## Read-only mode")
   ?.map((line) => line.slice(3, -1)) ?? [];
 equal(securityAllowed, expectedReadOnlyNames, "security read-only list must match the registry");
 for (const path of [
-  "README.md",
-  "README.ja.md",
-  "README.ko.md",
   "llms.txt",
   "website/docs/content/api-reference.md",
   "website/docs/content/security.md",
@@ -316,9 +304,6 @@ for (const key of [...docsIndex.matchAll(/data-i18n(?:-placeholder)?="([^"]+)"/g
 
 const expectedPageHeader = "> example.com/search | 0/1200 800vh";
 for (const path of [
-  "README.md",
-  "README.ja.md",
-  "README.ko.md",
   "llms.txt",
   "website/docs/content/getting-started.md",
   "website/docs/content/page-format.md",
