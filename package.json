@@ -1,6 +1,6 @@
 {
   "name": "@tidesurf/core",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Stateful Chromium tools with compact DOM text for browser agents",
   "type": "module",
   "main": "dist/index.js",

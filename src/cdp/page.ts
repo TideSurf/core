@@ -44,6 +44,9 @@ import { withTimeout } from "./timeout.js";
 
 const READ_PAGE_MODES = new Set(["full", "minimal", "interactive"]);
 
+// Download completion budget stays decoupled from the per-operation CDP timeout.
+const DOWNLOAD_TIMEOUT_MS = 30_000;
+
 function normalizeReadPageOptions(
   options: ReadPageOptions | undefined
 ): ReadPageOptions {
@@ -247,6 +250,9 @@ export class SurfingPage {
       validatePositiveNumber(amount, "amount");
     }
     await cdp.scroll(this.conn, direction, amount, this.timeout);
+    await this.confirmMutation("Scroll", () =>
+      cdp.waitForStable(this.conn, this.timeout)
+    );
   }
 
   async waitForStable(timeout?: number): Promise<void> {
@@ -457,7 +463,7 @@ export class SurfingPage {
             ? resolveImplicitDownloadRoot(this.fileAccessRoots)
             : undefined,
         fileAccessRoots: this.fileAccessRoots,
-        timeout: options?.timeout ?? this.timeout,
+        timeout: options?.timeout ?? DOWNLOAD_TIMEOUT_MS,
       },
       () => cdp.clickNode(this.conn, backendNodeId, this.timeout)
     );

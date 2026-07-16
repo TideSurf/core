@@ -122,7 +122,7 @@ describe("download event races", () => {
     await expect(download).rejects.toThrow("Download canceled");
   });
 
-  it("reports a download-policy restore failure after completion", async () => {
+  it("returns the completed download despite a policy restore failure", async () => {
     const restoreError = new Error("restore failed");
     const { conn, handlers } = harness(restoreError);
     const download = downloadFromAction(
@@ -136,12 +136,38 @@ describe("download event races", () => {
         handlers.get("downloadProgress")?.({
           guid: "complete",
           state: "completed",
+          totalBytes: 12,
         } as never);
       }
     );
 
-    await expect(download).rejects.toBeInstanceOf(ActionCommittedError);
-    await expect(download).rejects.toHaveProperty("cause", restoreError);
+    await expect(download).resolves.toEqual({
+      filePath: "/tmp/downloads/complete.txt",
+      fileName: "complete.txt",
+      totalBytes: 12,
+    });
+    const setBehavior = conn.Page.setDownloadBehavior as unknown as {
+      mock: { calls: Array<[{ behavior: string }]> };
+    };
+    expect(
+      setBehavior.mock.calls.some(([params]) => params.behavior === "default")
+    ).toBe(true);
+  });
+
+  it("still rejects an uncompleted download when restore also fails", async () => {
+    const { conn } = harness(new Error("restore failed"));
+
+    const attempt = downloadFromAction(
+      conn,
+      { downloadDir: "/tmp/downloads", timeout: 20 },
+      async () => {}
+    );
+
+    await expect(attempt).rejects.toBeInstanceOf(ActionCommittedError);
+    await expect(attempt).rejects.toHaveProperty(
+      "cause",
+      expect.any(CDPTimeoutError)
+    );
   });
 
   it("restores behavior after a timed-out configure resolves late", async () => {
@@ -207,7 +233,7 @@ describe("download event races", () => {
       }
     );
 
-    await expect(first).rejects.toBeInstanceOf(ActionCommittedError);
+    await expect(first).resolves.toMatchObject({ fileName: "first.txt" });
     await expect(
       downloadFromAction(
         conn,

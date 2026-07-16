@@ -1,17 +1,26 @@
 import { describe, it, expect, jest } from "bun:test";
 import { EventEmitter } from "node:events";
+import type { ChildProcess } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SurfingPage } from "../../src/cdp/page.js";
+import { SurfingPage, isSurfingPageConnected } from "../../src/cdp/page.js";
+import type { TabManager } from "../../src/cdp/tab-manager.js";
 import { TideSurf } from "../../src/tidesurf.js";
 import {
+  CDPConnectionError,
+  CDPTimeoutError,
+  ChromeLaunchError,
   ElementNotFoundError,
   ReadOnlyError,
   ValidationError,
 } from "../../src/errors.js";
 import type { CDPConnection } from "../../src/cdp/connection.js";
 import { SNAPSHOT_COMPUTED_STYLES } from "../../src/cdp/snapshot.js";
+import {
+  executeValidatedToolSpec,
+  getToolSpec,
+} from "../../src/tools/registry.js";
 
 function snapshotData(text = "test") {
   const strings: string[] = [];
@@ -510,5 +519,140 @@ describe("SurfingPage runtime validation", () => {
       clip: { x: 0, y: 0, width: 120, height: 60, scale: 1 },
       captureBeyondViewport: true,
     });
+  });
+});
+
+function closableConnection(): CDPConnection {
+  return createMockCDPConnection({
+    client: Object.assign(new EventEmitter(), {
+      close: jest.fn(async () => {}),
+      send: jest.fn().mockResolvedValue(snapshotData()),
+    }) as unknown as CDPConnection["client"],
+  });
+}
+
+function constructTideSurf(
+  tabManager: unknown,
+  options: { process?: ChildProcess; page?: SurfingPage } = {}
+): TideSurf {
+  return Reflect.construct(TideSurf, [
+    options.process ?? null,
+    options.page ?? new SurfingPage(closableConnection()),
+    tabManager as TabManager,
+    "",
+    false,
+    false,
+    "active",
+    undefined,
+    [],
+    {},
+    undefined,
+    "127.0.0.1",
+    9222,
+  ]) as TideSurf;
+}
+
+describe("tool failure guidance", () => {
+  const getState = getToolSpec("get_state")!;
+  const failingInstance = (error: Error): TideSurf =>
+    ({
+      readPage: async () => {
+        throw error;
+      },
+    }) as unknown as TideSurf;
+
+  it("appends loading guidance to timeout failures", async () => {
+    const result = await executeValidatedToolSpec(
+      failingInstance(new CDPTimeoutError("Page read", 5000)),
+      getState,
+      {}
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("Page read timed out after 5000ms");
+    expect(result.error).toContain(
+      "The page may still be loading. Call get_state to check the current state, or retry."
+    );
+  });
+
+  it("appends Chrome setup guidance to connection and launch failures", async () => {
+    for (const error of [
+      new CDPConnectionError("WebSocket is not open"),
+      new ChromeLaunchError("Chrome executable not found"),
+    ]) {
+      const result = await executeValidatedToolSpec(
+        failingInstance(error),
+        getState,
+        {}
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain(error.message);
+      expect(result.error).toContain("Make sure Chrome is installed");
+      expect(result.error).toContain("chrome://inspect#remote-debugging");
+    }
+  });
+
+  it("keeps other failure messages unchanged", async () => {
+    const result = await executeValidatedToolSpec(
+      failingInstance(new Error("boom")),
+      getState,
+      {}
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe("boom");
+  });
+});
+
+describe("closeTab successor promotion", () => {
+  it("does not promote a disconnected cached page as the new active page", async () => {
+    const tabManager = {
+      listTabs: jest.fn().mockResolvedValue([
+        { id: "active", url: "about:blank", title: "", type: "page" },
+        { id: "next", url: "about:blank", title: "", type: "page" },
+      ]),
+      connectToTab: jest.fn(async () => closableConnection()),
+      closeTab: jest.fn(async () => {}),
+    };
+    const surf = constructTideSurf(tabManager);
+    const staleConnection = closableConnection();
+    const stalePage = new SurfingPage(staleConnection);
+    Reflect.set(staleConnection, "disconnected", true);
+    (Reflect.get(surf, "pages") as Map<string, SurfingPage>).set(
+      "next",
+      stalePage
+    );
+    expect(isSurfingPageConnected(stalePage)).toBe(false);
+
+    await surf.closeTab("active");
+
+    expect(Reflect.get(surf, "activeTabId")).toBe("next");
+    expect(surf.getPage()).not.toBe(stalePage);
+    expect(isSurfingPageConnected(surf.getPage())).toBe(true);
+    expect(tabManager.connectToTab).toHaveBeenCalledWith("next", undefined);
+    await surf.close();
+  });
+});
+
+describe("owned Chrome exit handler", () => {
+  it("swallows kill failures at process exit", async () => {
+    const kill = jest.fn(() => {
+      throw new Error("kill EPERM");
+    });
+    const proc = {
+      exitCode: null,
+      signalCode: null,
+      kill,
+    } as unknown as ChildProcess;
+    const surf = constructTideSurf({}, { process: proc });
+
+    const handler = Reflect.get(surf, "exitHandler") as () => void;
+    expect(typeof handler).toBe("function");
+    expect(() => handler()).not.toThrow();
+    expect(kill).toHaveBeenCalledTimes(1);
+
+    Reflect.set(proc, "exitCode", 0);
+    await surf.close();
   });
 });

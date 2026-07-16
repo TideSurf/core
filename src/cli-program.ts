@@ -1,6 +1,7 @@
 import {
   CliUsageError,
   buildToolInput,
+  jsonOutputRequested,
   normalizeCliPaths,
   parseInvocation,
   unknownCommandError,
@@ -8,6 +9,7 @@ import {
 } from "./cli/args.js";
 import { commandHelp, generalHelp } from "./cli/help.js";
 import {
+  CLI_ERROR_EXIT_CODES,
   CLI_EXIT_CODES,
   type LifecycleCommandName,
 } from "./cli/metadata.js";
@@ -55,22 +57,14 @@ function writeLine(value: string, stream: NodeJS.WriteStream = process.stdout): 
 
 function errorExitCode(error: unknown): number {
   const name = error instanceof Error ? error.name : "";
+  const mapped: number | undefined = CLI_ERROR_EXIT_CODES[name];
+  if (mapped !== undefined) return mapped;
   const code = typeof error === "object" && error !== null
     ? (error as NodeJS.ErrnoException).code ?? ""
     : "";
-  if (error instanceof CliUsageError) return CLI_EXIT_CODES.usage.code;
-  if (name === "SessionStateError") return CLI_EXIT_CODES.browser.code;
-  if (/Chrome|CDPConnection|Navigation/.test(name)) {
-    return CLI_EXIT_CODES.browser.code;
-  }
-  if (
-    name === "SessionProtocolError" ||
-    /Protocol|Socket|ECONN|EPIPE/.test(name) ||
-    /^(?:ECONN|EPIPE|ENOENT)/.test(code)
-  ) {
-    return CLI_EXIT_CODES.protocol.code;
-  }
-  return CLI_EXIT_CODES.tool.code;
+  return /^(?:ECONN|EPIPE|ENOENT)/.test(code)
+    ? CLI_EXIT_CODES.protocol.code
+    : CLI_EXIT_CODES.tool.code;
 }
 
 function printError(error: unknown): void {
@@ -78,11 +72,11 @@ function printError(error: unknown): void {
 }
 
 function requestTimeout(
-  invocation: ParsedInvocation,
+  config: SessionState["config"],
   input?: Record<string, unknown>
 ): number {
   const toolTimeout = typeof input?.["timeout"] === "number" ? input["timeout"] : 0;
-  const operationTimeout = invocation.sessionConfig.timeout ?? DEFAULT_OPERATION_TIMEOUT;
+  const operationTimeout = config.timeout ?? DEFAULT_OPERATION_TIMEOUT;
   const timeout = Math.max(
     60_000,
     operationTimeout * MAX_SEQUENTIAL_OPERATION_PHASES +
@@ -110,6 +104,22 @@ function preflightToolInput(
   } catch (error) {
     throw new CliUsageError(message(error));
   }
+}
+
+/**
+ * The daemon's persisted config drives the request budget: a running
+ * session may legitimately work for multiples of its own timeout, not the
+ * local process defaults.
+ */
+async function effectiveSessionConfig(
+  invocation: ParsedInvocation
+): Promise<SessionState["config"]> {
+  const { getSessionPaths, isProcessRunning, readSessionState } =
+    await loadSessionModule();
+  const state = readSessionState(getSessionPaths(invocation.session));
+  return state && isProcessRunning(state.pid)
+    ? state.config
+    : invocation.sessionConfig;
 }
 
 async function sessionPolicy(
@@ -190,6 +200,10 @@ async function outputScreenshot(
   };
 }
 
+function printSuccess(json: boolean, data: unknown, text: string): void {
+  writeLine(json ? JSON.stringify({ success: true, data }, null, 2) : text);
+}
+
 function printToolResult(result: ToolResult, json: boolean): number {
   if (json) {
     writeLine(
@@ -222,7 +236,7 @@ async function executeToolCommand(
   const { data: response } = await ensureSessionRequest<ToolResult>(
     sessionOptions(invocation),
     { method: "tool", name: tool.name, input },
-    requestTimeout(invocation, input)
+    requestTimeout(policy, input)
   );
   let result = toToolResult(response);
   if (tool.outputKind === "image") {
@@ -290,9 +304,9 @@ async function startSession(invocation: ParsedInvocation): Promise<number> {
   const { data: status } = await ensureSessionRequest(
     sessionOptions(invocation),
     { method: "start" },
-    requestTimeout(invocation)
+    requestTimeout(await effectiveSessionConfig(invocation))
   );
-  writeLine(invocation.json ? JSON.stringify({ success: true, data: status }, null, 2) : formatToolData(status));
+  printSuccess(invocation.json, status, formatToolData(status));
   return 0;
 }
 
@@ -306,11 +320,11 @@ async function statusSession(invocation: ParsedInvocation): Promise<number> {
   );
   if (!response) {
     const data = { session: invocation.session, running: false };
-    writeLine(invocation.json ? JSON.stringify({ success: true, data }, null, 2) : `Session ${invocation.session} is stopped.`);
+    printSuccess(invocation.json, data, `Session ${invocation.session} is stopped.`);
     return 0;
   }
   const status = response.data;
-  writeLine(invocation.json ? JSON.stringify({ success: true, data: status }, null, 2) : formatToolData(status));
+  printSuccess(invocation.json, status, formatToolData(status));
   return 0;
 }
 
@@ -323,7 +337,7 @@ async function stopSession(invocation: ParsedInvocation): Promise<number> {
   const response = await sendLiveSessionRequest(
     invocation.session,
     { method: "stop" },
-    requestTimeout(invocation)
+    requestTimeout(await effectiveSessionConfig(invocation))
   );
   const state = response?.state;
   const data = response
@@ -338,19 +352,19 @@ async function stopSession(invocation: ParsedInvocation): Promise<number> {
       throw protocolError(`Session ${invocation.session} did not stop cleanly`);
     }
   }
-  writeLine(invocation.json ? JSON.stringify({ success: true, data }, null, 2) : `Session ${invocation.session} stopped.`);
+  printSuccess(invocation.json, data, `Session ${invocation.session} stopped.`);
   return 0;
 }
 
 function listTools(invocation: ParsedInvocation): number {
   if (invocation.positionals.length) throw new CliUsageError("tools takes no arguments");
-  if (invocation.json) {
-    writeLine(JSON.stringify({ success: true, data: getToolDefinitions() }, null, 2));
-  } else {
-    writeLine(getToolSpecs()
+  printSuccess(
+    invocation.json,
+    getToolDefinitions(),
+    getToolSpecs()
       .map((tool) => `${tool.name}\t${tool.description}`)
-      .join("\n"));
-  }
+      .join("\n")
+  );
   return 0;
 }
 
@@ -516,42 +530,6 @@ async function dispatch(invocation: ParsedInvocation): Promise<number> {
 
 async function main(argv: string[]): Promise<number> {
   return dispatch(parseInvocation(argv));
-}
-
-function jsonOutputRequested(args: readonly string[]): boolean {
-  let enabled = false;
-  for (let index = 0; index < args.length; index++) {
-    const argument = args[index];
-    if (argument === "--") break;
-    if (argument === "--no-json") {
-      const next = args[index + 1];
-      if (next === "true" || next === "false") {
-        enabled = next === "false";
-        index++;
-      } else {
-        enabled = false;
-      }
-      continue;
-    }
-    if (argument.startsWith("--no-json=")) {
-      enabled = argument.slice("--no-json=".length) === "false";
-      continue;
-    }
-    if (argument === "--json") {
-      const next = args[index + 1];
-      if (next === "true" || next === "false") {
-        enabled = next === "true";
-        index++;
-      } else {
-        enabled = true;
-      }
-      continue;
-    }
-    if (argument.startsWith("--json=")) {
-      enabled = argument.slice("--json=".length) !== "false";
-    }
-  }
-  return enabled;
 }
 
 export function runCliProcess(argv: string[]): void {

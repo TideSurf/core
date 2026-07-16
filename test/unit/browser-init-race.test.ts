@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BrowserController } from "../../src/cli/browser-controller.js";
 import { TideSurf } from "../../src/tidesurf.js";
+import { SurfingPage } from "../../src/cdp/page.js";
+import type { CDPConnection } from "../../src/cdp/connection.js";
 import type { SessionConfig } from "../../src/cli/session.js";
 import { CDPConnectionError } from "../../src/errors.js";
 
@@ -37,8 +39,11 @@ function emptyProfile(): string {
 }
 
 function fakeBrowser(close = mock(async () => {})): TideSurf {
+  const conn = { client: { close: mock(async () => {}) } } as unknown as CDPConnection;
+  const page = new SurfingPage(conn);
   return {
     close,
+    getPage: () => page,
     getToolExecutor: () => mock(async () => ({ success: true })),
   } as unknown as TideSurf;
 }
@@ -197,7 +202,7 @@ describe("BrowserController initialization", () => {
     });
 
     expect(await controller.getBrowser()).toBe(browser);
-    expect(connect).toHaveBeenCalledTimes(2);
+    expect(connect).toHaveBeenCalledTimes(1);
     expect(launch).toHaveBeenCalledTimes(1);
     expect(launch.mock.calls[0]?.[0]).toMatchObject({ port: 9_333 });
     expect(controller.status().source).toBe("launched");
@@ -224,13 +229,12 @@ describe("BrowserController initialization", () => {
     await controller.close();
   });
 
-  it("continues local discovery after an explicit connect-only endpoint fails", async () => {
-    const browser = fakeBrowser();
+  it("fails fast when an explicit connect-only endpoint is unavailable", async () => {
     const connect = mock(async (options: Parameters<typeof TideSurf.connect>[0]) => {
       if (options?.port === 9_333) {
         throw new CDPConnectionError("explicit endpoint unavailable");
       }
-      return browser;
+      return fakeBrowser();
     });
     const launch = mock(async () => fakeBrowser());
     replaceConnect(connect);
@@ -244,12 +248,8 @@ describe("BrowserController initialization", () => {
       userDataDir: emptyProfile(),
     });
 
-    expect(await controller.getBrowser()).toBe(browser);
-    expect(connect).toHaveBeenCalledTimes(2);
-    expect(connect.mock.calls[1]?.[0]).toMatchObject({
-      host: "127.0.0.1",
-      port: 9222,
-    });
+    await expect(controller.getBrowser()).rejects.toThrow("explicit endpoint unavailable");
+    expect(connect).toHaveBeenCalledTimes(1);
     expect(launch).toHaveBeenCalledTimes(0);
     await controller.close();
   });

@@ -46,6 +46,8 @@ function connection(overrides: Partial<CDPConnection> = {}): CDPConnection {
       releaseObject: mock(async () => ({})),
     } as unknown as CDPConnection["Runtime"],
     Emulation: {} as CDPConnection["Emulation"],
+    disconnected: false,
+    ownsBrowser: true,
     ...overrides,
   };
 }
@@ -56,6 +58,7 @@ function connectionForPageObject(
   target.matches ??= () => false;
   target.closest ??= () => null;
   target.contains ??= () => false;
+  target.focus ??= () => {};
   target.getRootNode ??= () => target.ownerDocument ?? {};
   const ownerDocument = (target.ownerDocument ?? {}) as Record<string, unknown>;
   ownerDocument.defaultView ??= {
@@ -256,12 +259,12 @@ describe("CDP operations", () => {
     await typeText(conn, 7, "new value", true);
 
     expect(target.textContent).toBe("new value");
-    expect(events).toEqual(["input"]);
+    expect(events).toEqual(["input", "change"]);
     expect(selection.removeAllRanges).not.toHaveBeenCalled();
     expect(selection.addRange).not.toHaveBeenCalled();
   });
 
-  it("emits one input event when clearing without replacement text", async () => {
+  it("emits one input/change pair when clearing without replacement text", async () => {
     const events: string[] = [];
     const target: Record<string, unknown> = {
       isConnected: true,
@@ -280,7 +283,7 @@ describe("CDP operations", () => {
     await typeText(conn, 7, "", true);
 
     expect(target.value).toBe("");
-    expect(events).toEqual(["input"]);
+    expect(events).toEqual(["input", "change"]);
   });
 
   it("types into non-selection inputs and enforces maxlength", async () => {
@@ -307,6 +310,30 @@ describe("CDP operations", () => {
     email.maxLength = 1;
     await typeText(connectionForPageObject(email), 7, "😀");
     expect(email.value).toBe("");
+  });
+
+  it("focuses the target and dispatches input then change", async () => {
+    const events: string[] = [];
+    const target: Record<string, unknown> = {
+      isConnected: true,
+      tagName: "INPUT",
+      type: "text",
+      value: "",
+      focus: () => {
+        events.push("focus");
+      },
+      getAttribute: mock(() => null),
+      dispatchEvent: (event: Event) => {
+        events.push(event.type);
+        return true;
+      },
+    };
+    const conn = connectionForPageObject(target);
+
+    await typeText(conn, 7, "hello");
+
+    expect(target.value).toBe("hello");
+    expect(events).toEqual(["focus", "input", "change"]);
   });
 
   it("rejects role textboxes that are not actually editable", async () => {
@@ -372,6 +399,32 @@ describe("CDP operations", () => {
     );
   });
 
+  it("shares one byte-identical interaction guard across injected actions", async () => {
+    const declarations: string[] = [];
+    const capture = () => connection({
+      Runtime: {
+        callFunctionOn: mock(async (params: { functionDeclaration: string }) => {
+          declarations.push(params.functionDeclaration);
+          return { result: { value: true } };
+        }),
+        releaseObject: mock(async () => ({})),
+      } as unknown as CDPConnection["Runtime"],
+    });
+
+    await clickNode(capture(), 7);
+    await typeText(capture(), 7, "text");
+    await selectOption(capture(), 7, "value");
+
+    const guard = (source: string) => source.slice(
+      source.indexOf("const ariaDisabled"),
+      source.indexOf("if (this.matches")
+    );
+    expect(declarations).toHaveLength(3);
+    expect(guard(declarations[0])).toContain("pointerEvents === 'none'");
+    expect(guard(declarations[1])).toBe(guard(declarations[0]));
+    expect(guard(declarations[2])).toBe(guard(declarations[0]));
+  });
+
   it("rejects page-side action exceptions returned by CDP", async () => {
     const releaseObject = mock(async () => ({}));
     const callFunctionOn = mock(async () => ({
@@ -412,6 +465,7 @@ describe("CDP operations", () => {
           order.push("listen");
           return () => {};
         }),
+        on: mock(() => () => {}),
         navigate: mock(async () => {
           order.push("navigate");
           return {};
@@ -432,6 +486,7 @@ describe("CDP operations", () => {
           lifecycle = handler;
           return unsubscribe;
         }),
+        on: mock(() => () => {}),
         navigate: mock(async () => {
           queueMicrotask(() => {
             lifecycle({ name: "load", loaderId: "other-loader" });
@@ -447,6 +502,91 @@ describe("CDP operations", () => {
     expect(unsubscribe).toHaveBeenCalledTimes(1);
   });
 
+  function redirectHarness(
+    schedule: (
+      frameNavigated: (event: { frame: { id: string; loaderId: string } }) => void,
+      lifecycle: (event: { name: string; loaderId: string }) => void
+    ) => void
+  ): CDPConnection {
+    let lifecycle!: (event: { name: string; loaderId: string }) => void;
+    let frameNavigated!: (event: {
+      frame: { id: string; loaderId: string };
+    }) => void;
+    return connection({
+      Page: {
+        lifecycleEvent: mock((handler: typeof lifecycle) => {
+          lifecycle = handler;
+          return () => {};
+        }),
+        on: mock((_event: string, handler: typeof frameNavigated) => {
+          frameNavigated = handler;
+          return () => {};
+        }),
+        navigate: mock(async () => {
+          schedule(
+            (event) => frameNavigated(event),
+            (event) => lifecycle(event)
+          );
+          return { frameId: "frame-1", loaderId: "loader-1" };
+        }),
+      } as unknown as CDPConnection["Page"],
+    });
+  }
+
+  it("resolves when a client-side redirect replaces the pending loader", async () => {
+    const conn = redirectHarness((frameNavigated, lifecycle) => {
+      setTimeout(() => {
+        frameNavigated({ frame: { id: "frame-1", loaderId: "loader-1" } });
+        frameNavigated({ frame: { id: "frame-1", loaderId: "loader-2" } });
+        lifecycle({ name: "load", loaderId: "loader-2" });
+      }, 0);
+    });
+
+    const started = Date.now();
+    await navigate(conn, "https://example.com", 5_000);
+    expect(Date.now() - started).toBeLessThan(1_000);
+  });
+
+  it("resolves a redirect whose events all arrive before the navigate reply", async () => {
+    const conn = redirectHarness((frameNavigated, lifecycle) => {
+      frameNavigated({ frame: { id: "frame-1", loaderId: "loader-1" } });
+      frameNavigated({ frame: { id: "frame-1", loaderId: "loader-2" } });
+      lifecycle({ name: "load", loaderId: "loader-2" });
+    });
+
+    const started = Date.now();
+    await navigate(conn, "https://example.com", 5_000);
+    expect(Date.now() - started).toBeLessThan(1_000);
+  });
+
+  it("does not accept a load from a loader that committed before ours", async () => {
+    const conn = redirectHarness((frameNavigated, lifecycle) => {
+      setTimeout(() => {
+        frameNavigated({ frame: { id: "frame-1", loaderId: "loader-0" } });
+        lifecycle({ name: "load", loaderId: "loader-0" });
+        frameNavigated({ frame: { id: "frame-1", loaderId: "loader-1" } });
+      }, 0);
+    });
+
+    await expect(
+      navigate(conn, "https://example.com", 50)
+    ).rejects.toBeInstanceOf(ActionCommittedError);
+  });
+
+  it("does not accept a subframe loader as a navigation successor", async () => {
+    const conn = redirectHarness((frameNavigated, lifecycle) => {
+      setTimeout(() => {
+        frameNavigated({ frame: { id: "frame-1", loaderId: "loader-1" } });
+        frameNavigated({ frame: { id: "child-frame", loaderId: "iframe-loader" } });
+        lifecycle({ name: "load", loaderId: "iframe-loader" });
+      }, 0);
+    });
+
+    await expect(
+      navigate(conn, "https://example.com", 50)
+    ).rejects.toBeInstanceOf(ActionCommittedError);
+  });
+
   it("stops a committed navigation when the target disconnects", async () => {
     const client = Object.assign(new EventEmitter(), {
       close: mock(async () => {}),
@@ -457,6 +597,7 @@ describe("CDP operations", () => {
       client: client as unknown as CDPConnection["client"],
       Page: {
         lifecycleEvent: mock(() => unsubscribe),
+        on: mock(() => () => {}),
         navigate: mock(async () => ({ loaderId: "loader-1" })),
       } as unknown as CDPConnection["Page"],
     });
@@ -480,6 +621,7 @@ describe("CDP operations", () => {
       client: client as unknown as CDPConnection["client"],
       Page: {
         lifecycleEvent: mock(() => () => {}),
+        on: mock(() => () => {}),
         navigate: mock(() => new Promise(() => {})),
       } as unknown as CDPConnection["Page"],
     });
@@ -526,6 +668,7 @@ describe("CDP operations", () => {
     const conn = connection({
       Page: {
         lifecycleEvent: mock(() => () => {}),
+        on: mock(() => () => {}),
         navigate: mock(async () => ({ errorText: "blocked" })),
       } as unknown as CDPConnection["Page"],
     });
@@ -834,6 +977,57 @@ describe("CDP operations", () => {
       "Page.bringToFront",
       "Browser.resetPermissions",
     ]);
+  });
+
+  it("leaves permission overrides alone on a browser TideSurf did not launch", async () => {
+    const send = mock(async () => ({}));
+    const evaluate = mock(async ({ expression }: { expression: string }) => ({
+      result: {
+        value: expression === "location.origin"
+          ? "https://example.com"
+          : undefined,
+      },
+    }));
+    const conn = connection({
+      ownsBrowser: false,
+      client: Object.assign(new EventEmitter(), { send }) as unknown as CDPConnection["client"],
+      Runtime: { evaluate } as unknown as CDPConnection["Runtime"],
+    });
+
+    await clipboardWrite(conn, "text");
+
+    expect(send.mock.calls.map(([method]) => method)).toEqual([
+      "Browser.grantPermissions",
+      "Page.bringToFront",
+    ]);
+  });
+
+  it("skips the deferred reset on an unowned browser when a grant completes late", async () => {
+    let resolveGrant!: () => void;
+    const grant = new Promise<void>((resolve) => { resolveGrant = resolve; });
+    const send = mock(async (method: string) => {
+      if (method === "Browser.grantPermissions") return grant;
+      return {};
+    });
+    const conn = connection({
+      ownsBrowser: false,
+      client: Object.assign(new EventEmitter(), { send }) as unknown as CDPConnection["client"],
+      Runtime: {
+        evaluate: mock(async () => ({
+          result: { value: "https://example.com" },
+        })),
+      } as unknown as CDPConnection["Runtime"],
+    });
+
+    await expect(clipboardWrite(conn, "text", 5)).rejects.toBeInstanceOf(
+      CDPTimeoutError
+    );
+    resolveGrant();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(send.mock.calls.filter(([method]) =>
+      method === "Browser.resetPermissions"
+    )).toHaveLength(0);
   });
 
   it("keeps clipboard cooldowns independent across browser connections", async () => {

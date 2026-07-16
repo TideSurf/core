@@ -16,7 +16,7 @@ MCP client ── stdio ── MCP adapter ────────────�
 
 All 18 tools have one `ToolSpec`. Each spec holds its JSON schema, read-only eligibility, CLI argument metadata, output kind, validation, and handler. The registry generates SDK definitions, executor dispatch, CLI help, MCP registration, and unknown-tool messages.
 
-MCP adds only transport behavior: stdio registration, schema conversion, PNG image blocks, `isError`, and the `launch_browser` lifecycle tool.
+MCP adds only transport behavior: stdio registration, schema conversion, tolerance for omitted call arguments, PNG image blocks, `isError`, and the `launch_browser` lifecycle tool.
 
 ## Stateful CLI sessions
 
@@ -41,7 +41,7 @@ The transport uses a Unix domain socket on Unix and a named pipe on Windows. Ses
 
 The CLI bootstrap defers session and browser modules until a command needs them. A warm command sends its requested operation as the first authenticated socket request. TideSurf retries only stale-endpoint failures detected before that request is sent; an ambiguous post-send failure returns to the caller without replaying a possible mutation.
 
-Sessions have no idle timeout. `stop` ends the daemon and its browser relationship.
+Sessions have no idle timeout. `stop` ends the daemon and its browser relationship, and it terminates a recorded daemon process whose socket has vanished.
 
 This state-preserving background-process model follows the [Chrome DevTools CLI session design](https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/main/docs/cli.md).
 
@@ -71,7 +71,7 @@ Executable resolution follows one path:
 
 Channel priority is stable, Beta, Dev, Canary, Chromium. Platform locations include macOS user applications and Windows `LOCALAPPDATA`. Edge and Brave do not enter automatic resolution.
 
-Auto-connect checks an explicit endpoint, a supported Chrome profile `DevToolsActivePort`, then a conventional local endpoint. It never converts a failed remote connection into a local launch.
+Without an explicit endpoint, auto-connect checks a supported Chrome profile `DevToolsActivePort`, then a conventional local endpoint. An explicit endpoint is pinned and never falls back to a different running browser: connect-only fails when it does not answer, and auto-connect launches a fresh local browser for a local endpoint or fails for a remote one.
 
 ## Browser-to-agent data flow
 
@@ -109,7 +109,7 @@ Navigation and download waits observe the same disconnect boundary. They stop pr
 
 Element screenshots resolve the current ID once and capture its border box with beyond-viewport capture enabled. All screenshot paths share the same dimension and pixel-area limits.
 
-Clipboard permission changes serialize per browser endpoint within one TideSurf process, so its page connections cannot race while independent browsers remain independent. A timed-out permission reset keeps that process-local endpoint queue reserved until Chrome settles the raw command. One download may own a `SurfingPage` connection at a time; separate clients attached to the same target do not share this lock. Timed-out setup and restore commands keep the connection reserved until their raw replies settle. Cleanup failures after a completed transfer and uncertain trigger failures use the committed-action path to prevent unsafe retries.
+Clipboard permission changes serialize per browser endpoint within one TideSurf process, so its page connections cannot race while independent browsers remain independent. A timed-out permission reset keeps that process-local endpoint queue reserved until Chrome settles the raw command. One download may own a `SurfingPage` connection at a time; separate clients attached to the same target do not share this lock. Timed-out setup and restore commands keep the connection reserved until their raw replies settle. A completed transfer keeps its result even when final cleanup fails; uncertain trigger failures use the committed-action path to prevent unsafe retries.
 
 ## Read-only boundary
 

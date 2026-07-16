@@ -99,6 +99,13 @@ interface DevToolsActivePort {
 
 class DevToolsEndpointMismatchError extends ChromeLaunchError {}
 
+const ownedBrowserEndpoints = new Set<string>();
+
+/** True when TideSurf launched (and therefore owns) the browser at host:port. */
+export function isOwnedBrowserEndpoint(host: string, port: number): boolean {
+  return ownedBrowserEndpoints.has(`${host}:${port}`);
+}
+
 function selectedChannels(channel?: ChromeChannel): readonly ChromeChannel[] {
   return channel ? [channel] : CHROME_CHANNELS;
 }
@@ -646,6 +653,7 @@ export async function launchChrome(options: LaunchOptions = {}): Promise<LaunchR
       if (onSpawnError) launchedProcess.removeListener("error", onSpawnError);
       stderr.stop();
     });
+    ownedBrowserEndpoints.add(`${endpoint.host}:${endpoint.port}`);
     return {
       process: launchedProcess,
       ...endpoint,

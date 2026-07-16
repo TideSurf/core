@@ -231,3 +231,21 @@ export const CLI_EXIT_CODES = {
   tool: { code: 4, meaning: "Tool execution failed" },
   protocol: { code: 5, meaning: "Daemon authentication, transport, or protocol error" },
 } as const;
+
+// Maps every first-party error name, including daemon-rehydrated wire
+// errorType strings, to its documented exit code. Unknown names fall back to
+// the tool exit code in errorExitCode.
+export const CLI_ERROR_EXIT_CODES: Readonly<Record<string, number>> = {
+  CliUsageError: CLI_EXIT_CODES.usage.code,
+  ChromeLaunchError: CLI_EXIT_CODES.browser.code,
+  CDPConnectionError: CLI_EXIT_CODES.browser.code,
+  NavigationError: CLI_EXIT_CODES.browser.code,
+  SessionStateError: CLI_EXIT_CODES.browser.code,
+  SessionProtocolError: CLI_EXIT_CODES.protocol.code,
+  TideSurfError: CLI_EXIT_CODES.tool.code,
+  CDPTimeoutError: CLI_EXIT_CODES.tool.code,
+  ElementNotFoundError: CLI_EXIT_CODES.tool.code,
+  ValidationError: CLI_EXIT_CODES.tool.code,
+  ReadOnlyError: CLI_EXIT_CODES.tool.code,
+  ActionCommittedError: CLI_EXIT_CODES.tool.code,
+};

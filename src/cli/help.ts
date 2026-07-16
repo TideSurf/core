@@ -35,10 +35,8 @@ function globalOptionRows(): string {
   ]);
 }
 
-let generalHelpText: string | undefined;
-
 export function generalHelp(): string {
-  return generalHelpText ??= `TideSurf ${VERSION}
+  return `TideSurf ${VERSION}
 Stateful Chromium automation for agents
 
 Usage:
@@ -87,25 +85,11 @@ function toolHelp(tool: ToolSpec): string {
   return `${tool.name}\n\n${tool.description}\n\nUsage:\n  ${usageForTool(tool)}${positionalLines}${optionLines}\n\nGlobal session and output options are also accepted.`;
 }
 
-const toolHelpCache = new Map<ToolSpec, string>();
-const lifecycleHelpCache = new Map<string, string>();
-
 export function commandHelp(command?: string): string | undefined {
   if (!command) return generalHelp();
   const tool = getToolSpec(command);
-  if (tool) {
-    let help = toolHelpCache.get(tool);
-    if (help === undefined) {
-      help = toolHelp(tool);
-      toolHelpCache.set(tool, help);
-    }
-    return help;
-  }
-  const cached = lifecycleHelpCache.get(command);
-  if (cached !== undefined) return cached;
+  if (tool) return toolHelp(tool);
   const lifecycle = LIFECYCLE_COMMANDS.find((item) => item.name === command);
   if (!lifecycle) return undefined;
-  const help = `Usage: tidesurf ${"usage" in lifecycle ? lifecycle.usage : lifecycle.synopsis}\n\n${lifecycle.help}`;
-  lifecycleHelpCache.set(command, help);
-  return help;
+  return `Usage: tidesurf ${"usage" in lifecycle ? lifecycle.usage : lifecycle.synopsis}\n\n${lifecycle.help}`;
 }

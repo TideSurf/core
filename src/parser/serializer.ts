@@ -49,6 +49,12 @@ interface SerializationContext {
   text: Map<OSNode, { all: string; nonInteractive: string }>;
 }
 
+export const OBSCURED_FLAG = " obscured";
+export const OPEN_FLAG = " open";
+export const CLOSED_FLAG = " closed";
+export const IFRAME_INACCESSIBLE_PLACEHOLDER = "[iframe: inaccessible]";
+export const IFRAME_UNKNOWN_PLACEHOLDER = "[iframe: unknown]";
+
 /**
  * Compute element state for serialization.
  * Disabled/inert → struck through (~~). Obscured → keyword. Expanded/collapsed → open/closed.
@@ -59,13 +65,13 @@ function getElementState(node: OSNode, hasAttrDisabled: boolean): ElementState {
   const struck = isDisabled || isInert;
 
   let flags = "";
-  if (!struck && node.state?.includes("obscured")) flags += " obscured";
-  if (node.attributes["aria-expanded"] === "true") flags += " open";
-  else if (node.attributes["aria-expanded"] === "false") flags += " closed";
+  if (!struck && node.state?.includes("obscured")) flags += OBSCURED_FLAG;
+  if (node.attributes["aria-expanded"] === "true") flags += OPEN_FLAG;
+  else if (node.attributes["aria-expanded"] === "false") flags += CLOSED_FLAG;
   return { struck, flags };
 }
 
-const STRUCTURAL_CONTAINERS = new Set([
+export const STRUCTURAL_CONTAINERS = new Set([
   "form",
   "nav",
   "table",
@@ -286,10 +292,14 @@ function serializeNodes(
       } else {
         const status = node.attributes["status"];
         if (status === "inaccessible") {
-          parts.push(`${pad}[iframe: inaccessible]`);
+          parts.push(pad + IFRAME_INACCESSIBLE_PLACEHOLDER);
         } else {
           const src = node.attributes["src"];
-          parts.push(`${pad}[iframe: ${src ? compressUrlWithContext(src, context.url) : "unknown"}]`);
+          parts.push(
+            src
+              ? `${pad}[iframe: ${compressUrlWithContext(src, context.url)}]`
+              : pad + IFRAME_UNKNOWN_PLACEHOLDER
+          );
         }
       }
       continue;

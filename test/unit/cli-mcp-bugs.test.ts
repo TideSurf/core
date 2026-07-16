@@ -1,12 +1,32 @@
 import { describe, expect, it } from "bun:test";
+import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import {
   CliUsageError,
   buildToolInput,
   parseInvocation,
 } from "../../src/cli/args.js";
 import { BrowserController } from "../../src/cli/browser-controller.js";
+import {
+  DAEMON_COMMAND,
+  buildDaemonArgv,
+  parseDaemonArgv,
+} from "../../src/cli/daemon-argv.js";
+import { runDaemon, type DaemonController } from "../../src/cli/daemon.js";
+import {
+  SESSION_PROTOCOL_VERSION,
+  getSessionPaths,
+  readSessionState,
+  removeSessionFiles,
+  sendSessionRequest,
+  writeSessionState,
+  type SessionConfig,
+  type SessionPaths,
+  type SessionState,
+} from "../../src/cli/session.js";
 import { TOOL_REGISTRY } from "../../src/tools/registry.js";
 import { validateExpression } from "../../src/validation.js";
+import { VERSION } from "../../src/version.js";
 
 describe("CLI parsing", () => {
   it("uses help semantics with no command", () => {
@@ -244,6 +264,177 @@ describe("BrowserController tool preflight", () => {
       expect(controller.status().running).toBe(false);
     } finally {
       await controller.close();
+    }
+  });
+});
+
+const daemonConfig: SessionConfig = {
+  browserMode: "launch",
+  headless: true,
+  readOnly: false,
+  allowLocalhost: false,
+  allowPrivateHosts: false,
+};
+
+function fakeController(): DaemonController {
+  return {
+    status: () => ({ running: false }),
+    start: async () => ({ running: false }),
+    execute: async () => ({ success: true }),
+    close: async () => {},
+  };
+}
+
+function pendingState(
+  name: string,
+  paths: SessionPaths,
+  startupId: string,
+  pid = process.pid
+): SessionState {
+  return {
+    protocol: SESSION_PROTOCOL_VERSION,
+    version: VERSION,
+    session: name,
+    secret: "a".repeat(64),
+    socketPath: paths.socketPath,
+    config: daemonConfig,
+    pid,
+    ready: false,
+    startupId,
+  };
+}
+
+describe("daemon wire protocol", () => {
+  it("surfaces the daemon's oversize-request message instead of a protocol mismatch", async () => {
+    const name = `oversize-${randomUUID()}`;
+    const paths = getSessionPaths(name);
+    writeSessionState(paths, pendingState(name, paths, randomUUID()));
+    await runDaemon(paths.stateFile, {
+      controllerFactory: fakeController,
+      installProcessHandlers: false,
+    });
+    const ready = readSessionState(paths)!;
+    try {
+      await expect(
+        sendSessionRequest(ready, {
+          method: "tool",
+          name: "echo",
+          input: { blob: "a".repeat(1_100_000) },
+        }, 5_000)
+      ).rejects.toThrow("Session request exceeded 1 MiB");
+    } finally {
+      await sendSessionRequest(ready, { method: "stop" }, 2_000).catch(() => undefined);
+      removeSessionFiles(paths, true);
+    }
+  });
+});
+
+describe("daemon startup identity", () => {
+  it("exits without touching state when the startup token does not match", async () => {
+    const name = `token-${randomUUID()}`;
+    const paths = getSessionPaths(name);
+    const parentPid = 123_456_789;
+    writeSessionState(paths, pendingState(name, paths, randomUUID(), parentPid));
+    try {
+      await expect(
+        runDaemon(paths.stateFile, {
+          controllerFactory: fakeController,
+          installProcessHandlers: false,
+          startupToken: randomUUID(),
+        })
+      ).rejects.toThrow("startup token");
+      const state = readSessionState(paths)!;
+      expect(state.pid).toBe(parentPid);
+      expect(state.ready).toBe(false);
+      if (process.platform !== "win32") {
+        expect(existsSync(paths.socketPath)).toBe(false);
+      }
+    } finally {
+      removeSessionFiles(paths, true);
+    }
+  });
+
+  it("does not steal a socket that a live daemon still serves", async () => {
+    if (process.platform === "win32") return;
+    const name = `probe-${randomUUID()}`;
+    const paths = getSessionPaths(name);
+    writeSessionState(paths, pendingState(name, paths, randomUUID()));
+    await runDaemon(paths.stateFile, {
+      controllerFactory: fakeController,
+      installProcessHandlers: false,
+    });
+    const first = readSessionState(paths)!;
+    const rivalId = randomUUID();
+    writeSessionState(paths, pendingState(name, paths, rivalId));
+    try {
+      await expect(
+        runDaemon(paths.stateFile, {
+          controllerFactory: fakeController,
+          installProcessHandlers: false,
+          startupToken: rivalId,
+        })
+      ).rejects.toThrow("already served");
+      await expect(
+        sendSessionRequest<{ pid: number }>(first, { method: "ping" }, 2_000)
+      ).resolves.toMatchObject({ pid: process.pid });
+    } finally {
+      await sendSessionRequest(first, { method: "stop" }, 2_000).catch(() => undefined);
+      removeSessionFiles(paths, true);
+    }
+  });
+
+  it("does not mark ready after the state file changed during startup", async () => {
+    const name = `replaced-${randomUUID()}`;
+    const paths = getSessionPaths(name);
+    const startupId = randomUUID();
+    const rivalId = randomUUID();
+    writeSessionState(paths, pendingState(name, paths, startupId));
+    const controllerFactory = () => {
+      writeSessionState(paths, pendingState(name, paths, rivalId));
+      return fakeController();
+    };
+    try {
+      await expect(
+        runDaemon(paths.stateFile, {
+          controllerFactory,
+          installProcessHandlers: false,
+          startupToken: startupId,
+        })
+      ).rejects.toThrow("changed during startup");
+      const state = readSessionState(paths)!;
+      expect(state.ready).toBe(false);
+      expect(state.startupId).toBe(rivalId);
+    } finally {
+      removeSessionFiles(paths, true);
+    }
+  });
+});
+
+describe("daemon argv contract", () => {
+  it("round-trips the spawn argv", () => {
+    const argv = buildDaemonArgv({ stateFile: "/tmp/x.json", startupToken: "tok" });
+    expect(argv[0]).toBe(DAEMON_COMMAND);
+    expect(parseDaemonArgv(argv)).toEqual({
+      stateFile: "/tmp/x.json",
+      startupToken: "tok",
+    });
+  });
+
+  it("rejects incomplete daemon argv with a protocol error", () => {
+    for (const argv of [
+      [DAEMON_COMMAND],
+      [DAEMON_COMMAND, "--state-file", "/tmp/x.json"],
+      [DAEMON_COMMAND, "--startup-token", "tok"],
+    ]) {
+      let caught: unknown;
+      try {
+        parseDaemonArgv(argv);
+      } catch (error) {
+        caught = error;
+      }
+      expect(caught).toBeInstanceOf(Error);
+      expect((caught as Error).name).toBe("SessionProtocolError");
+      expect((caught as Error).message).toContain("--startup-token");
     }
   });
 });

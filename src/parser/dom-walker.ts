@@ -52,50 +52,53 @@ interface MarkerContext {
   classifyOptions: { includeHidden: boolean; computedVisibility: boolean };
 }
 
+/**
+ * CDPNode with the snapshot decoder's pre-parsed attribute record. walkDOM
+ * reads it to skip re-parsing the flat name/value pairs, which stay the
+ * public CDPNode surface.
+ */
+export interface AttributedCDPNode extends CDPNode {
+  parsedAttributes?: Record<string, string>;
+}
+
+function takeAttribute(
+  values: Record<string, string>,
+  key: string | undefined
+): string | undefined {
+  if (key === undefined) return undefined;
+  const value = values[key];
+  if (value !== undefined) delete values[key];
+  return value;
+}
+
 function walkAttributes(
-  attributes: string[] | undefined,
+  node: CDPNode,
   markerContext: MarkerContext
 ): Record<string, string> {
+  const parsed = (node as AttributedCDPNode).parsedAttributes;
   const markers = markerContext.markers;
   if (!markers) {
-    return parseAttributes(attributes);
+    return parsed ?? parseAttributes(node.attributes);
   }
 
   const values = Object.create(null) as Record<string, string>;
-  let visible: string | undefined;
-  let hidden: string | undefined;
-  let state: string | undefined;
-  let text: string | undefined;
-  const length = attributes?.length ?? 0;
-  for (let index = 0; index < length; index += 2) {
-    const key = attributes![index];
-    const value = attributes![index + 1];
-    if (key === markers.visible) {
-      visible = value;
-      continue;
+  if (parsed) {
+    for (const key in parsed) values[key] = parsed[key];
+  } else {
+    const flat = node.attributes;
+    const length = flat?.length ?? 0;
+    for (let index = 0; index < length; index += 2) {
+      values[flat![index]] = flat![index + 1];
     }
-    if (key === markers.hidden) {
-      hidden = value;
-      continue;
-    }
-    if (key === markers.state) {
-      state = value;
-      continue;
-    }
-    if (key === markers.text) {
-      text = value;
-      continue;
-    }
-    if (
-      key === "data-os-visible" ||
-      key === "data-os-hidden" ||
-      key === "data-os-state" ||
-      key === "data-os-text"
-    ) {
-      continue;
-    }
-    values[key] = value;
   }
+  const visible = takeAttribute(values, markers.visible);
+  const hidden = takeAttribute(values, markers.hidden);
+  const state = takeAttribute(values, markers.state);
+  const text = takeAttribute(values, markers.text);
+  delete values["data-os-visible"];
+  delete values["data-os-hidden"];
+  delete values["data-os-state"];
+  delete values["data-os-text"];
   if (visible !== undefined) values["data-os-visible"] = visible;
   if (hidden !== undefined) values["data-os-hidden"] = hidden;
   if (state !== undefined) values["data-os-state"] = state;
@@ -252,7 +255,7 @@ function walkNode(
 
   if (node.nodeType !== 1) return;
 
-  const attrs = walkAttributes(node.attributes, markerContext);
+  const attrs = walkAttributes(node, markerContext);
   const children = node.children ?? [];
   const elementCtx: WalkContext = markerContext.viewportMarked
     ? {

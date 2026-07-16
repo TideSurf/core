@@ -42,6 +42,7 @@ declare module "chrome-remote-interface" {
       navigate(params: { url: string }): Promise<{
         errorText?: string;
         loaderId?: string;
+        frameId?: string;
       }>;
       lifecycleEvent(callback: (event: {
         name: string;
@@ -56,6 +57,12 @@ declare module "chrome-remote-interface" {
         behavior: string;
         downloadPath?: string;
       }): Promise<void>;
+      on(
+        event: "frameNavigated",
+        callback: (params: {
+          frame: { id: string; loaderId: string; url?: string };
+        }) => void
+      ): () => void;
       on(event: string, callback: (params: any) => void): () => void;
     };
     Runtime: {

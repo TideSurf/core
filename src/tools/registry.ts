@@ -1,6 +1,11 @@
 import type { TideSurf } from "../tidesurf.js";
 import type { ReadPageOptions, ToolDefinition, ToolResult } from "../types.js";
-import { ActionCommittedError } from "../errors.js";
+import {
+  ActionCommittedError,
+  CDPConnectionError,
+  CDPTimeoutError,
+  ChromeLaunchError,
+} from "../errors.js";
 import {
   validateElementId,
   validateExpression,
@@ -708,6 +713,16 @@ export function validateToolInput(
   tool.validate?.(input, urlOptions);
 }
 
+function failureGuidance(error: unknown): string | undefined {
+  if (error instanceof CDPTimeoutError) {
+    return "The page may still be loading. Call get_state to check the current state, or retry.";
+  }
+  if (error instanceof ChromeLaunchError || error instanceof CDPConnectionError) {
+    return "Make sure Chrome is installed and, when attaching to an existing browser, that remote debugging is enabled at chrome://inspect#remote-debugging or with --remote-debugging-port.";
+  }
+  return undefined;
+}
+
 function failure(error: unknown): ToolResult {
   const message = error instanceof Error ? error.message : String(error);
   const errorType = error instanceof Error ? error.name : "UnknownError";
@@ -715,8 +730,14 @@ function failure(error: unknown): ToolResult {
     process.env.NODE_ENV === "development" && error instanceof Error
       ? error.stack
       : undefined;
+  const guidance = failureGuidance(error);
 
-  return { success: false, error: message, errorType, stack };
+  return {
+    success: false,
+    error: guidance ? `${message} ${guidance}` : message,
+    errorType,
+    stack,
+  };
 }
 
 export function createToolExecutor(instance: TideSurf): ToolExecutor {

@@ -107,7 +107,7 @@ Managed launch resolves a browser in this order:
 
 The default channel order is stable, Beta, Dev, Canary, Chromium. Pass `channel: "canary"` or `--channel canary` to select one. Edge and Brave require an explicit executable path.
 
-The CLI uses managed launch by default. `--auto-connect` tries an endpoint or discoverable Chrome profile before local launch. `--connect-only` fails instead of launching.
+The CLI uses managed launch by default. `--auto-connect` attaches to an explicit endpoint or a discoverable Chrome profile before launching locally; a failed explicit endpoint never falls back to a different running browser. `--connect-only` fails instead of launching.
 
 ## Fix session policy
 

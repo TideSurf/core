@@ -1,10 +1,10 @@
 import { marked } from "marked";
 import "./style.css";
 import { initScrollTone } from "../../shared/scroll-tone";
+import { initTheme, prefersReducedMotion, safeStorageGet, safeStorageSet } from "../../shared/theme";
 import { translations } from "./translations";
 
 type Language = "en" | "ja" | "ko";
-type Theme = "light" | "dark";
 
 interface SearchEntry {
   name: string;
@@ -85,7 +85,6 @@ const contentEl = document.getElementById("content") as HTMLElement;
 const mobileMedia = window.matchMedia(MOBILE_QUERY);
 
 let currentLang: Language = "en";
-let currentTheme: Theme = "light";
 let currentPageName = DEFAULT_PAGE;
 let pageMap: Record<string, string> = {};
 let tocScrollFrame = 0;
@@ -105,32 +104,8 @@ const translatedReadmes: Record<Exclude<Language, "en">, { label: string; text: 
   },
 };
 
-function prefersReducedMotion(): boolean {
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
-
-function safeStorageGet(key: string): string | null {
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function safeStorageSet(key: string, value: string): void {
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    // Storage can be unavailable in hardened browser contexts.
-  }
-}
-
 function isLanguage(value: string | null | undefined): value is Language {
   return value === "en" || value === "ja" || value === "ko";
-}
-
-function isTheme(value: string | null | undefined): value is Theme {
-  return value === "light" || value === "dark";
 }
 
 function translate(key: string): string {
@@ -548,35 +523,6 @@ function initSearch(): void {
   document.addEventListener("pointerdown", (event) => {
     if (!(event.target instanceof Node) || input.contains(event.target) || results.contains(event.target)) return;
     closeResults();
-  });
-}
-
-function applyTheme(): void {
-  document.documentElement.dataset.theme = currentTheme;
-  document.querySelectorAll<HTMLButtonElement>(".theme-btn[data-theme]").forEach((button) => {
-    const active = button.dataset.theme === currentTheme;
-    button.classList.toggle("active", active);
-    button.setAttribute("aria-pressed", String(active));
-  });
-}
-
-function initTheme(): void {
-  const saved = safeStorageGet("tidesurf-theme");
-  currentTheme = isTheme(saved)
-    ? saved
-    : window.matchMedia("(prefers-color-scheme: dark)").matches
-      ? "dark"
-      : "light";
-  applyTheme();
-
-  document.querySelectorAll<HTMLButtonElement>(".theme-btn[data-theme]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const theme = button.dataset.theme;
-      if (!isTheme(theme)) return;
-      currentTheme = theme;
-      safeStorageSet("tidesurf-theme", theme);
-      applyTheme();
-    });
   });
 }
 

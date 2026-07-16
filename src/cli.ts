@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { VERSION } from "./version.js";
+import { DAEMON_COMMAND, parseDaemonArgv } from "./cli/daemon-argv.js";
 
 const argv = process.argv.slice(2);
 
@@ -11,23 +12,18 @@ function importFailure(error: unknown): void {
 }
 
 async function startDaemon(args: string[]): Promise<void> {
-  const stateIndex = args.indexOf("--state-file");
-  const stateFile = stateIndex === -1 ? undefined : args[stateIndex + 1];
-  if (!stateFile) {
-    const error = new Error("Daemon requires --state-file");
-    error.name = "SessionProtocolError";
-    throw error;
-  }
+  const { stateFile, startupToken } = parseDaemonArgv(args);
   const { runDaemon } = await import("./cli/daemon.js");
-  await runDaemon(stateFile);
+  await runDaemon(stateFile, { startupToken });
 }
 
 if (argv.length === 1 && (argv[0] === "-V" || argv[0] === "--version")) {
   process.stdout.write(`${VERSION}\n`);
-} else if (argv[0] === "__daemon") {
+} else if (argv[0] === DAEMON_COMMAND) {
   void startDaemon(argv).catch((error) => {
     const message = error instanceof Error ? error.message : String(error);
     process.stderr.write(`tidesurf: ${message}\n`);
+    // 5/4 mirror CLI_EXIT_CODES protocol/tool in cli/metadata.ts, kept literal off the boot path
     process.exitCode = error instanceof Error && error.name === "SessionProtocolError" ? 5 : 4;
   });
 } else if (

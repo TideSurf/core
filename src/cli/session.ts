@@ -16,6 +16,7 @@ import { join, resolve } from "node:path";
 import { connect as connectSocket } from "node:net";
 import type { ChromeChannel, ToolResult } from "../types.js";
 import { VERSION } from "../version.js";
+import { buildDaemonArgv } from "./daemon-argv.js";
 import { isValidSessionName, SESSION_NAME_ERROR } from "./session-name.js";
 import { MAX_SESSION_EXECUTION_TIMEOUT_MS } from "./timeouts.js";
 
@@ -93,9 +94,14 @@ function parseWireResponse<T>(raw: string, id: string): WireResponse<T> {
     throw new SessionProtocolError("Session returned an invalid response");
   }
   const response = value as Record<string, unknown>;
+  // The daemon answers requests it cannot parse (for example oversize
+  // frames) with id "", so an id-less error frame is terminal for this
+  // request rather than a protocol mismatch.
+  const idMatches = response["id"] === id ||
+    (response["id"] === "" && response["success"] === false);
   if (
     response["protocol"] !== SESSION_PROTOCOL_VERSION ||
-    response["id"] !== id ||
+    !idMatches ||
     typeof response["success"] !== "boolean"
   ) {
     throw new SessionProtocolError(
@@ -267,6 +273,34 @@ export function isProcessRunning(pid: number): boolean {
     if (code === "ESRCH") return false;
     throw error;
   }
+}
+
+async function terminateDaemon(pid: number): Promise<void> {
+  if (pid === process.pid) return;
+  try {
+    process.kill(pid, "SIGTERM");
+  } catch {
+    return;
+  }
+  const termDeadline = Date.now() + 5_000;
+  while (isProcessRunning(pid) && Date.now() < termDeadline) {
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
+  }
+  if (!isProcessRunning(pid)) return;
+  try {
+    process.kill(pid, "SIGKILL");
+  } catch {
+    return;
+  }
+  const killDeadline = Date.now() + 1_000;
+  while (isProcessRunning(pid) && Date.now() < killDeadline) {
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
+  }
+}
+
+function removeEndpointFiles(paths: SessionPaths): void {
+  rmSync(paths.stateFile, { force: true });
+  if (process.platform !== "win32") rmSync(paths.socketPath, { force: true });
 }
 
 function isStaleEndpointError(error: unknown): boolean {
@@ -478,6 +512,19 @@ function readStartupLock(paths: SessionPaths): StartupLock | null {
   }
 }
 
+// Delete only the lock we judged stale: re-read and abort if it changed
+// hands. A lock replaced in the window between this re-read and rmSync can
+// still be lost; the daemon startup-token check keeps that residual window
+// from producing two live daemons.
+function removeObservedLock(
+  paths: SessionPaths,
+  observed: StartupLock | null
+): void {
+  const latest = readStartupLock(paths);
+  if (latest?.startupId !== observed?.startupId) return;
+  rmSync(paths.lockFile, { force: true });
+}
+
 export interface EnsureSessionOptions {
   session: string;
   config: SessionConfig;
@@ -514,7 +561,8 @@ export async function ensureSession(
       return verifyCompatibleSession(current, options);
     } catch (error) {
       if (isProcessRunning(current.pid) && !isStaleEndpointError(error)) throw error;
-      removeSessionFiles(paths, true);
+      if (isProcessRunning(current.pid)) await terminateDaemon(current.pid);
+      removeEndpointFiles(paths);
     }
   }
 
@@ -532,10 +580,11 @@ export async function ensureSession(
       await sendSessionRequest(latest, { method: "ping" }, 500);
       return verifyCompatibleSession(latest, options);
     }
-    removeSessionFiles(paths, true);
+    removeEndpointFiles(paths);
+    removeObservedLock(paths, lock);
   }
   if (current?.ready && !isProcessRunning(current.pid)) {
-    removeSessionFiles(paths, true);
+    removeEndpointFiles(paths);
   }
 
   let ownsLock = false;
@@ -580,10 +629,24 @@ export async function ensureSession(
           await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
           continue;
         }
-        removeSessionFiles(paths, true);
+        removeObservedLock(paths, lock);
       }
     }
     if (!ownsLock) throw new SessionProtocolError("Could not acquire the session startup lock");
+
+    // A rival startup can finish between the pre-lock checks and our lock
+    // win; reuse it instead of clobbering its state with a second spawn.
+    const raced = readSessionState(paths);
+    if (raced?.ready && isProcessRunning(raced.pid)) {
+      try {
+        await sendSessionRequest(raced, { method: "ping" }, 500);
+        return verifyCompatibleSession(raced, options);
+      } catch (error) {
+        if (isProcessRunning(raced.pid) && !isStaleEndpointError(error)) throw error;
+        if (isProcessRunning(raced.pid)) await terminateDaemon(raced.pid);
+        removeEndpointFiles(paths);
+      }
+    }
 
     const secret = randomBytes(32).toString("hex");
     const pending: SessionState = {
@@ -610,7 +673,10 @@ export async function ensureSession(
       const { spawn } = await import("node:child_process");
       const child = spawn(
         process.execPath,
-        [entryPath, "__daemon", "--state-file", paths.stateFile],
+        [entryPath, ...buildDaemonArgv({
+          stateFile: paths.stateFile,
+          startupToken: startupId,
+        })],
         {
           detached: true,
           stdio: ["ignore", logFd, logFd],
@@ -631,7 +697,7 @@ export async function ensureSession(
       !isProcessRunning(state.pid) ||
       (state.startupId === startupId && state.pid === process.pid)
     ) {
-      removeSessionFiles(paths);
+      removeEndpointFiles(paths);
     }
     throw error;
   } finally {
@@ -660,7 +726,8 @@ export async function ensureSessionRequest<T>(
       };
     } catch (error) {
       if (!isStaleEndpointError(error)) throw error;
-      removeSessionFiles(paths, true);
+      if (isProcessRunning(compatible.pid)) await terminateDaemon(compatible.pid);
+      removeEndpointFiles(paths);
     }
   }
 
@@ -725,6 +792,7 @@ export async function sendLiveSessionRequest<T>(
     };
   } catch (error) {
     if (!isStaleEndpointError(error)) throw error;
+    if (isProcessRunning(ready.pid)) await terminateDaemon(ready.pid);
     removeSessionFiles(paths);
     return null;
   }

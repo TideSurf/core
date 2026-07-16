@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
+import type { AttributedCDPNode } from "../parser/dom-walker.js";
 import type { CDPNode } from "../types.js";
+import { validatePositiveNumber } from "../validation.js";
 import { MAX_DOM_NODES, type CDPConnection } from "./connection.js";
 import { withTimeout } from "./timeout.js";
 
@@ -187,12 +189,6 @@ function positiveLimit(value: number | undefined): number {
   return value;
 }
 
-function assertViewport(value: number, name: string): void {
-  if (!Number.isFinite(value) || value <= 0) {
-    throw new RangeError(`${name} must be a positive finite number`);
-  }
-}
-
 function nodeLimitError(limit: number, count: number): Error {
   const found = count > limit ? `more than ${limit.toLocaleString()}` : count.toLocaleString();
   return new Error(
@@ -362,9 +358,44 @@ function circleBounds(value: string, bounds: Bounds): Bounds | null | undefined 
   };
 }
 
+function polygonBounds(value: string, bounds: Bounds): Bounds | null | undefined {
+  const match = /^polygon\((.*)\)$/i.exec(value.trim());
+  if (!match) return undefined;
+  const vertices = match[1].split(",").map((vertex) => vertex.trim());
+  if (/^(?:nonzero|evenodd)$/i.test(vertices[0] ?? "")) vertices.shift();
+  if (vertices.length === 0) return undefined;
+  const width = bounds.right - bounds.left;
+  const height = bounds.bottom - bounds.top;
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const vertex of vertices) {
+    const parts = vertex.split(/\s+/);
+    if (parts.length !== 2) return undefined;
+    const x = parseClipLength(parts[0], width);
+    const y = parseClipLength(parts[1], height);
+    if (x === undefined || y === undefined) return undefined;
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  }
+  const clipped = {
+    top: bounds.top + minY,
+    right: bounds.left + maxX,
+    bottom: bounds.top + maxY,
+    left: bounds.left + minX,
+  };
+  return clipped.right > clipped.left && clipped.bottom > clipped.top ? clipped : null;
+}
+
 function clipPathBounds(value: string, bounds: Bounds): Bounds | null | undefined {
   const inset = insetBounds(value, bounds);
-  return inset !== undefined ? inset : circleBounds(value, bounds);
+  if (inset !== undefined) return inset;
+  const circle = circleBounds(value, bounds);
+  if (circle !== undefined) return circle;
+  return polygonBounds(value, bounds);
 }
 
 function legacyClipBounds(value: string, bounds: Bounds): Bounds | null | undefined {
@@ -415,14 +446,7 @@ function styleHidingKind(layout: LayoutData | undefined): "self" | "subtree" | u
   }
   const clipPath = (style["clip-path"] ?? "").trim().toLowerCase();
   if (clipPath === "" || clipPath === "none") return undefined;
-  const clipBounds = clipPathBounds(clipPath, layout.bounds);
-  if (
-    clipPath.replaceAll(" ", "") === "polygon(00,00,00)" ||
-    clipBounds === null
-  ) {
-    return "subtree";
-  }
-  return undefined;
+  return clipPathBounds(clipPath, layout.bounds) === null ? "subtree" : undefined;
 }
 
 function appendMarker(attributes: Attributes, name: string, value: string): void {
@@ -522,7 +546,6 @@ function buildDocument(
       nodeName,
       localName,
       nodeValue: stringAt(strings, values?.[index]),
-      attributes: nodeTypes[index] === 1 ? [] : undefined,
     };
     if (parent >= 0) (children[parent] ??= []).push(index);
   }
@@ -611,6 +634,9 @@ function prepareDocument(
   const childClips: Array<Bounds | undefined> | undefined = markViewport
     ? new Array(count)
     : undefined;
+  const absoluteClips: Array<Bounds | undefined> | undefined = markViewport
+    ? new Array(count)
+    : undefined;
   if (markViewport) document.effectiveBounds = new Array(count);
   for (let index = 0; index < count; index++) {
     const parent = document.parents[index];
@@ -650,7 +676,15 @@ function prepareDocument(
     }
 
     if (childClips) {
-      const inheritedClip = parent >= 0 ? childClips[parent]! : UNBOUNDED;
+      const positioned = (layout?.style.position ?? "").toLowerCase();
+      // Fixed boxes escape ancestor clips; their clip context resets to the
+      // viewport (transform/filter containing blocks are not captured).
+      const inheritedClip =
+        parent < 0 || positioned === "fixed"
+          ? UNBOUNDED
+          : positioned === "absolute"
+            ? absoluteClips![parent]!
+            : childClips[parent]!;
       const ownBounds = layout?.bounds;
       let effective = ownBounds ? intersect(ownBounds, inheritedClip) : undefined;
       const clipPath = (layout?.style["clip-path"] ?? "").trim().toLowerCase();
@@ -659,7 +693,6 @@ function prepareDocument(
         pathBounds = clipPathBounds(clipPath, ownBounds);
         if (pathBounds === undefined) pathBounds = ownBounds;
       }
-      const positioned = (layout?.style.position ?? "").toLowerCase();
       const legacyBounds = ownBounds && (positioned === "absolute" || positioned === "fixed")
         ? legacyClipBounds(layout?.style.clip ?? "", ownBounds)
         : undefined;
@@ -687,6 +720,22 @@ function prepareDocument(
         else if (legacyBounds) childClip = intersect(childClip, legacyBounds) ?? EMPTY_BOUNDS;
       }
       childClips[index] = childClip;
+
+      // Absolute boxes skip clips from non-positioned ancestors, so track a
+      // parallel clip narrowed only by positioned or paint-containing
+      // ancestors and by clip paths, which clip all descendant painting.
+      let absoluteClip: Bounds;
+      if (
+        (positioned !== "" && positioned !== "static") ||
+        (layout && clipsDescendants(layout.style))
+      ) {
+        absoluteClip = childClip;
+      } else {
+        absoluteClip = parent >= 0 ? absoluteClips![parent]! : UNBOUNDED;
+        if (pathBounds === null) absoluteClip = EMPTY_BOUNDS;
+        else if (pathBounds) absoluteClip = intersect(absoluteClip, pathBounds) ?? EMPTY_BOUNDS;
+      }
+      absoluteClips![index] = absoluteClip;
     }
 
     document.inertSubtree[index] =
@@ -841,8 +890,8 @@ export function decodeDOMSnapshot(
   value: unknown,
   options: DecodeSnapshotOptions
 ): SnapshotCapture {
-  assertViewport(options.viewportWidth, "viewportWidth");
-  assertViewport(options.viewportHeight, "viewportHeight");
+  validatePositiveNumber(options.viewportWidth, "viewportWidth");
+  validatePositiveNumber(options.viewportHeight, "viewportHeight");
   const limit = positiveLimit(options.maxNodes);
   const data = snapshotData(value);
   let nodeCount = 0;
@@ -902,12 +951,15 @@ export function decodeDOMSnapshot(
     }
   }
 
+  // Flat pairs stay the public CDPNode surface; the attached record lets
+  // walkDOM skip re-parsing them.
   for (const document of documents) {
     for (let index = 0; index < document.nodes.length; index++) {
+      if (document.nodes[index].nodeType !== 1) continue;
+      const node = document.nodes[index] as AttributedCDPNode;
       const attrs = document.attributes[index];
-      if (document.nodes[index].nodeType === 1) {
-        document.nodes[index].attributes = flattenAttributes(attrs);
-      }
+      node.attributes = flattenAttributes(attrs);
+      node.parsedAttributes = attrs;
     }
   }
 
@@ -930,6 +982,9 @@ interface PreflightResult {
   viewportHeight: number;
 }
 
+// Closed shadow roots cannot be counted in-page (mode "closed" hides
+// element.shadowRoot), so the preflight is best-effort and the post-decode
+// limits are authoritative.
 function preflightExpression(limit: number): string {
   return `(() => {
   const limit = ${limit};

@@ -1,4 +1,4 @@
-import { walkDOM } from "../../src/parser/dom-walker.js";
+import { walkDOM, type AttributedCDPNode } from "../../src/parser/dom-walker.js";
 import { filterViewportOnly } from "../../src/parser/viewport-filter.js";
 import type { CDPNode, OSNode } from "../../src/types.js";
 
@@ -518,5 +518,53 @@ describe("walkDOM", () => {
 
     expect(output).toContain("SHADOW ONSCREEN");
     expect(output).not.toContain("SHADOW OFFSCREEN");
+  });
+
+  it("reads decoder-attached attribute records without flat pairs", () => {
+    const button = makeNode({
+      nodeName: "BUTTON",
+      backendNodeId: 100,
+      children: [makeText("Go")],
+    }) as AttributedCDPNode;
+    button.attributes = undefined;
+    button.parsedAttributes = { title: "Action" };
+    const root = makeNode({ nodeName: "BODY", children: [button] });
+
+    const { nodes } = walkDOM(root);
+    const walkedButton = nodes.find((node) => node.tag === "button");
+
+    expect(walkedButton?.attributes).toEqual({ id: "B1", title: "Action" });
+  });
+
+  it("renames marker keys from attribute records without mutating them", () => {
+    const record = {
+      "m-visible": "1",
+      "m-state": "disabled",
+      "data-os-visible": "spoof",
+      title: "Action",
+    };
+    const button = makeNode({
+      nodeName: "BUTTON",
+      backendNodeId: 100,
+      children: [makeText("Go")],
+    }) as AttributedCDPNode;
+    button.parsedAttributes = { ...record };
+    const root = makeNode({ nodeName: "BODY", children: [button] });
+
+    const { nodes } = walkDOM(root, {
+      markerAttributes: {
+        visible: "m-visible",
+        hidden: "m-hidden",
+        state: "m-state",
+        text: "m-text",
+      },
+      viewportMarked: true,
+    });
+    const walkedButton = nodes.find((node) => node.tag === "button");
+
+    expect(walkedButton?.visible).toBe(true);
+    expect(walkedButton?.state).toEqual(["disabled"]);
+    expect(walkedButton?.attributes).toEqual({ id: "B1", title: "Action" });
+    expect(button.parsedAttributes).toEqual(record);
   });
 });

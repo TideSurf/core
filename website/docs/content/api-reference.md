@@ -179,7 +179,7 @@ Mutation methods can throw `ActionCommittedError` after work commits. A mutating
 scroll(direction: "up" | "down", amount?: number): Promise<void>
 ```
 
-Scrolls by pixels. The default amount is `500`.
+Scrolls by pixels and waits for the page to settle, like `click`. The default amount is `500`.
 
 ### `waitForStable(timeout?)`
 
@@ -257,7 +257,7 @@ download(
 ): Promise<DownloadResult>
 ```
 
-Clicks one current element and waits for its file. The destination must resolve inside `fileAccessRoots`; TideSurf checks it again after directory creation and before browser setup. A second download on the same `SurfingPage` connection fails while one is active.
+Clicks one current element and waits for its file. The trigger click uses the instance timeout; the file wait uses `timeout`, which defaults to 30,000 ms. The destination must resolve inside `fileAccessRoots`; TideSurf checks it again after directory creation and before browser setup. A second download on the same `SurfingPage` connection fails while one is active. A completed download returns its result even when final download-policy cleanup fails.
 
 ### `close()`
 

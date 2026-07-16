@@ -246,7 +246,13 @@ export class TideSurf {
 
     if (chromeProcess) {
       const ownedProcess = chromeProcess;
-      this.exitHandler = () => void ownedProcess.kill();
+      this.exitHandler = () => {
+        try {
+          ownedProcess.kill();
+        } catch {
+          // best-effort kill at exit
+        }
+      };
       process.on("exit", this.exitHandler);
     }
   }
@@ -553,6 +559,13 @@ export class TideSurf {
     return this.trackPageWork(result);
   }
 
+  private evictDisconnectedPage(tabId: string): void {
+    const cached = this.pages.get(tabId);
+    if (cached && !isSurfingPageConnected(cached)) {
+      this.pages.delete(tabId);
+    }
+  }
+
   private connectTabOnce(tabId: string): Promise<SurfingPage> {
     const cached = this.pages.get(tabId);
     if (cached) return Promise.resolve(cached);
@@ -580,10 +593,7 @@ export class TideSurf {
     validateTabId(tabId);
     return this.queueTabMutation(async () => {
       this.assertOpen();
-      const cached = this.pages.get(tabId);
-      if (cached && !isSurfingPageConnected(cached)) {
-        this.pages.delete(tabId);
-      }
+      this.evictDisconnectedPage(tabId);
       const page = await this.connectTabOnce(tabId);
       this.assertOpen();
       this.activePage = page;
@@ -615,6 +625,7 @@ export class TideSurf {
         this.assertOpen();
         const nextTab = tabs.find((tab) => tab.id !== tabId);
         if (nextTab) {
+          this.evictDisconnectedPage(nextTab.id);
           successor = {
             tab: nextTab,
             page: await this.connectTabOnce(nextTab.id),

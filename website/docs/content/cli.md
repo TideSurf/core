@@ -107,7 +107,7 @@ Global flags may appear before or after the command. Startup flags set daemon po
 
 Session names contain letters, numbers, dots, dashes, or underscores. Use different names when workflows need different browser or security policies.
 
-`download` also has a tool-level `--timeout`. After the `download` command, it sets the file wait. Put the global flag before the command to set session timing: `tidesurf --timeout 60000 download B1 --timeout 30000`.
+`download` also has a tool-level `--timeout`. After the `download` command, it sets the file wait, which defaults to 30,000 ms independent of the session timeout. Put the global flag before the command to set session timing: `tidesurf --timeout 60000 download B1 --timeout 30000`.
 
 Timeouts use positive whole milliseconds and cannot exceed 2,147,483,647 ms. The CLI also rejects a computed request budget above its 1,073,741,823 ms transport limit before sending the operation.
 
@@ -126,9 +126,9 @@ Without `--channel`, channel priority is stable, Beta, Dev, Canary, Chromium. Ex
 
 Managed launch uses a temporary profile unless `--user-data-dir` is set. It requests port `0`, reads the actual endpoint from `DevToolsActivePort`, and rejects collisions when a fixed `--port` is supplied.
 
-`--auto-connect` checks an explicit endpoint first, then a supported Chrome profile `DevToolsActivePort`, then the conventional local CDP endpoint. It launches a local browser only after local attach attempts fail. A remote-host failure never triggers local launch.
+`--auto-connect` attaches to an explicit endpoint when one is set. Otherwise it checks a supported Chrome profile `DevToolsActivePort`, then the conventional local CDP endpoint, and launches a local browser only after those attach attempts fail. A failed explicit endpoint never falls back to a different running browser: a local one launches fresh, a remote one fails.
 
-`--connect-only` follows the attach checks but never launches. Chrome 144 profile attachment may require approval at `chrome://inspect#remote-debugging`; see [Chrome agent configuration](https://developer.chrome.com/docs/devtools/agents/get-started/configuration). Manual Chrome 136+ remote debugging needs a non-default `--user-data-dir`; see [the remote debugging change](https://developer.chrome.com/blog/remote-debugging-port).
+`--connect-only` follows the same attach checks but never launches, and it fails when an explicit endpoint does not answer. Chrome 144 profile attachment may require approval at `chrome://inspect#remote-debugging`; see [Chrome agent configuration](https://developer.chrome.com/docs/devtools/agents/get-started/configuration). Manual Chrome 136+ remote debugging needs a non-default `--user-data-dir`; see [the remote debugging change](https://developer.chrome.com/blog/remote-debugging-port).
 
 ## Output
 
@@ -176,4 +176,4 @@ Element and full-page captures cannot exceed 16,384 px on either side or 12,000,
 
 ## MCP mode
 
-`tidesurf mcp` registers the same 18 tools and schemas plus the `launch_browser` lifecycle tool. Screenshots become MCP image blocks, and failures set `isError`.
+`tidesurf mcp` registers the same 18 tools and schemas plus the `launch_browser` lifecycle tool. A `tools/call` request may omit its `arguments` object; the adapter treats the omission as an empty input. Screenshots become MCP image blocks, and failures set `isError`.

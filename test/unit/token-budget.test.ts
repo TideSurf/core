@@ -228,6 +228,76 @@ describe("pruneToFit", () => {
     expect(estimateTokens(output)).toBeLessThanOrEqual(10);
   });
 
+  it("tolerates an unparseable pageUrl and still compresses hrefs", () => {
+    const link: OSNode = {
+      tag: "link",
+      id: "L1",
+      attributes: { href: "https://example.com/page?utm_source=x" },
+      children: [makeText("Go")],
+    };
+
+    const output = serialize(
+      pruneToFit([link], { maxTokens: 10, pageUrl: "example.com/page" }),
+      0,
+      "example.com/page"
+    );
+
+    expect(output).toBe("[L1](example.com/page) Go");
+    expect(estimateTokens(output)).toBeLessThanOrEqual(10);
+  });
+
+  it("counts the title fallback when aria-label is empty", () => {
+    const button: OSNode = {
+      tag: "button",
+      id: "B1",
+      attributes: { "aria-label": "", title: "Fallback action ".repeat(10) },
+      children: [],
+    };
+    const link: OSNode = {
+      tag: "link",
+      id: "L1",
+      attributes: {
+        href: "https://e.co/x",
+        "aria-label": "",
+        title: "Fallback destination ".repeat(10),
+      },
+      children: [],
+    };
+
+    for (const nodes of [[button], [link]]) {
+      const output = serialize(pruneToFit(nodes, { maxTokens: 5 }));
+      expect(estimateTokens(output)).toBeLessThanOrEqual(5);
+    }
+  });
+
+  it("derives flag and placeholder sizes from serializer constants", () => {
+    const collapsed: OSNode = {
+      tag: "button",
+      id: "B1",
+      attributes: { "aria-expanded": "false" },
+      children: [makeText("Menu item ".repeat(100))],
+    };
+    const collapsedOutput = serialize(pruneToFit([collapsed], { maxTokens: 20 }));
+    expect(collapsedOutput).toContain("closed");
+    expect(estimateTokens(collapsedOutput)).toBeLessThanOrEqual(20);
+
+    const unknownFrame: OSNode = { tag: "iframe", attributes: {}, children: [] };
+    expect(
+      serialize(pruneToFit([unknownFrame], { maxTokens: 18, charsPerToken: 1 }))
+    ).toBe("[iframe: unknown]");
+    expect(
+      serialize(pruneToFit([unknownFrame], { maxTokens: 17, charsPerToken: 1 }))
+    ).toBe("");
+  });
+
+  it("keeps an empty-alt image whose serialized size exactly fits", () => {
+    const img: OSNode = { tag: "img", attributes: { alt: "" }, children: [] };
+
+    expect(
+      serialize(pruneToFit([img], { maxTokens: 6, charsPerToken: 1 }))
+    ).toBe("[img]");
+  });
+
   it("costs optgroup labels and keeps select omissions visible", () => {
     const select: OSNode = {
       tag: "select",

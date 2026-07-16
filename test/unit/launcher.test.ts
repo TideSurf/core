@@ -3,6 +3,7 @@ import {
   discoverActiveBrowser,
   discoverBrowser,
   getChromeExecutableSearchPaths,
+  isOwnedBrowserEndpoint,
   launchChrome,
   parseDevToolsActivePort,
   readDevToolsActivePort,
@@ -584,6 +585,51 @@ setInterval(() => {}, 1000);
         timeout: 2_000,
       });
       expect(launched).toMatchObject({ port, targetId: "started-page" });
+    } finally {
+      if (launched) await terminateChromeProcess(launched.process, 500);
+      await closeServer(server);
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("records a launched endpoint as an owned browser", async () => {
+    if (process.platform === "win32") return;
+    const server = createDevToolsServer("/devtools/browser/owned", [
+      { id: "owned-page", type: "page" },
+    ]);
+    const port = await listen(server, "127.0.0.1");
+    const root = mkdtempSync(join(tmpdir(), "tidesurf-owned-endpoint-"));
+    const profile = join(root, "profile");
+    const fakeChrome = join(root, "fake-chrome");
+    writeFileSync(
+      fakeChrome,
+      `#!/usr/bin/env node
+const { mkdirSync, writeFileSync } = require("node:fs");
+const { join } = require("node:path");
+const prefix = "--user-data-dir=";
+const argument = process.argv.find((value) => value.startsWith(prefix));
+if (!argument) process.exit(2);
+const profile = argument.slice(prefix.length);
+mkdirSync(profile, { recursive: true });
+writeFileSync(join(profile, "DevToolsActivePort"), ${JSON.stringify(
+        `${port}\n/devtools/browser/owned\n`
+      )});
+setInterval(() => {}, 1000);
+`,
+      { mode: 0o755 }
+    );
+    chmodSync(fakeChrome, 0o755);
+
+    expect(isOwnedBrowserEndpoint("127.0.0.1", port)).toBe(false);
+    let launched: Awaited<ReturnType<typeof launchChrome>> | undefined;
+    try {
+      launched = await launchChrome({
+        chromePath: fakeChrome,
+        userDataDir: profile,
+        timeout: 2_000,
+      });
+      expect(launched.port).toBe(port);
+      expect(isOwnedBrowserEndpoint(launched.host, launched.port)).toBe(true);
     } finally {
       if (launched) await terminateChromeProcess(launched.process, 500);
       await closeServer(server);

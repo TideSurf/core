@@ -251,10 +251,9 @@ export async function downloadFromAction(
     try {
       await cleanup();
     } catch (error) {
-      if (!operationFailed) {
-        if (completed) throw new ActionCommittedError("Download", error);
-        throw error;
-      }
+      // A completed download keeps its resolved result; cleanup failures must
+      // not replace it with an error that hides the downloaded file path.
+      if (!operationFailed && !completed) throw error;
     }
   }
 }

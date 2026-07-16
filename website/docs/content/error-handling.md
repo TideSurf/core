@@ -59,4 +59,6 @@ TideSurf retries only transient browser-readiness failures during managed setup.
 
 Direct SDK mutation methods throw `ActionCommittedError` after a confirmed mutation or when a dispatched mutating CDP request times out or disconnects before its reply. Its message says `completed` or `may have completed`. CLI and MCP tool calls convert both forms to a successful warning so an agent does not repeat the action.
 
+Failed tool calls append one sentence of recovery guidance: timeouts point to `get_state`, and launch or connection failures point to Chrome installation and remote-debugging setup.
+
 Add an application-level retry loop only when the operation is safe to repeat. Never retry a stale element ID against a guessed replacement; read fresh state first.

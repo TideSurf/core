@@ -1,11 +1,12 @@
 import { timingSafeEqual } from "node:crypto";
-import { createServer, type Server, type Socket } from "node:net";
+import { connect, createServer, type Server, type Socket } from "node:net";
 import { resolve } from "node:path";
-import { readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { BrowserController } from "./browser-controller.js";
 import {
   SESSION_PROTOCOL_VERSION,
   getSessionPaths,
+  readSessionState,
   removeSessionFiles,
   writeSessionState,
   SessionProtocolError,
@@ -91,6 +92,7 @@ export interface DaemonController {
 export interface RunDaemonOptions {
   controllerFactory?: (config: SessionConfig) => DaemonController;
   installProcessHandlers?: boolean;
+  startupToken?: string;
 }
 
 function errorDetails(error: unknown): { error: string; errorType: string } {
@@ -103,6 +105,31 @@ function errorDetails(error: unknown): { error: string; errorType: string } {
 function secretsMatch(expected: Uint8Array, received: string): boolean {
   const value = Buffer.from(received);
   return expected.length === value.length && timingSafeEqual(expected, value);
+}
+
+// Anything other than a fast connection error means the endpoint may still
+// be served, so err on the side of not stealing it.
+function endpointInUse(socketPath: string): Promise<boolean> {
+  if (!existsSync(socketPath)) return Promise.resolve(false);
+  return new Promise((resolveProbe) => {
+    let probe: Socket;
+    try {
+      probe = connect(socketPath);
+    } catch {
+      resolveProbe(false);
+      return;
+    }
+    let settled = false;
+    const settle = (value: boolean) => {
+      if (settled) return;
+      settled = true;
+      probe.destroy();
+      resolveProbe(value);
+    };
+    probe.setTimeout(500, () => settle(true));
+    probe.on("connect", () => settle(true));
+    probe.on("error", () => settle(false));
+  });
 }
 
 function send(
@@ -130,6 +157,14 @@ export async function runDaemon(
   const paths = getSessionPaths(initial.session);
   if (resolve(paths.stateFile) !== resolve(stateFile)) {
     throw new Error("Session state file does not match its session name");
+  }
+  if (
+    options.startupToken !== undefined &&
+    initial.startupId !== options.startupToken
+  ) {
+    throw new SessionProtocolError(
+      "Session state file no longer carries this daemon's startup token"
+    );
   }
   writeSessionState(paths, { ...initial, pid: process.pid, ready: false });
 
@@ -336,6 +371,16 @@ export async function runDaemon(
   };
 
   if (process.platform !== "win32") {
+    if (await endpointInUse(paths.socketPath)) {
+      try {
+        await controller.close();
+      } catch (closeError) {
+        console.error(`[tidesurf] Browser shutdown failed: ${errorDetails(closeError).error}`);
+      }
+      throw new SessionProtocolError(
+        `Session "${initial.session}" is already served by a live daemon socket`
+      );
+    }
     rmSync(paths.socketPath, { force: true });
   }
   server = createServer(handleSocket);
@@ -354,10 +399,13 @@ export async function runDaemon(
     } catch (closeError) {
       console.error(`[tidesurf] Browser shutdown failed: ${errorDetails(closeError).error}`);
     }
-    try {
-      removeSessionFiles(paths);
-    } catch (cleanupError) {
-      console.error(`[tidesurf] Session cleanup failed: ${errorDetails(cleanupError).error}`);
+    // EADDRINUSE means another daemon owns the endpoint; its files are not ours to remove.
+    if ((error as NodeJS.ErrnoException).code !== "EADDRINUSE") {
+      try {
+        removeSessionFiles(paths);
+      } catch (cleanupError) {
+        console.error(`[tidesurf] Session cleanup failed: ${errorDetails(cleanupError).error}`);
+      }
     }
     throw error;
   }
@@ -365,6 +413,27 @@ export async function runDaemon(
     console.error(`[tidesurf] Session server error: ${error.message}`);
     void shutdown(1);
   });
+
+  // Residual startup race: another startup can replace the state file after
+  // this daemon bound the socket. Losing here exits without touching shared
+  // files (the next daemon's probe reclaims the stale socket file). Both
+  // racers can lose - this daemon on the token, the rival on the socket
+  // probe - which fails safe as a startup timeout, not a duplicate daemon.
+  const current = readSessionState(paths);
+  if (
+    !current ||
+    current.startupId !== initial.startupId ||
+    current.pid !== process.pid
+  ) {
+    for (const socket of sockets) socket.destroy();
+    await stopListening();
+    try {
+      await controller.close();
+    } catch (closeError) {
+      console.error(`[tidesurf] Browser shutdown failed: ${errorDetails(closeError).error}`);
+    }
+    throw new SessionProtocolError("Session state file changed during startup");
+  }
 
   const ready: SessionState = {
     ...initial,

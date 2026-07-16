@@ -47,7 +47,7 @@ clipboard_write download
 
 직접 명령에는 레지스트리와 MCP에서 쓰는 도구 식별자를 그대로 지정합니다. `tidesurf tools`는 도구 목록을, `tidesurf help <command>`는 명령별 도움말을 출력합니다. `tidesurf call <tool> --input '<json>'`은 원시 도구 호출을 실행합니다.
 
-기본값은 관리 브라우저 실행입니다. TideSurf는 Chrome stable, Beta, Dev, Canary, Chromium을 찾고 동적 디버깅 포트를 사용합니다. 검색 순서는 `--chrome-path`, `CHROME_PATH`, `PATH`, 운영체제 설치 경로입니다. 브라우저를 내려받지는 않습니다. 기존 브라우저를 우선하려면 `--auto-connect`, 실행을 금지하려면 `--connect-only`를 사용하세요.
+기본값은 관리 브라우저 실행입니다. TideSurf는 Chrome stable, Beta, Dev, Canary, Chromium을 찾고 동적 디버깅 포트를 사용합니다. 검색 순서는 `--chrome-path`, `CHROME_PATH`, `PATH`, 운영체제 설치 경로입니다. 브라우저를 내려받지는 않습니다. 기존 브라우저를 우선하려면 `--auto-connect`, 실행을 금지하려면 `--connect-only`를 사용하세요. 명시한 엔드포인트 연결에 실패해도 다른 실행 중인 브라우저로 대체하지 않습니다.
 
 읽기 전용 정책은 세션이 끝날 때까지 고정됩니다.
 

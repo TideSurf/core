@@ -47,7 +47,7 @@ clipboard_write download
 
 直接コマンドには、レジストリおよびMCPと同じツール識別子を指定します。`tidesurf tools`はツール一覧、`tidesurf help <command>`はコマンド別ヘルプを表示します。`tidesurf call <tool> --input '<json>'`は生のツール呼び出しを実行します。
 
-既定では、TideSurfが管理ブラウザーを起動します。Chrome stable、Beta、Dev、Canary、Chromiumを検索し、動的なデバッグポートを使います。検索順は`--chrome-path`、`CHROME_PATH`、`PATH`、OSの標準インストール先です。ブラウザーをダウンロードすることはありません。既存ブラウザーを優先する場合は`--auto-connect`、起動を禁止する場合は`--connect-only`を指定します。
+既定では、TideSurfが管理ブラウザーを起動します。Chrome stable、Beta、Dev、Canary、Chromiumを検索し、動的なデバッグポートを使います。検索順は`--chrome-path`、`CHROME_PATH`、`PATH`、OSの標準インストール先です。ブラウザーをダウンロードすることはありません。既存ブラウザーを優先する場合は`--auto-connect`、起動を禁止する場合は`--connect-only`を指定します。明示したエンドポイントへの接続に失敗しても、別の実行中ブラウザーには切り替わりません。
 
 読み取り専用ポリシーはセッション終了まで固定されます。
 

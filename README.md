@@ -47,7 +47,7 @@ clipboard_write download
 
 Direct commands use the exact registry and MCP tool identifiers. `tidesurf tools` prints the registry, `tidesurf help <command>` prints command help, and `tidesurf call <tool> --input '<json>'` accepts a raw tool call.
 
-Managed launch is the default. TideSurf finds Chrome stable, Beta, Dev, Canary, or Chromium and uses an ephemeral debugging port. It checks `--chrome-path`, `CHROME_PATH`, `PATH`, then platform install locations. It never downloads a browser. Use `--auto-connect` to attach when possible and launch locally as a fallback, or `--connect-only` to forbid launch.
+Managed launch is the default. TideSurf finds Chrome stable, Beta, Dev, Canary, or Chromium and uses an ephemeral debugging port. It checks `--chrome-path`, `CHROME_PATH`, `PATH`, then platform install locations. It never downloads a browser. Use `--auto-connect` to attach to a running Chrome before launching, or `--connect-only` to forbid launch. An explicit endpoint that fails never falls back to a different running browser.
 
 Read-only policy remains fixed for the session lifetime:
 
@@ -57,7 +57,7 @@ tidesurf --session audit --read-only get_state
 
 Read-only sessions keep `get_state`, `extract`, `list_tabs`, `switch_tab`, `search`, and `screenshot`. Navigation, page interaction, JavaScript, clipboard, upload/download, and tab creation or closure fail at every SDK and tool boundary.
 
-Startup policy is immutable. Later calls may omit startup flags or repeat matching standalone values such as `--read-only`; conflicting values fail.
+Every startup flag works the same way: later calls may omit it or repeat a matching standalone value; conflicting values fail.
 
 ## SDK
 
@@ -96,7 +96,7 @@ FORM F1
 
 `TideSurf.launch()` always launches and owns Chromium. It uses an isolated temporary profile unless `userDataDir` selects another profile. `TideSurf.connect()` always attaches to an existing endpoint and defaults to port `9222`. Closing an attached instance disconnects without stopping the user browser.
 
-`readPage()` supports `full`, `interactive`, and `minimal` modes, viewport filtering, and `maxTokens`. `includeHidden: true` includes hidden nodes and disables viewport filtering. The deprecated `getState()` alias delegates to `readPage()` for SDK compatibility.
+`readPage()` supports `full`, `interactive`, and `minimal` modes, viewport filtering, and `maxTokens`. `includeHidden: true` includes hidden nodes and disables viewport filtering. The deprecated `getState()` alias delegates to `readPage()`.
 
 SDK uploads and downloads default to the working directory and OS temporary directory. Pass `fileAccessRoots: []` to disable SDK filesystem operations.
 

@@ -1,63 +1,6 @@
 import "./style.css";
 import { initScrollTone } from "../../shared/scroll-tone";
-
-type Theme = "light" | "dark";
-
-let currentTheme: Theme = "light";
-const motionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-
-function prefersReducedMotion(): boolean {
-  return motionQuery.matches;
-}
-
-function safeStorageGet(key: string): string | null {
-  try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function safeStorageSet(key: string, value: string): void {
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    // Storage can fail in private browsing contexts.
-  }
-}
-
-function isTheme(value: string | null | undefined): value is Theme {
-  return value === "light" || value === "dark";
-}
-
-function initTheme(): void {
-  const saved = safeStorageGet("tidesurf-theme");
-  currentTheme = isTheme(saved)
-    ? saved
-    : window.matchMedia("(prefers-color-scheme: dark)").matches
-      ? "dark"
-      : "light";
-  applyTheme();
-
-  document.querySelectorAll<HTMLButtonElement>(".theme-btn[data-theme]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const theme = button.dataset.theme;
-      if (!isTheme(theme)) return;
-      currentTheme = theme;
-      safeStorageSet("tidesurf-theme", theme);
-      applyTheme();
-    });
-  });
-}
-
-function applyTheme(): void {
-  document.documentElement.setAttribute("data-theme", currentTheme);
-  document.querySelectorAll<HTMLButtonElement>(".theme-btn[data-theme]").forEach((button) => {
-    const active = button.dataset.theme === currentTheme;
-    button.classList.toggle("active", active);
-    button.setAttribute("aria-pressed", String(active));
-  });
-}
+import { initTheme, prefersReducedMotion, reducedMotionQuery } from "../../shared/theme";
 
 function initCopyButtons(): void {
   document.querySelectorAll<HTMLButtonElement>("[data-copy]").forEach((button) => {
@@ -154,7 +97,8 @@ function initWaves(): void {
   }
 
   function updatePalette(): void {
-    const darkMix = scrollProgress * (currentTheme === "dark" ? 0.32 : 0.22);
+    const darkMix =
+      scrollProgress * (document.documentElement.dataset.theme === "dark" ? 0.32 : 0.22);
     for (let index = 0; index < PALETTE_STEPS; index++) {
       const m = index / (PALETTE_STEPS - 1);
       const paperMix = m * 0.55 + scrollProgress * 0.32;
@@ -297,7 +241,7 @@ function initWaves(): void {
   window.addEventListener("scroll", onScroll, { passive: true });
 
   document.addEventListener("visibilitychange", () => syncAnimation(false));
-  motionQuery.addEventListener("change", () => syncAnimation());
+  reducedMotionQuery.addEventListener("change", () => syncAnimation());
   reducedDataQuery.addEventListener("change", () => syncAnimation());
   compactQuery.addEventListener("change", () => syncAnimation());
   syncAnimation(false);

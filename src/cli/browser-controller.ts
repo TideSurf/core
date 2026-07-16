@@ -5,6 +5,7 @@ import {
 } from "../tidesurf.js";
 import { CDPConnectionError } from "../errors.js";
 import { discoverActiveBrowser } from "../cdp/launcher.js";
+import { isSurfingPageConnected } from "../cdp/page.js";
 import {
   dispatchTool,
   executeValidatedToolSpec,
@@ -75,17 +76,33 @@ export class BrowserController {
   }
 
   status(): BrowserStatus {
-    const endpoint = this.browser
-      ? getTideSurfConnectionInfo(this.browser)
-      : undefined;
+    const browser = this.liveBrowser();
+    const endpoint = browser ? getTideSurfConnectionInfo(browser) : undefined;
     return {
-      running: this.browser !== null,
+      running: browser !== null,
       source: this.source,
       headless: this.config.headless,
       readOnly: this.config.readOnly,
       host: endpoint?.host,
       port: endpoint?.port,
     };
+  }
+
+  /** Returns the cached browser only while it is still connected; disposes dead handles. */
+  private liveBrowser(): TideSurf | null {
+    const browser = this.browser;
+    if (!browser) return null;
+    let connected: boolean;
+    try {
+      connected = isSurfingPageConnected(browser.getPage());
+    } catch {
+      connected = false;
+    }
+    if (connected) return browser;
+    this.browser = null;
+    this.source = undefined;
+    void browser.close().catch(() => undefined);
+    return null;
   }
 
   async start(): Promise<BrowserStatus> {
@@ -101,11 +118,17 @@ export class BrowserController {
     source: "launched" | "attached";
   }> {
     return this.runSerialized(async () => {
-      const alreadyRunning = this.browser !== null;
+      const alreadyRunning = this.liveBrowser() !== null;
+      const previousHeadless = this.config.headless;
       if (!alreadyRunning && options.headless !== undefined) {
         this.config.headless = options.headless;
       }
-      await this.getBrowser();
+      try {
+        await this.getBrowser();
+      } catch (error) {
+        this.config.headless = previousHeadless;
+        throw error;
+      }
       return {
         alreadyRunning,
         headless: this.config.headless,
@@ -118,7 +141,8 @@ export class BrowserController {
     if (this.closed) {
       throw new CDPConnectionError("Browser controller is closed");
     }
-    if (this.browser) return this.browser;
+    const browser = this.liveBrowser();
+    if (browser) return browser;
     if (!this.opening) {
       this.opening = this.acquire().then((browser) => {
         this.browser = browser;
@@ -184,7 +208,6 @@ export class BrowserController {
         ? { host: this.config.host ?? "127.0.0.1", port: this.config.port ?? 9222 }
         : undefined;
 
-    let connectionError: unknown;
     if (explicitEndpoint) {
       try {
         return await this.attach(
@@ -195,14 +218,18 @@ export class BrowserController {
         );
       } catch (error) {
         if (!(error instanceof CDPConnectionError)) throw error;
-        connectionError = error;
-      }
-
-      if (!isLocalHost(explicitEndpoint.host)) {
-        throw connectionError;
+        // A pinned endpoint never falls back to another running browser.
+        if (
+          this.config.browserMode === "connect" ||
+          !isLocalHost(explicitEndpoint.host)
+        ) {
+          throw error;
+        }
+        return this.launch(this.config.port, remaining());
       }
     }
 
+    let connectionError: unknown;
     try {
       const active = await discoverActiveBrowser({
         channel: this.config.channel,
@@ -220,16 +247,11 @@ export class BrowserController {
       connectionError = error;
     }
 
-    if (
-      !explicitEndpoint ||
-      explicitEndpoint.port !== 9222
-    ) {
-      try {
-        return await this.attach("127.0.0.1", 9222, undefined, remaining(1_500));
-      } catch (error) {
-        if (!(error instanceof CDPConnectionError)) throw error;
-        connectionError = error;
-      }
+    try {
+      return await this.attach("127.0.0.1", 9222, undefined, remaining(1_500));
+    } catch (error) {
+      if (!(error instanceof CDPConnectionError)) throw error;
+      connectionError = error;
     }
 
     if (this.config.browserMode === "connect") {

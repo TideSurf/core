@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+## 0.6.1 (2026-07-16)
+
+Claude Fable 5 edition.
+
+### Note for 0.6.0 upgraders
+
+Paint-order obscured detection was removed in 0.6.0. Page reads no longer mark overlay-covered elements with `obscured`, because snapshot geometry cannot prove which painted element receives a hit; use a screenshot when overlay state matters. This change shipped documented on the docs site but was missing from the 0.6.0 changelog.
+
+### Fixed
+
+- `navigate()` no longer stalls when the page redirects client-side during load. Navigation tracks redirect commits that arrive before or after the navigate reply and resolves on the expected load or its successor.
+- `type()` focuses the target before typing again and dispatches `input` followed by `change` when the value changed, for inputs, textareas, and contenteditable elements. Non-editable and disabled targets are still rejected without receiving focus.
+- Viewport reads show fixed-position and portal content again. `position: fixed` elements such as cookie banners and modals are no longer hidden by ancestor overflow clipping, and absolutely positioned elements are clipped only by positioned or paint-containing ancestors. Parseable `polygon()` clip-paths now contribute real bounds instead of being ignored.
+- `scroll()` waits for the page to settle again, matching click, type, and select. A settle failure is reported as a committed Scroll action instead of being dropped.
+- Downloads default to a 30-second completion timeout again, decoupled from the instance CDP timeout. Short instance timeouts no longer cancel healthy downloads, and explicit per-call timeouts still apply.
+- A download that completed is returned even when the post-download cleanup fails. Only downloads that never completed report an error.
+- Clipboard operations no longer reset embedder permission grants on browsers TideSurf attached to. The permission reset runs only on browsers TideSurf launched itself.
+- MCP tool calls with omitted arguments are accepted again. Tools without required parameters run with empty input, and advertised tool schemas are unchanged.
+- Explicit `--port` and `--browser-url` endpoints never silently fall back to a different browser. Connect mode fails fast when the endpoint is unavailable, and auto mode launches a fresh browser instead of attaching to another running one.
+- Dead browser handles recover. Status reports the real connection state, `launch_browser` no longer claims a dead browser is running, the next call reconnects or relaunches, and closing the active tab reconnects the successor tab instead of promoting a stale cached page.
+- A failed launch no longer leaves the requested headless override applied to the session; the previous mode is restored.
+- Session daemon startup races resolve to exactly one daemon, a live daemon whose socket vanished is terminated during stop or restart instead of being orphaned, and `stop` output reflects what actually happened.
+- Requests over the session daemon's 1 MiB limit surface the daemon's size error instead of a generic protocol failure.
+- The CLI derives its request deadline from the running session's configured timeout instead of local defaults.
+- CLI error paths honor `--json` consistently; the output format decision uses the same argument parser as normal execution.
+- Timeout and connection errors include next-step guidance again. Timeouts suggest checking page state or retrying, and Chrome launch or connection failures include setup instructions.
+- Budgeted reads no longer crash on pages whose URL cannot be parsed; link compression proceeds without same-origin relativization.
+- Token-budgeted output no longer overshoots its budget when elements carry empty `aria-label` or `alt` attributes; the size estimator now matches the serializer exactly.
+
+### Performance
+
+- Budgeted page reads parse and compress each link URL once per read instead of once per measurement pass, about 4.5x faster on link-heavy pages.
+
 ## 0.6.0 (2026-07-16)
 
 ### Added

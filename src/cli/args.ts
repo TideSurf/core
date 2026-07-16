@@ -1,10 +1,12 @@
 import { resolve } from "node:path";
+import { ValidationError } from "../errors.js";
 import {
   getToolNames,
   getToolSpec,
   type ToolSpec,
 } from "../tools/registry.js";
 import { CHROME_CHANNELS, type ChromeChannel } from "../types.js";
+import { validatePort, validateTimeout } from "../validation.js";
 import {
   GLOBAL_OPTIONS,
   LIFECYCLE_COMMANDS,
@@ -61,32 +63,61 @@ function optionValue(token: string): { flag: string; inline?: string } {
     : { flag: token.slice(0, equals), inline: token.slice(equals + 1) };
 }
 
-function findCommand(argv: string[]): { command?: string; index: number } {
-  for (let i = 0; i < argv.length; i++) {
-    const token = argv[i];
-    if (token === "--") return { command: argv[i + 1], index: i + 1 };
-    if (token === "-h" || token === "--help" || token === "-V" || token === "--version") {
-      continue;
-    }
-    if (token.startsWith("--")) {
-      const { flag, inline } = optionValue(token);
-      const definition = GLOBAL_BY_FLAG.get(flag) ??
-        (flag.startsWith("--no-") ? GLOBAL_BY_FLAG.get(`--${flag.slice(5)}`) : undefined);
-      if (!definition) throw new CliUsageError(`Unknown option: ${flag}`);
-      if (definition.kind !== "boolean" && inline === undefined) i++;
-      if (
-        definition.kind === "boolean" &&
-        inline === undefined &&
-        (argv[i + 1] === "true" || argv[i + 1] === "false")
-      ) {
-        i++;
-      }
-      continue;
-    }
-    if (token.startsWith("-")) throw new CliUsageError(`Unknown option: ${token}`);
-    return { command: token, index: i };
+interface ResolvedFlag {
+  flag: string;
+  definition: OptionDefinition;
+  negated: boolean;
+  raw?: string;
+}
+
+function resolveFlag(
+  argv: string[],
+  index: number,
+  lookup: (flag: string) => OptionDefinition | undefined
+): { resolved: ResolvedFlag; nextIndex: number } {
+  const { flag, inline } = optionValue(argv[index]);
+  let definition = lookup(flag);
+  let negated = false;
+  if (!definition && flag.startsWith("--no-")) {
+    definition = lookup(`--${flag.slice(5)}`);
+    negated = true;
   }
-  return { index: -1 };
+  if (!definition) throw new CliUsageError(`Unknown option: ${flag}`);
+  let raw = inline;
+  let nextIndex = index + 1;
+  if (definition.kind === "boolean") {
+    if (raw === undefined && (argv[nextIndex] === "true" || argv[nextIndex] === "false")) {
+      raw = argv[nextIndex];
+      nextIndex++;
+    }
+  } else if (raw === undefined) {
+    raw = argv[nextIndex];
+    nextIndex++;
+  }
+  return { resolved: { flag, definition, negated, raw }, nextIndex };
+}
+
+function applyFlag(
+  resolved: ResolvedFlag,
+  values: Record<string, unknown>,
+  explicitStartupProperties: Set<string>
+): void {
+  const { flag, definition, negated, raw } = resolved;
+  if (negated && definition.kind !== "boolean") {
+    throw new CliUsageError(`${flag} cannot be negated`);
+  }
+  if (definition.startup) explicitStartupProperties.add(definition.property);
+  if (definition.kind === "boolean") {
+    const positive = raw === undefined ? true : parseBoolean(raw, flag);
+    setValue(values, definition, negated ? !positive : positive);
+    return;
+  }
+  if (raw === undefined) throw new CliUsageError(`${flag} requires a value`);
+  setValue(
+    values,
+    definition,
+    definition.kind === "number" ? parseNumber(raw, flag) : raw
+  );
 }
 
 function parseNumber(raw: string, flag: string): number {
@@ -161,8 +192,51 @@ function localOptions(
   return inspectOptions;
 }
 
+function usageCheck(check: () => void): void {
+  try {
+    check();
+  } catch (error) {
+    if (error instanceof ValidationError) throw new CliUsageError(error.message);
+    throw error;
+  }
+}
+
 export function parseInvocation(argv: string[]): ParsedInvocation {
-  const { command, index: commandIndex } = findCommand(argv);
+  const preCommand: ResolvedFlag[] = [];
+  let command: string | undefined;
+  let restIndex = argv.length;
+  let afterDoubleDash = false;
+  let help = false;
+  let version = false;
+
+  for (let i = 0; i < argv.length; ) {
+    const token = argv[i];
+    if (token === "--") {
+      command = argv[i + 1];
+      restIndex = i + 2;
+      afterDoubleDash = true;
+      break;
+    }
+    if (token === "-h" || token === "--help") {
+      help = true;
+      i++;
+      continue;
+    }
+    if (token === "-V" || token === "--version") {
+      version = true;
+      i++;
+      continue;
+    }
+    if (!token.startsWith("-")) {
+      command = token;
+      restIndex = i + 1;
+      break;
+    }
+    const { resolved, nextIndex } = resolveFlag(argv, i, (flag) => GLOBAL_BY_FLAG.get(flag));
+    preCommand.push(resolved);
+    i = nextIndex;
+  }
+
   const tool = command ? getToolSpec(command) : undefined;
   if (command && !tool && !LIFECYCLE_COMMAND_SET.has(command)) {
     throw unknownCommandError(command);
@@ -171,90 +245,57 @@ export function parseInvocation(argv: string[]): ParsedInvocation {
   const localByFlag = localOptions(command, tool);
   const values: Record<string, unknown> = {};
   const positionals: string[] = [];
-  let help = false;
-  let version = false;
   const explicitStartupProperties = new Set<string>();
-  let afterDoubleDash = false;
 
-  for (let i = 0; i < argv.length; i++) {
-    if (i === commandIndex) continue;
+  for (const resolved of preCommand) {
+    applyFlag(resolved, values, explicitStartupProperties);
+  }
+
+  for (let i = restIndex; i < argv.length; ) {
     const token = argv[i];
     if (afterDoubleDash) {
       positionals.push(token);
+      i++;
       continue;
     }
     if (token === "--") {
       afterDoubleDash = true;
+      i++;
       continue;
     }
     if (token === "-h" || token === "--help") {
       help = true;
+      i++;
       continue;
     }
     if (token === "-V" || token === "--version") {
       version = true;
+      i++;
       continue;
     }
     if (!token.startsWith("-")) {
       positionals.push(token);
+      i++;
       continue;
     }
-
-    const parsed = optionValue(token);
-    const beforeCommand = commandIndex !== -1 && i < commandIndex;
-    let definition = beforeCommand
-      ? GLOBAL_BY_FLAG.get(parsed.flag)
-      : localByFlag.get(parsed.flag) ?? GLOBAL_BY_FLAG.get(parsed.flag);
-    let negated = false;
-    if (!definition && parsed.flag.startsWith("--no-")) {
-      const positive = `--${parsed.flag.slice(5)}`;
-      definition = beforeCommand
-        ? GLOBAL_BY_FLAG.get(positive)
-        : localByFlag.get(positive) ?? GLOBAL_BY_FLAG.get(positive);
-      negated = true;
-    }
-    if (!definition) throw new CliUsageError(`Unknown option: ${parsed.flag}`);
-    if (negated && definition.kind !== "boolean") {
-      throw new CliUsageError(`${parsed.flag} cannot be negated`);
-    }
-    if (definition.startup) {
-      explicitStartupProperties.add(definition.property);
-    }
-
-    if (definition.kind === "boolean") {
-      const raw = parsed.inline ??
-        (argv[i + 1] === "true" || argv[i + 1] === "false"
-          ? argv[++i]
-          : undefined);
-      const positive = raw === undefined ? true : parseBoolean(raw, parsed.flag);
-      const value = negated ? !positive : positive;
-      setValue(values, definition, value);
-      continue;
-    }
-
-    const raw = parsed.inline ?? argv[++i];
-    if (raw === undefined) throw new CliUsageError(`${parsed.flag} requires a value`);
-    setValue(
-      values,
-      definition,
-      definition.kind === "number" ? parseNumber(raw, parsed.flag) : raw
+    const { resolved, nextIndex } = resolveFlag(
+      argv,
+      i,
+      (flag) => localByFlag.get(flag) ?? GLOBAL_BY_FLAG.get(flag)
     );
+    applyFlag(resolved, values, explicitStartupProperties);
+    i = nextIndex;
   }
 
   const port = values["port"] as number | undefined;
-  if (port !== undefined && (!Number.isInteger(port) || port < 1 || port > 65535)) {
-    throw new CliUsageError("--port must be an integer between 1 and 65535");
-  }
+  if (port !== undefined) usageCheck(() => validatePort(port));
   const sessionTimeout = values["sessionTimeout"] as number | undefined;
-  if (
-    sessionTimeout !== undefined &&
-    (!Number.isInteger(sessionTimeout) || sessionTimeout <= 0)
-  ) {
-    throw new CliUsageError("--timeout must be a positive integer");
+  if (sessionTimeout !== undefined) {
+    usageCheck(() => validateTimeout(sessionTimeout, "--timeout"));
   }
   const toolTimeout = values["timeout"] as number | undefined;
-  if (toolTimeout !== undefined && (!Number.isInteger(toolTimeout) || toolTimeout <= 0)) {
-    throw new CliUsageError("--timeout must be a positive integer");
+  if (toolTimeout !== undefined) {
+    usageCheck(() => validateTimeout(toolTimeout, "--timeout"));
   }
   const channel = values["channel"] as ChromeChannel | undefined;
   if (channel !== undefined && !CHROME_CHANNELS.includes(channel)) {
@@ -384,6 +425,41 @@ export function parseInvocation(argv: string[]): ParsedInvocation {
     screenshotOutput: values["screenshotOutput"] as string | undefined,
     callInput: values["callInput"] as string | undefined,
   };
+}
+
+/**
+ * Decide the error-path output format. Uses the real parse whenever it
+ * succeeds so the decision matches the invocation; when the parse itself
+ * fails, falls back to a tolerant scan with the same global flag
+ * consumption rules that never throws.
+ */
+export function jsonOutputRequested(argv: string[]): boolean {
+  try {
+    return parseInvocation(argv).json;
+  } catch {
+    let json = false;
+    for (let i = 0; i < argv.length; ) {
+      const token = argv[i];
+      if (token === "--") break;
+      if (!token.startsWith("-")) {
+        i++;
+        continue;
+      }
+      let step: ReturnType<typeof resolveFlag>;
+      try {
+        step = resolveFlag(argv, i, (flag) => GLOBAL_BY_FLAG.get(flag));
+      } catch {
+        i++;
+        continue;
+      }
+      i = step.nextIndex;
+      const { definition, negated, raw } = step.resolved;
+      if (definition.property !== "json") continue;
+      const positive = raw !== "false";
+      json = negated ? !positive : positive;
+    }
+    return json;
+  }
 }
 
 export function buildToolInput(invocation: ParsedInvocation): Record<string, unknown> {

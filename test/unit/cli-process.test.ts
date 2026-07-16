@@ -1,12 +1,19 @@
 import { describe, expect, it } from "bun:test";
+import { spawn, type ChildProcess } from "node:child_process";
+import { once } from "node:events";
 import { join } from "node:path";
 import {
   SESSION_PROTOCOL_VERSION,
   ensureSession,
   getSessionPaths,
+  isProcessRunning,
+  readSessionState,
   removeSessionFiles,
+  sendLiveSessionRequest,
   sendSessionRequest,
   writeSessionState,
+  type SessionPaths,
+  type SessionState,
 } from "../../src/cli/session.js";
 import { TOOL_REGISTRY } from "../../src/tools/registry.js";
 import { VERSION } from "../../src/version.js";
@@ -283,6 +290,12 @@ describe("CLI process behavior", () => {
     });
   });
 
+  it("fails the daemon bootstrap without a startup token", () => {
+    const result = cli("__daemon", "--state-file", "/nonexistent/state.json");
+    expect(result.code).toBe(5);
+    expect(result.stderr).toContain("--startup-token");
+  });
+
   it("uses an authenticated session's immutable read-only policy", async () => {
     const session = `readonly-existing-${crypto.randomUUID()}`;
     const paths = getSessionPaths(session);
@@ -307,4 +320,92 @@ describe("CLI process behavior", () => {
       removeSessionFiles(paths, true);
     }
   });
+});
+
+describe("orphaned daemon recovery", () => {
+  async function spawnFakeDaemon(): Promise<ChildProcess> {
+    const child = spawn(
+      process.execPath,
+      ["-e", "setInterval(() => {}, 1000)"],
+      { stdio: "ignore" }
+    );
+    await once(child, "spawn");
+    return child;
+  }
+
+  async function awaitExit(child: ChildProcess): Promise<void> {
+    if (child.exitCode === null && child.signalCode === null) {
+      await Promise.race([
+        once(child, "exit"),
+        new Promise((resolveDelay) => setTimeout(resolveDelay, 8_000)),
+      ]);
+    }
+  }
+
+  function orphanReadyState(session: string, paths: SessionPaths, pid: number): SessionState {
+    return {
+      protocol: SESSION_PROTOCOL_VERSION,
+      version: VERSION,
+      session,
+      secret: "a".repeat(64),
+      socketPath: paths.socketPath,
+      config: {
+        browserMode: "launch",
+        headless: true,
+        readOnly: false,
+        allowLocalhost: false,
+        allowPrivateHosts: false,
+      },
+      pid,
+      ready: true,
+    };
+  }
+
+  it("stop terminates a live daemon whose socket vanished", async () => {
+    const session = `orphan-stop-${crypto.randomUUID()}`;
+    const paths = getSessionPaths(session);
+    const fake = await spawnFakeDaemon();
+    writeSessionState(paths, orphanReadyState(session, paths, fake.pid!));
+    try {
+      const response = await sendLiveSessionRequest(session, { method: "stop" }, 5_000);
+      expect(response).toBeNull();
+      await awaitExit(fake);
+      expect(isProcessRunning(fake.pid!)).toBe(false);
+      expect(readSessionState(paths)).toBeNull();
+    } finally {
+      fake.kill("SIGKILL");
+      removeSessionFiles(paths, true);
+    }
+  }, 20_000);
+
+  it("terminates a live orphan before starting a replacement daemon", async () => {
+    const session = `orphan-recover-${crypto.randomUUID()}`;
+    const paths = getSessionPaths(session);
+    const fake = await spawnFakeDaemon();
+    writeSessionState(paths, orphanReadyState(session, paths, fake.pid!));
+    let recovered: SessionState | undefined;
+    try {
+      recovered = await ensureSession({
+        session,
+        config: {
+          browserMode: "launch",
+          headless: true,
+          readOnly: false,
+          allowLocalhost: false,
+          allowPrivateHosts: false,
+        },
+        entryPath: join(root, "src", "cli.ts"),
+      });
+      expect(recovered.pid).not.toBe(fake.pid);
+      await awaitExit(fake);
+      expect(isProcessRunning(fake.pid!)).toBe(false);
+      expect(await sendSessionRequest(recovered, { method: "ping" }, 2_000)).toBeTruthy();
+    } finally {
+      if (recovered) {
+        await sendSessionRequest(recovered, { method: "stop" }, 5_000).catch(() => undefined);
+      }
+      fake.kill("SIGKILL");
+      removeSessionFiles(paths, true);
+    }
+  }, 30_000);
 });

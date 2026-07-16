@@ -38,7 +38,7 @@ Session commands:
 
 - `start`: start the session daemon and browser
 - `status`: report session and browser state without starting either
-- `stop`: stop the named session; repeated calls succeed
+- `stop`: stop the named session; repeated calls succeed, and a recorded daemon whose socket vanished is terminated
 - `tools`: list the shared tool registry
 - `help [command]`: show generated help
 - `call <tool> --input <json|->`: call an exact tool identifier with JSON; `-` reads stdin
@@ -100,13 +100,13 @@ Browser resolution order:
 
 Channel order: stable, Beta, Dev, Canary, Chromium. Select one with `--channel stable|beta|dev|canary|chromium`. Edge and Brave need `--chrome-path`. TideSurf never downloads a browser.
 
-`--auto-connect` tries an explicit endpoint, a current Chrome profile DevToolsActivePort entry, then a conventional local CDP endpoint before local launch. `--connect-only` never launches. Failure on a remote host never starts a local browser.
+Without an explicit endpoint, `--auto-connect` tries a current Chrome profile DevToolsActivePort entry, then a conventional local CDP endpoint, before local launch; `--connect-only` runs the same checks and never launches. An explicit `--browser-url` or `--host`/`--port` endpoint never falls back to a different running browser: `--connect-only` fails when it does not answer, and `--auto-connect` launches fresh for a local endpoint or fails for a remote one.
 
 Startup and policy flags:
 
 `--headful`, `--auto-connect`, `--connect-only`, `--browser-url`, `--host`, `--port`, `--chrome-path`, `--channel`, `--user-data-dir`, `--read-only`, `--allow-localhost`, `--allow-private-hosts`, repeatable `--file-access-root`, `--timeout`.
 
-For `download`, `--timeout` after the command sets the download wait. Put the global `--timeout` before `download` to set the session operation timeout.
+For `download`, `--timeout` after the command sets the file wait, which defaults to 30,000 ms independent of the session timeout. Put the global `--timeout` before `download` to set the session operation timeout.
 
 Timer-backed SDK and tool timeouts are positive whole milliseconds up to 2,147,483,647. CLI aggregate request budgets must stay at or below 1,073,741,823 ms.
 
@@ -180,4 +180,4 @@ Localhost, loopback, private, and link-local navigation is blocked by default. U
 }
 ```
 
-The MCP adapter registers the shared 18 tools and the `launch_browser` lifecycle tool. Screenshot results become image blocks. Failed tool calls set `isError`. `@modelcontextprotocol/sdk` and `zod` are optional package dependencies.
+The MCP adapter registers the shared 18 tools and the `launch_browser` lifecycle tool. Tool calls may omit the `arguments` object. Screenshot results become image blocks. Failed tool calls set `isError`. `@modelcontextprotocol/sdk` and `zod` are optional package dependencies.

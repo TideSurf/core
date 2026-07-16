@@ -1,5 +1,13 @@
 import type { OSNode } from "../types.js";
 import { validatePositiveNumber } from "../validation.js";
+import {
+  CLOSED_FLAG,
+  IFRAME_INACCESSIBLE_PLACEHOLDER,
+  IFRAME_UNKNOWN_PLACEHOLDER,
+  OBSCURED_FLAG,
+  OPEN_FLAG,
+  STRUCTURAL_CONTAINERS,
+} from "./serializer.js";
 import { formatTruncation, truncateGraphemes } from "./truncation.js";
 import {
   compressUrlWithContext,
@@ -45,18 +53,6 @@ interface Candidate {
   metrics: NodeMetrics;
 }
 
-const STRUCTURAL_CONTAINERS = new Set([
-  "form",
-  "nav",
-  "table",
-  "main",
-  "header",
-  "footer",
-  "section",
-  "article",
-  "aside",
-  "dialog",
-]);
 const HEADING_TAGS = new Set([
   "h1",
   "h2",
@@ -67,6 +63,8 @@ const HEADING_TAGS = new Set([
   "heading",
 ]);
 const TRUNCATION_SIZE_WITHOUT_COUNT = formatTruncation("").length + 1;
+const IFRAME_INACCESSIBLE_SIZE = IFRAME_INACCESSIBLE_PLACEHOLDER.length + 1;
+const IFRAME_UNKNOWN_SIZE = IFRAME_UNKNOWN_PLACEHOLDER.length + 1;
 
 function stateSize(node: OSNode): number {
   let size = 0;
@@ -76,9 +74,11 @@ function stateSize(node: OSNode): number {
     node.state?.includes("disabled") ||
     node.state?.includes("inert");
   if (struck) size += 4;
-  else if (node.state?.includes("obscured")) size += 9;
-  if (node.attributes["aria-expanded"] === "true") size += 5;
-  else if (node.attributes["aria-expanded"] === "false") size += 7;
+  else if (node.state?.includes("obscured")) size += OBSCURED_FLAG.length;
+  if (node.attributes["aria-expanded"] === "true") size += OPEN_FLAG.length;
+  else if (node.attributes["aria-expanded"] === "false") {
+    size += CLOSED_FLAG.length;
+  }
   return size;
 }
 
@@ -144,7 +144,7 @@ function estimateOwnSize(
       : 0;
     const fallbackSize = hasNonInteractiveText
       ? 0
-      : escapedTextSize(attributes["aria-label"] ?? attributes["title"]);
+      : escapedTextSize(attributes["aria-label"] || attributes["title"]);
     const targetSize = href && attributes["target"] === "_blank" ? 2 : 0;
     return indentation + idSize + hrefSize + escapedTextSize(node.text) +
       fallbackSize + targetSize + stateSize(node) + 8;
@@ -152,7 +152,7 @@ function estimateOwnSize(
   if (node.tag === "button") {
     const fallbackSize = hasNonInteractiveText
       ? 0
-      : escapedTextSize(attributes["aria-label"] ?? attributes["title"]);
+      : escapedTextSize(attributes["aria-label"] || attributes["title"]);
     return indentation + idSize + escapedTextSize(node.text) + fallbackSize +
       stateSize(node) + 5;
   }
@@ -182,13 +182,18 @@ function estimateOwnSize(
       (attributes["required"] !== undefined ? 9 : 0) +
       (attributes["multiple"] !== undefined ? 9 : 0);
   }
-  if (node.tag === "img") return indentation + (attributes["alt"]?.length ?? 0) + 8;
+  if (node.tag === "img") {
+    const alt = attributes["alt"];
+    return indentation + (alt ? alt.length + 8 : 6);
+  }
   if (node.tag === "iframe") {
     const src = attributes["src"];
     const srcSize = src
       ? compressUrlWithContext(src, url).length + 14
       : 0;
-    const emptySize = attributes["status"] === "inaccessible" ? 23 : 18;
+    const emptySize = attributes["status"] === "inaccessible"
+      ? IFRAME_INACCESSIBLE_SIZE
+      : IFRAME_UNKNOWN_SIZE;
     return indentation + Math.max(srcSize, emptySize);
   }
   if (HEADING_TAGS.has(node.tag)) {

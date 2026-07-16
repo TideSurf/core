@@ -15,12 +15,13 @@ export interface UrlCompressionContext {
   pageUrl?: string;
   pageOrigin?: string;
   originResolved: boolean;
+  cache: Map<string, string>;
 }
 
 export function createUrlCompressionContext(
   pageUrl?: string
 ): UrlCompressionContext {
-  return { pageUrl, originResolved: false };
+  return { pageUrl, originResolved: false, cache: new Map() };
 }
 
 /** Strip tracking parameters, relativize same-origin URLs, and shorten paths. */
@@ -41,6 +42,17 @@ export function compressUrlWithContext(
     return href;
   }
 
+  const cached = context.cache.get(href);
+  if (cached !== undefined) return cached;
+  const compressed = compressParsedUrl(href, context);
+  context.cache.set(href, compressed);
+  return compressed;
+}
+
+function compressParsedUrl(
+  href: string,
+  context: UrlCompressionContext
+): string {
   let url: URL;
   try {
     url = new URL(href);
@@ -57,10 +69,14 @@ export function compressUrlWithContext(
   }
 
   if (!context.originResolved) {
-    context.pageOrigin = context.pageUrl
-      ? new URL(context.pageUrl).origin
-      : undefined;
     context.originResolved = true;
+    try {
+      context.pageOrigin = context.pageUrl
+        ? new URL(context.pageUrl).origin
+        : undefined;
+    } catch {
+      context.pageOrigin = undefined;
+    }
   }
   const sameOrigin = context.pageOrigin !== undefined &&
     url.origin === context.pageOrigin;

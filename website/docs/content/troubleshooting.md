@@ -59,7 +59,7 @@ TideSurf uses a startup lock, PID check, private state file, and local socket or
 If startup still fails:
 
 1. Run `tidesurf status`.
-2. Run `tidesurf stop`; stop is safe when no session exists.
+2. Run `tidesurf stop`. It succeeds when no session exists and terminates a recorded daemon whose socket has vanished.
 3. Retry the tool command.
 4. Read the daemon log path included in the error.
 
@@ -69,7 +69,7 @@ Managed launch failures include the final bounded portion of Chrome stderr. Use 
 
 ## Connect-only cannot find Chrome
 
-`--connect-only` never launches. Without an explicit endpoint, it checks a supported Chrome profile `DevToolsActivePort` and the conventional local endpoint on port `9222`.
+`--connect-only` never launches. Without an explicit endpoint, it checks a supported Chrome profile `DevToolsActivePort` and the conventional local endpoint on port `9222`. An explicit `--browser-url` or `--host`/`--port` endpoint is pinned: when it does not answer, the command fails instead of trying discovery.
 
 Chrome 144 profile attachment may require approval at `chrome://inspect#remote-debugging`. For a manual fixed endpoint, launch Chrome with a non-default profile:
 
@@ -95,14 +95,13 @@ tidesurf --connect-only --host 127.0.0.1 --port 9222 get_state
 
 ## Auto-connect launches unexpectedly
 
-`--auto-connect` tries, in order:
+Without an explicit endpoint, `--auto-connect` tries, in order:
 
-1. explicit `--browser-url` or host/port
-2. supported Chrome profile `DevToolsActivePort`
-3. conventional local CDP endpoint
-4. managed local launch
+1. supported Chrome profile `DevToolsActivePort`
+2. conventional local CDP endpoint
+3. managed local launch
 
-Use `--connect-only` when launch is never acceptable. A failed remote-host endpoint does not fall back to local launch.
+An explicit `--browser-url` or `--host`/`--port` endpoint is pinned and never falls back to a different running browser. When it does not answer, auto-connect launches a fresh local browser for a local endpoint and fails for a remote one. Use `--connect-only` when launch is never acceptable.
 
 ## Fixed port is already in use
 
@@ -173,7 +172,7 @@ tidesurf --session files \
 
 Only one download can run through a `SurfingPage` connection at a time. A second call on that connection fails instead of sharing browser download state; separate clients attached to the same target do not share this lock. A path that resolves outside the allowed roots is rejected before browser download setup.
 
-A browser or target disconnect stops the download wait. The trigger may already have clicked, so an uncertain trigger returns the committed-action warning path. Inspect session and page state instead of retrying the click. A completed transfer can also use that path when final browser-policy cleanup fails.
+A browser or target disconnect stops the download wait. The trigger may already have clicked, so an uncertain trigger returns the committed-action warning path. Inspect session and page state instead of retrying the click. A completed transfer always returns its file, even when final browser-policy cleanup fails.
 
 ## Screenshot output is unreadable
 
@@ -205,6 +204,10 @@ Then run `tidesurf mcp`. The direct CLI and SDK do not need MCP packages.
 
 If an owned browser survived an external hard kill of the daemon, identify the process by its TideSurf user data directory or remote-debugging argument before terminating it. Do not kill unrelated Chrome processes.
 
+## Connection drops on a very large response
+
+The CDP transport caps one incoming message at 256 MiB, and the limit is not configurable. A larger response, such as an enormous `evaluate` result, closes the whole browser connection; every in-flight command then fails with a generic WebSocket connection closed error. Reduce the response size and reconnect.
+
 ## Operation timeout
 
 Raise the session timeout for slow startup or heavy pages:
@@ -214,5 +217,7 @@ tidesurf --session slow --timeout 60000 navigate https://example.com
 ```
 
 For an existing session, choose a new name or stop it before changing the timeout.
+
+The `download` file wait is separate. It defaults to 30,000 ms regardless of the session timeout; set the tool-level `--timeout` after the `download` command to change it.
 
 Timeouts must be positive whole milliseconds no greater than 2,147,483,647. The CLI reserves time for sequential phases and transport cleanup, then rejects a computed request budget above 1,073,741,823 ms.

@@ -12,6 +12,7 @@ import {
   MAX_TIMER_DELAY_MS,
   validateScreenshotDimensions,
 } from "../validation.js";
+import { isOwnedBrowserEndpoint } from "./launcher.js";
 import { withTimeout } from "./timeout.js";
 
 const CLIPBOARD_READ_COOLDOWN_MS = 5_000;
@@ -166,6 +167,23 @@ function remainingTimeout(deadline: number): number {
   return Math.max(1, deadline - Date.now());
 }
 
+const INTERACTION_GUARD_SOURCE = `const ariaDisabled = this.closest('[aria-disabled="true" i]') !== null;
+            const inert = this.closest('[inert]') !== null;
+            const pointerBlocked = this.ownerDocument.defaultView
+              .getComputedStyle(this).pointerEvents === 'none';`;
+
+function assertNodeAttached(
+  result: RuntimeResponse,
+  backendNodeId: number
+): void {
+  if (result.result?.value === false) {
+    throw new ElementNotFoundError(
+      `backendNodeId:${backendNodeId}`,
+      "The mapped node is detached."
+    );
+  }
+}
+
 async function runMutation<T>(
   conn: CDPConnection,
   operation: string,
@@ -263,19 +281,23 @@ async function withClipboardPermissionsUnlocked<T>(
     operationFailed = false;
     return result;
   } finally {
-    try {
-      await reset();
-    } catch (error) {
-      if (!operationFailed) {
-        throw committedOperation
-          ? new ActionCommittedError(committedOperation, error)
-          : error;
+    // Browser.resetPermissions clears every override in the browser context,
+    // so an attached embedder's grants are left alone.
+    if (conn.ownsBrowser) {
+      try {
+        await reset();
+      } catch (error) {
+        if (!operationFailed) {
+          throw committedOperation
+            ? new ActionCommittedError(committedOperation, error)
+            : error;
+        }
       }
-    }
-    if (!grantCompleted) {
-      void grant
-        .then(() => serializeClipboard(conn, reset))
-        .catch(() => undefined);
+      if (!grantCompleted) {
+        void grant
+          .then(() => serializeClipboard(conn, reset))
+          .catch(() => undefined);
+      }
     }
   }
 }
@@ -303,6 +325,8 @@ export interface CDPConnection {
   Runtime: Client["Runtime"];
   Emulation: Client["Emulation"];
   disconnected: boolean;
+  /** True when TideSurf launched the browser and may clear browser-wide state. */
+  ownsBrowser: boolean;
 }
 
 /** Connect to Chrome and enable the required CDP domains. */
@@ -318,6 +342,11 @@ export async function connect(options: {
   const host = options.host ?? "localhost";
   let client: Client | undefined;
   let abandoned = false;
+  // chrome-remote-interface hardcodes the websocket maxPayload at 256 MiB and
+  // exposes no option to change it. A CDP message above that limit is
+  // connection-fatal: the ws error is swallowed and every pending command
+  // fails with a generic "WebSocket connection closed". The pre-parse memory
+  // guards keep snapshot payloads far below this backstop.
   const pendingClient = CDP({
     port,
     host,
@@ -351,7 +380,15 @@ export async function connect(options: {
       "CDP lifecycle enable"
     );
 
-    const conn = { client, DOM, Page, Runtime, Emulation, disconnected: false };
+    const conn = {
+      client,
+      DOM,
+      Page,
+      Runtime,
+      Emulation,
+      disconnected: false,
+      ownsBrowser: isOwnedBrowserEndpoint(host, port),
+    };
     client.once("disconnect", () => {
       conn.disconnected = true;
     });
@@ -396,11 +433,27 @@ export async function navigate(
   const operationTimeout = timeout ?? 30_000;
   const deadline = Date.now() + operationTimeout;
   const loadedLoaders = new Set<string>();
+  const earlyCommits: Array<{ frameId: string; loaderId: string }> = [];
+  const successorLoaders = new Set<string>();
   let expectedLoader: string | undefined;
+  let mainFrameId: string | undefined;
+  let expectedCommitSeen = false;
   let resolveLoaded!: () => void;
   const loaded = new Promise<void>((resolveLoad) => {
     resolveLoaded = resolveLoad;
   });
+  // A client-side redirect can replace the expected loader before it emits
+  // load, so main-frame loaders committed after ours also complete the wait.
+  const noteCommit = (frameId: string, loaderId: string) => {
+    if (frameId !== mainFrameId) return;
+    if (loaderId === expectedLoader) {
+      expectedCommitSeen = true;
+      return;
+    }
+    if (!expectedCommitSeen) return;
+    successorLoaders.add(loaderId);
+    if (loadedLoaders.has(loaderId)) resolveLoaded();
+  };
   let rejectDisconnect!: (error: Error) => void;
   const disconnectSignal = new Promise<never>((_resolve, reject) => {
     rejectDisconnect = reject;
@@ -414,10 +467,25 @@ export async function navigate(
     );
   };
   conn.client.once("disconnect", onDisconnect);
-  const unsubscribe = conn.Page.lifecycleEvent((event) => {
+  const unsubscribeLoads = conn.Page.lifecycleEvent((event) => {
     if (event.name !== "load") return;
     if (expectedLoader === undefined) loadedLoaders.add(event.loaderId);
-    else if (event.loaderId === expectedLoader) resolveLoaded();
+    else if (
+      event.loaderId === expectedLoader ||
+      successorLoaders.has(event.loaderId)
+    ) {
+      resolveLoaded();
+    }
+  });
+  const unsubscribeCommits = conn.Page.on("frameNavigated", (event) => {
+    if (expectedLoader === undefined) {
+      earlyCommits.push({
+        frameId: event.frame.id,
+        loaderId: event.frame.loaderId,
+      });
+    } else {
+      noteCommit(event.frame.id, event.frame.loaderId);
+    }
   });
   let committed = false;
   try {
@@ -430,6 +498,10 @@ export async function navigate(
     if (result.loaderId) {
       committed = true;
       expectedLoader = result.loaderId;
+      mainFrameId = result.frameId;
+      for (const commit of earlyCommits) {
+        noteCommit(commit.frameId, commit.loaderId);
+      }
       if (loadedLoaders.has(expectedLoader)) resolveLoaded();
       loadedLoaders.clear();
       await withTimeout(
@@ -449,7 +521,8 @@ export async function navigate(
       { cause: err instanceof Error ? err : undefined }
     );
   } finally {
-    unsubscribe();
+    unsubscribeLoads();
+    unsubscribeCommits();
     conn.client.removeListener("disconnect", onDisconnect);
   }
 }
@@ -500,29 +573,19 @@ export async function clickNode(
           {
             objectId,
             functionDeclaration: `function() {
-          if (this.isConnected !== true) return false;
-          const ariaDisabled = this.closest('[aria-disabled="true" i]') !== null;
-          const inert = this.closest('[inert]') !== null;
-          const pointerBlocked = this.ownerDocument.defaultView
-            .getComputedStyle(this).pointerEvents === 'none';
-          if (this.matches(':disabled') || ariaDisabled || inert || pointerBlocked) {
-            throw new Error('Target is disabled or inert');
-          }
-          this.click();
-          return true;
-        }`,
+            if (this.isConnected !== true) return false;
+            ${INTERACTION_GUARD_SOURCE}
+            if (this.matches(':disabled') || ariaDisabled || inert || pointerBlocked) {
+              throw new Error('Target is disabled or inert');
+            }
+            this.click();
+            return true;
+          }`,
             returnByValue: true,
           },
           remaining(),
           "clickNode:click"
-        ).then((result) => {
-          if (result.result?.value === false) {
-            throw new ElementNotFoundError(
-              `backendNodeId:${backendNodeId}`,
-              "The mapped node is detached."
-            );
-          }
-        })
+        ).then((result) => assertNodeAttached(result, backendNodeId))
       )
   );
 }
@@ -573,13 +636,11 @@ export async function typeText(
             if (!editable) {
               throw new Error('Target is not a text-editable input, textarea, or contenteditable element');
             }
-            const ariaDisabled = this.closest('[aria-disabled="true" i]') !== null;
-            const inert = this.closest('[inert]') !== null;
-            const pointerBlocked = this.ownerDocument.defaultView
-              .getComputedStyle(this).pointerEvents === 'none';
+            ${INTERACTION_GUARD_SOURCE}
             if (this.matches(':disabled') || this.readOnly || ariaDisabled || inert || pointerBlocked) {
               throw new Error('Target is disabled or read-only');
             }
+            this.focus();
             let changed = false;
             if (this.isContentEditable === true) {
               const before = this.textContent || '';
@@ -638,7 +699,10 @@ export async function typeText(
               }
               changed = next !== before;
             }
-            if (changed) this.dispatchEvent(new Event('input', { bubbles: true }));
+            if (changed) {
+              this.dispatchEvent(new Event('input', { bubbles: true }));
+              this.dispatchEvent(new Event('change', { bubbles: true }));
+            }
             return true;
           }`,
             arguments: [{ value: text }, { value: clear }],
@@ -646,14 +710,7 @@ export async function typeText(
           },
           remaining(),
           "typeText:type"
-        ).then((result) => {
-          if (result.result?.value === false) {
-            throw new ElementNotFoundError(
-              `backendNodeId:${backendNodeId}`,
-              "The mapped node is detached."
-            );
-          }
-        })
+        ).then((result) => assertNodeAttached(result, backendNodeId))
       )
   );
 }
@@ -681,10 +738,7 @@ export async function selectOption(
             if (this.tagName !== 'SELECT') {
               throw new Error('Target is not a native select element');
             }
-            const ariaDisabled = this.closest('[aria-disabled="true" i]') !== null;
-            const inert = this.closest('[inert]') !== null;
-            const pointerBlocked = this.ownerDocument.defaultView
-              .getComputedStyle(this).pointerEvents === 'none';
+            ${INTERACTION_GUARD_SOURCE}
             if (this.matches(':disabled') || ariaDisabled || inert || pointerBlocked) {
               throw new Error('Target is disabled or inert');
             }
@@ -712,14 +766,7 @@ export async function selectOption(
           },
           remaining(),
           "selectOption:select"
-        ).then((result) => {
-          if (result.result?.value === false) {
-            throw new ElementNotFoundError(
-              `backendNodeId:${backendNodeId}`,
-              "The mapped node is detached."
-            );
-          }
-        })
+        ).then((result) => assertNodeAttached(result, backendNodeId))
       )
   );
 }

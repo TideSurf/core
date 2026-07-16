@@ -143,8 +143,32 @@ export function registerMcpTools({
   }
 }
 
+interface ZodParsePayload {
+  value: unknown;
+  issues: unknown[];
+}
+
+interface ZodSchemaWithInternals {
+  _zod: {
+    run(payload: ZodParsePayload, ctx: unknown): unknown;
+  };
+}
+
 export function createZodInputSchemaFactory(zod: {
   fromJSONSchema: (schema: unknown) => unknown;
 }): McpInputSchemaFactory {
-  return (inputSchema) => zod.fromJSONSchema(inputSchema);
+  // tools/call may omit "arguments" entirely; parse that as {} while keeping
+  // the schema a plain zod object so the SDK still advertises its properties
+  // in tools/list. Wrapper schemas (preprocess/default) lose that listing.
+  return (inputSchema) => {
+    const schema = zod.fromJSONSchema(inputSchema) as ZodSchemaWithInternals;
+    const internals = schema._zod;
+    const run = internals.run.bind(internals);
+    internals.run = (payload, ctx) =>
+      run(
+        payload.value === undefined ? { ...payload, value: {} } : payload,
+        ctx
+      );
+    return schema;
+  };
 }
