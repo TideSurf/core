@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.6.2 (2026-07-16)
+
+### Changed
+
+- The README is a compact, design-led page again in English, Japanese, and Korean: tide mark, language bar, links, canonical install commands, social preview, and status badges. This is the README shown on npm from this release on.
+- The tide mark wave is now a constant-thickness ribbon, applied to every logo, favicon, inline mark, and social image.
+- The landing hero targets new users: it cycles the Homebrew, npm, and Bun install commands, pauses on hover, and shows a brand-hued halo. On phones the hero centers vertically, the Docs, npm, and GitHub links sit in the footer, and the theme switch docks on the right.
+
+### Performance
+
+- The docs app renders markdown at build time and ships without a client-side parser. Pages render with no parse work and the script bundle shrinks by ten kilobytes gzipped.
+
 ## 0.6.1 (2026-07-16)
 
 Claude Fable 5 edition.
