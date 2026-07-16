@@ -1,4 +1,3 @@
-import { marked } from "marked";
 import "./style.css";
 import { initScrollTone } from "../../shared/scroll-tone";
 import { initTheme, prefersReducedMotion, safeStorageGet, safeStorageSet } from "../../shared/theme";
@@ -87,6 +86,21 @@ const mobileMedia = window.matchMedia(MOBILE_QUERY);
 let currentLang: Language = "en";
 let currentPageName = DEFAULT_PAGE;
 let pageMap: Record<string, string> = {};
+let searchIndex: Record<string, { title: string; text: string }> | null = null;
+
+function ensureSearchIndex(): Record<string, { title: string; text: string }> {
+  if (searchIndex) return searchIndex;
+  const parser = new DOMParser();
+  const index: Record<string, { title: string; text: string }> = {};
+  Object.entries(pageMap).forEach(([name, html]) => {
+    const doc = parser.parseFromString(html, "text/html");
+    const title = doc.querySelector("h1")?.textContent?.trim() || name;
+    const text = (doc.body.textContent ?? "").replace(/\s+/g, " ").trim();
+    index[name] = { title, text };
+  });
+  searchIndex = index;
+  return index;
+}
 let tocScrollFrame = 0;
 let initialNavigation = true;
 let removeTocTracking: (() => void) | null = null;
@@ -115,7 +129,7 @@ function translate(key: string): string {
 async function loadContent(): Promise<void> {
   const modules = import.meta.glob("../content/*.md", {
     eager: true,
-    query: "?raw",
+    query: "?html",
     import: "default",
   });
 
@@ -364,14 +378,13 @@ function renderMissingPage(): void {
 }
 
 function renderPage(pageName: string): void {
-  const markdown = pageMap[pageName];
-  if (!markdown) {
+  const html = pageMap[pageName];
+  if (!html) {
     renderMissingPage();
     return;
   }
 
   currentPageName = pageName;
-  const html = marked.parse(markdown, { async: false }) as string;
   contentEl.replaceChildren(sanitizeHtmlFragment(html));
   contentEl.setAttribute("aria-busy", "false");
   contentEl.lang = "en";
@@ -489,22 +502,16 @@ function initSearch(): void {
     }
 
     const matches: SearchEntry[] = [];
-    Object.entries(pageMap).forEach(([name, markdown]) => {
-      const lower = markdown.toLowerCase();
+    Object.entries(ensureSearchIndex()).forEach(([name, page]) => {
+      const lower = page.text.toLowerCase();
       const index = lower.indexOf(query);
       if (index < 0) return;
 
-      const title = markdown.match(/^#\s+(.+)/m)?.[1] ?? name;
       const start = Math.max(0, index - 42);
-      const end = Math.min(markdown.length, index + query.length + 72);
-      const body = markdown
-        .slice(start, end)
-        .replace(/<[^>]+>/g, " ")
-        .replace(/[#*`_>\n]/g, " ")
-        .replace(/\s+/g, " ")
-        .trim();
-      const snippet = `${start > 0 ? "…" : ""}${body}${end < markdown.length ? "…" : ""}`;
-      matches.push({ name, title, snippet });
+      const end = Math.min(page.text.length, index + query.length + 72);
+      const body = page.text.slice(start, end).trim();
+      const snippet = `${start > 0 ? "…" : ""}${body}${end < page.text.length ? "…" : ""}`;
+      matches.push({ name, title: page.title, snippet });
     });
     renderSearchResults(results, matches);
   });

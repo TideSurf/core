@@ -119,7 +119,7 @@ pre {
   font-size: 0.86rem;
 }
 
-/* Optical lift: the all-lowercase npm wordmark reads ~1px low next to cap-height labels. */
+/* Optical lift: the lowercase npm wordmark sits one pixel low next to cap-height labels. */
 .topnav-links a[href*="npmjs"],
 .footer-links a[href*="npmjs"] {
   padding-block: calc(0.2rem - 1px) calc(0.2rem + 1px);
@@ -218,7 +218,88 @@ pre {
   gap: 0.65rem;
   padding-left: 0.9rem;
   color: var(--ink);
-  background: color-mix(in srgb, var(--paper-2) 86%, transparent);
+  position: relative;
+  isolation: isolate;
+}
+
+/* Backdrop sits above the glow so the halo shows only at the edges. */
+.install::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: color-mix(in srgb, var(--paper-2) 92%, transparent);
+}
+
+/* Hover halo: brand-hued rainbow ring behind the install command. */
+@property --glow-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.install::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  z-index: -1;
+  background: conic-gradient(
+    from var(--glow-angle),
+    var(--c-rust),
+    var(--c-gold),
+    var(--c-green),
+    var(--c-teal),
+    #6e56cf,
+    var(--c-rust)
+  );
+  filter: blur(8px) saturate(170%);
+  opacity: 0;
+  transition: opacity 240ms ease;
+}
+
+.install:hover::before,
+.install:focus-within::before {
+  opacity: 0.9;
+  animation: glow-spin 3.5s linear infinite;
+}
+
+[data-theme="light"] .install::before {
+  mix-blend-mode: multiply;
+  filter: blur(8px) saturate(220%);
+}
+
+@keyframes glow-spin {
+  to {
+    --glow-angle: 360deg;
+  }
+}
+
+.install code {
+  display: inline-block;
+  transition: transform 190ms ease-out, opacity 190ms ease-out;
+}
+
+.install code.roll-out {
+  transform: translateY(-0.6em);
+  opacity: 0;
+  transition: transform 190ms ease-in, opacity 190ms ease-in;
+}
+
+.install code.roll-in {
+  transform: translateY(0.6em);
+  opacity: 0;
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce), (prefers-reduced-data: reduce) {
+  .install::before {
+    animation: none;
+  }
+
+  .install code,
+  .install code.roll-out {
+    transition: none;
+  }
 }
 
 .install .prompt {

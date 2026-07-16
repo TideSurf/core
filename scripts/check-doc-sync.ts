@@ -459,9 +459,16 @@ const hero = landingHtml.match(/<h1 id="hero-title">([^<]+)<\/h1>/)?.[1];
 const heroCommand = landingHtml.match(/data-copy="([^"]+)"/)?.[1];
 check(hero === "Agents Surfing", "landing hero must be exactly Agents Surfing");
 check(
-  heroCommand === "tidesurf navigate https://example.com",
-  "landing command must use the installed TideSurf CLI"
+  heroCommand === "brew install TideSurf/tap/tidesurf",
+  "landing command must lead with the canonical Homebrew install"
 );
+const landingMain = read("website/landing/src/main.ts");
+for (const command of installCommands) {
+  check(
+    landingMain.includes(`"${command}"`),
+    `landing install rotation must include: ${command}`
+  );
+}
 for (const value of [
   hero,
   "Live DOM → compact text → current action handles.",

@@ -2,6 +2,44 @@ import "./style.css";
 import { initScrollTone } from "../../shared/scroll-tone";
 import { initTheme, prefersReducedMotion, reducedMotionQuery } from "../../shared/theme";
 
+const INSTALL_COMMANDS = [
+  "brew install TideSurf/tap/tidesurf",
+  "npm install --global @tidesurf/core",
+  "bun add --global @tidesurf/core",
+];
+
+function initInstallRotator(): void {
+  const box = document.querySelector<HTMLElement>(".install");
+  const text = document.getElementById("install-command-text");
+  const copy = document.querySelector<HTMLButtonElement>("#install-copy-btn");
+  if (!box || !text || !copy || prefersReducedMotion()) return;
+
+  let index = 0;
+  let paused = false;
+  const setPaused = (value: boolean) => () => {
+    paused = value;
+  };
+  box.addEventListener("pointerenter", setPaused(true));
+  box.addEventListener("pointerleave", setPaused(false));
+  box.addEventListener("focusin", setPaused(true));
+  box.addEventListener("focusout", setPaused(false));
+
+  setInterval(() => {
+    if (paused || document.hidden) return;
+    index = (index + 1) % INSTALL_COMMANDS.length;
+    const next = INSTALL_COMMANDS[index];
+    text.classList.add("roll-out");
+    setTimeout(() => {
+      text.textContent = next;
+      copy.dataset.copy = next;
+      text.classList.remove("roll-out");
+      text.classList.add("roll-in");
+      void text.offsetHeight;
+      text.classList.remove("roll-in");
+    }, 190);
+  }, 3200);
+}
+
 function initCopyButtons(): void {
   document.querySelectorAll<HTMLButtonElement>("[data-copy]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -261,6 +299,7 @@ function init(): void {
   initTheme();
   initScrollTone();
   initCopyButtons();
+  initInstallRotator();
   initWaves();
 }
 
