@@ -119,6 +119,12 @@ pre {
   font-size: 0.86rem;
 }
 
+/* Optical lift: the all-lowercase npm wordmark reads ~1px low next to cap-height labels. */
+.topnav-links a[href*="npmjs"],
+.footer-links a[href*="npmjs"] {
+  padding-block: calc(0.2rem - 1px) calc(0.2rem + 1px);
+}
+
 .topnav {
   width: var(--page);
   margin-inline: auto;
@@ -553,7 +559,6 @@ pre {
   .hero {
     min-height: calc(100svh - 3.65rem);
     padding: clamp(3.75rem, 10svh, 5rem) 0 4rem;
-    justify-content: flex-start;
   }
 
   .specimen {
@@ -593,6 +598,11 @@ pre {
 
   .topnav {
     align-items: center;
+  }
+
+  /* Utility chips live in the footer on phones; the topnav keeps only the brand. */
+  .topnav-links {
+    display: none;
   }
 
   .topnav-brand {
@@ -658,6 +668,7 @@ pre {
     margin-inline: auto;
     padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
     display: flex;
+    justify-content: flex-end;
     gap: 0.4rem;
   }
 
