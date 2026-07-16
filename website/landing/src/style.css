@@ -643,6 +643,7 @@ pre {
 
   .site-footer {
     align-items: flex-start;
+    padding-bottom: 1rem;
   }
 
   .footer-utilities {
@@ -650,9 +651,14 @@ pre {
     justify-content: flex-start;
   }
 
+  /* Docked below the footer so the fixed control cannot cover the footer links. */
   .theme-float {
-    left: max(1rem, env(safe-area-inset-left));
-    bottom: calc(0.75rem + env(safe-area-inset-bottom));
+    position: static;
+    width: var(--page);
+    margin-inline: auto;
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+    display: flex;
+    gap: 0.4rem;
   }
 
   .theme-float .theme-btn {
