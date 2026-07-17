@@ -8,10 +8,12 @@ import {
 import { formatTruncation } from "./truncation.js";
 
 function escapeQuotes(text: string): string {
-  return text.replace(/"/g, '\\"');
+  // Attribute interpolations: escape quotes and square brackets so
+  // page-controlled attributes can never forge element markers like [B1].
+  return text.replace(/["\[\]]/g, (char) => `\\${char}`);
 }
 
-function escapeHtml(text: string): string {
+export function escapeHtml(text: string): string {
   let result = "";
   let chunkStart = 0;
   for (let index = 0; index < text.length; index++) {
@@ -21,6 +23,10 @@ function escapeHtml(text: string): string {
     else if (code === 60) replacement = "&lt;";
     else if (code === 62) replacement = "&gt;";
     else if (code === 34) replacement = "&quot;";
+    // Square brackets are escaped so page-controlled text can never forge
+    // element markers like [B1] in the serialized output.
+    else if (code === 91) replacement = "\\[";
+    else if (code === 93) replacement = "\\]";
     if (!replacement) continue;
     result += text.slice(chunkStart, index) + replacement;
     chunkStart = index + 1;
@@ -84,7 +90,7 @@ export const STRUCTURAL_CONTAINERS = new Set([
   "dialog",
 ]);
 
-const HEADING_MAP: Record<string, string> = {
+export const HEADING_MAP: Record<string, string> = {
   h1: "#",
   h2: "##",
   h3: "###",
@@ -107,7 +113,9 @@ function collectText(
     result = { all: value, nonInteractive: value };
   } else {
     const text = serializableText(node);
-    const ownText = text ? escapeHtml(text) : "";
+    // The truncated marker is TideSurf-generated structural text, not page
+    // text: it must keep its literal brackets.
+    const ownText = text && node.tag !== "truncated" ? escapeHtml(text) : (text ?? "");
     if (node.children.length === 0) {
       result = { all: ownText, nonInteractive: ownText };
     } else if (node.children.length === 1) {
@@ -210,7 +218,8 @@ function serializeNodes(
     if (node.tag === "link") {
       const id = node.id ?? "";
       const href = node.attributes["href"];
-      const text = collectNonInteractiveText(node, context).trim() || node.attributes["aria-label"] || node.attributes["title"] || "";
+      const fallback = node.attributes["aria-label"] || node.attributes["title"] || "";
+      const text = collectNonInteractiveText(node, context).trim() || escapeHtml(fallback);
       const compHref = href
         ? compressUrlWithContext(href, context.url)
         : undefined;
@@ -228,7 +237,8 @@ function serializeNodes(
 
     if (node.tag === "button") {
       const id = node.id ?? "";
-      const text = collectNonInteractiveText(node, context).trim() || node.attributes["aria-label"] || node.attributes["title"] || "";
+      const fallback = node.attributes["aria-label"] || node.attributes["title"] || "";
+      const text = collectNonInteractiveText(node, context).trim() || escapeHtml(fallback);
       const { struck, flags } = getElementState(node, node.attributes["disabled"] !== undefined || node.attributes["aria-disabled"] === "true");
       const line = `[${id}]${text ? " " + text : ""}${flags}`;
       appendAction(parts, node, line, struck, indent, context);
@@ -243,14 +253,14 @@ function serializeNodes(
       const readonly = node.attributes["readonly"] !== undefined ? " readonly" : "";
       const required = node.attributes["required"] !== undefined ? " required" : "";
       const checked = node.attributes["checked"] !== undefined ? " checked" : "";
-      const min = node.attributes["min"] !== undefined ? ` min=${node.attributes["min"]}` : "";
-      const max = node.attributes["max"] !== undefined ? ` max=${node.attributes["max"]}` : "";
-      const step = node.attributes["step"] !== undefined ? ` step=${node.attributes["step"]}` : "";
-      const pattern = node.attributes["pattern"] !== undefined ? ` pattern=${node.attributes["pattern"]}` : "";
+      const min = node.attributes["min"] !== undefined ? ` min=${escapeQuotes(node.attributes["min"])}` : "";
+      const max = node.attributes["max"] !== undefined ? ` max=${escapeQuotes(node.attributes["max"])}` : "";
+      const step = node.attributes["step"] !== undefined ? ` step=${escapeQuotes(node.attributes["step"])}` : "";
+      const pattern = node.attributes["pattern"] !== undefined ? ` pattern=${escapeQuotes(node.attributes["pattern"])}` : "";
       const { struck, flags } = getElementState(node, node.attributes["disabled"] !== undefined || node.attributes["aria-disabled"] === "true");
 
       let line = id;
-      if (type && type !== "text") line += `:${type}`;
+      if (type && type !== "text") line += `:${escapeQuotes(type)}`;
       if (placeholder) line += ` ~${escapeQuotes(placeholder)}`;
       if (value) line += ` ="${escapeQuotes(value)}"`;
       line += min + max + step + pattern + flags + readonly + required + checked;
@@ -277,7 +287,7 @@ function serializeNodes(
 
     if (node.tag === "img") {
       const alt = node.attributes["alt"];
-      parts.push(`${pad}${alt ? `[img: ${alt}]` : "[img]"}`);
+      parts.push(`${pad}${alt ? `[img: ${escapeHtml(alt)}]` : "[img]"}`);
       continue;
     }
 
@@ -311,7 +321,7 @@ function serializeNodes(
           const itemText = serializeItem(child, context);
           parts.push(`${pad}- ${itemText}`);
         } else if (child.tag === "#text" && child.text?.trim()) {
-          parts.push(`${pad}${child.text}`);
+          parts.push(`${pad}${escapeHtml(child.text)}`);
         } else {
           pushIfNotEmpty(parts, serializeNodes([child], indent, context));
         }
@@ -374,6 +384,9 @@ function serializeNodes(
     }
 
     if (node.tag === "above" || node.tag === "below") {
+      // Summary text is escaped at composition time (mode-filter); the
+      // interactive-count markers it embeds are TideSurf-generated and keep
+      // their literal brackets. The memoized fallback is already escaped.
       const text = node.text ?? collectTextMemoized(node, context).trim();
       parts.push(`${pad}${node.tag.toUpperCase()}: ${text}`);
       continue;
@@ -383,13 +396,14 @@ function serializeNodes(
       const label = node.tag.toUpperCase();
       const id = node.id ? ` ${node.id}` : "";
       const ariaLabel = node.attributes["aria-label"];
+      // node.text here is a minimal-mode landmark summary: page text escaped
+      // at composition time plus TideSurf-generated count markers.
       const summary = node.text?.trim();
       let description = ariaLabel ? escapeHtml(ariaLabel) : "";
       if (summary && summary !== ariaLabel) {
-        const escapedSummary = escapeHtml(summary);
         description = description
-          ? `${description} — ${escapedSummary}`
-          : escapedSummary;
+          ? `${description} — ${summary}`
+          : summary;
       }
       const desc = description ? `: ${description}` : "";
       parts.push(`${pad}${label}${id}${desc}`);
@@ -405,7 +419,7 @@ function serializeNodes(
     if (node.children.length > 0) {
       pushIfNotEmpty(parts, serializeNodes(node.children, indent, context));
     } else if (node.text) {
-      parts.push(`${pad}${node.text}`);
+      parts.push(`${pad}${escapeHtml(node.text)}`);
     }
   }
 
@@ -425,14 +439,17 @@ function serializeSelectChildren(
     if (node.tag === "#text") {
       const text = node.text?.trim();
       if (text) {
-        parts.push(`${pad}${text}`);
+        parts.push(`${pad}${escapeHtml(text)}`);
       }
       continue;
     }
     if (node.tag === "optgroup") {
       const label = node.attributes["aria-label"] || node.attributes["label"] || "";
       const disabled = inheritedDisabled || node.attributes["disabled"] !== undefined;
-      if (label) parts.push(`${pad}${disabled ? `~~${label}~~` : label}:`);
+      if (label) {
+        const escapedLabel = escapeHtml(label);
+        parts.push(`${pad}${disabled ? `~~${escapedLabel}~~` : escapedLabel}:`);
+      }
       if (node.children.length > 0) {
         pushIfNotEmpty(
           parts,
@@ -547,6 +564,30 @@ function compressPageUrl(url: string): string {
 }
 
 /**
+ * Build the page header lines (title + URL meta) that wrapPage prepends to
+ * the serialized body. Exposed so callers can reserve its size from a token
+ * budget before fitting the body.
+ */
+export function pageHeader(
+  url: string,
+  title: string,
+  scrollPosition?: ScrollPosition
+): string {
+  // Page titles are page-controlled: collapse whitespace so a newline can
+  // never inject extra header lines, and escape it like any other text.
+  const safeTitle = escapeHtml(title.replace(/\s+/g, " ").trim());
+  const lines: string[] = [`# ${safeTitle}`];
+
+  const compUrl = compressPageUrl(url);
+  let metaLine = `> ${compUrl}`;
+  if (scrollPosition) {
+    metaLine += ` | ${scrollPosition.scrollY}/${scrollPosition.scrollHeight} ${scrollPosition.viewportHeight}vh`;
+  }
+  lines.push(metaLine);
+  return lines.join("\n");
+}
+
+/**
  * Wrap serialized body in a page header.
  * Format:
  *   # Page Title
@@ -560,17 +601,5 @@ export function wrapPage(
   title: string,
   scrollPosition?: ScrollPosition
 ): string {
-  const lines: string[] = [];
-  lines.push(`# ${title}`);
-
-  const compUrl = compressPageUrl(url);
-  let metaLine = `> ${compUrl}`;
-  if (scrollPosition) {
-    metaLine += ` | ${scrollPosition.scrollY}/${scrollPosition.scrollHeight} ${scrollPosition.viewportHeight}vh`;
-  }
-  lines.push(metaLine);
-  lines.push("");
-  lines.push(body);
-
-  return lines.join("\n");
+  return `${pageHeader(url, title, scrollPosition)}\n\n${body}`;
 }

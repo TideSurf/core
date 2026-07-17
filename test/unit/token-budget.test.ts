@@ -1,5 +1,5 @@
 import { estimateTokens, pruneToFit } from "../../src/parser/token-budget.js";
-import { serialize } from "../../src/parser/serializer.js";
+import { pageHeader, serialize, wrapPage } from "../../src/parser/serializer.js";
 import { filterMinimal } from "../../src/parser/mode-filter.js";
 import type { OSNode } from "../../src/types.js";
 import { ValidationError } from "../../src/errors.js";
@@ -558,5 +558,82 @@ describe("pruneToFit", () => {
 
     expect(estimateTokens(serialized)).toBeLessThanOrEqual(50);
     expect(serialized).toContain("truncated");
+  });
+
+  it("reserves header characters so wrapPage output stays within maxTokens", () => {
+    const url = "https://example.com/page?id=123";
+    const title = `Long title ${"with many words ".repeat(15)}`.trim();
+    const scrollPosition = { scrollY: 250, scrollHeight: 3_000, viewportHeight: 800 };
+    const header = pageHeader(url, title, scrollPosition);
+    const maxTokens = 120;
+    const nodes = [
+      makeNode("button", [makeText("Keep action")], { id: "B1" }),
+      ...Array.from({ length: 30 }, (_, index) =>
+        makeNode("heading", [makeText(`Section ${index} ${"filler text ".repeat(15)}`)])
+      ),
+    ];
+
+    const pruned = pruneToFit(nodes, {
+      maxTokens,
+      pageUrl: url,
+      reservedChars: header.length + 2,
+    });
+    const output = wrapPage(serialize(pruned, 0, url), url, title, scrollPosition);
+
+    // The header (title + URL meta) is charged against the budget before the
+    // body is fitted, so the wrapped page never exceeds maxTokens * 4 chars.
+    expect(output.length).toBeLessThanOrEqual(maxTokens * 4);
+    expect(output).toContain("[B1]");
+    expect(output).toContain("truncated");
+
+    // Without the reservation the same body would push the page over budget.
+    const unreserved = wrapPage(
+      serialize(pruneToFit(nodes, { maxTokens, pageUrl: url }), 0, url),
+      url,
+      title,
+      scrollPosition
+    );
+    expect(unreserved.length).toBeGreaterThan(maxTokens * 4);
+  });
+
+  it("drops the whole body when the reservation consumes the budget", () => {
+    const nodes = [
+      makeNode("button", [makeText("Keep action")], { id: "B1" }),
+      makeNode("heading", [makeText("Some content")]),
+    ];
+
+    expect(pruneToFit(nodes, { maxTokens: 10, reservedChars: 1_000 })).toEqual([]);
+  });
+
+  it("weights each CJK character as charsPerToken units at the default ratio", () => {
+    // At 4 chars/token, ten Japanese characters weigh 40 units: the whole
+    // maxTokens=10 budget, so the text is shortened while 39 ASCII chars fit.
+    const cjk = serialize(pruneToFit([makeText("あ".repeat(10))], { maxTokens: 10 }));
+    expect(cjk).toBe("あ...");
+    expect(serialize(pruneToFit([makeText("あ".repeat(9))], { maxTokens: 10 })))
+      .toBe("あ".repeat(9));
+
+    const latin = serialize(pruneToFit([makeText("a".repeat(41))], { maxTokens: 10 }));
+    expect(latin).toBe("aaaaa...");
+    expect(serialize(pruneToFit([makeText("a".repeat(39))], { maxTokens: 10 })))
+      .toBe("a".repeat(39));
+  });
+
+  it("prunes a CJK-heavy tree much harder than an ASCII twin under one budget", () => {
+    const asciiNodes = Array.from({ length: 8 }, (_, index) =>
+      makeNode("heading", [makeText(`ascii block ${index} ${"x".repeat(40)}`)])
+    );
+    const japaneseNodes = Array.from({ length: 8 }, (_, index) =>
+      makeNode("heading", [makeText(`ascii block ${index} ${"あ".repeat(40)}`)])
+    );
+
+    const asciiOutput = serialize(pruneToFit(asciiNodes, { maxTokens: 200 }));
+    const japaneseOutput = serialize(pruneToFit(japaneseNodes, { maxTokens: 200 }));
+
+    // Real tokenizers emit roughly one token per CJK character; weighting
+    // CJK at charsPerToken units keeps the page near its real token budget.
+    expect(asciiOutput).not.toContain("truncated");
+    expect(japaneseOutput).toContain("truncated");
+    expect(japaneseOutput.length).toBeLessThan(asciiOutput.length);
   });
 });

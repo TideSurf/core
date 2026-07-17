@@ -218,7 +218,7 @@ describe("search node-map preservation", () => {
 });
 
 describe("Stale element handling", () => {
-  it("preserves the CDP error when a mapped node no longer exists", async () => {
+  it("translates a stale mapped node into ElementNotFoundError with the recovery hint", async () => {
     const resolveNode = jest.fn().mockRejectedValue(new Error("Node not found"));
     const conn = createMockCDPConnection({
       DOM: {
@@ -233,7 +233,9 @@ describe("Stale element handling", () => {
 
     setNodeMap(page, [["B1", 999]]);
 
-    await expect(page.click("B1")).rejects.toThrow("Node not found");
+    await expect(page.click("B1")).rejects.toThrow(
+      /Read the page again to refresh its action IDs/
+    );
     expect(resolveNode).toHaveBeenCalledTimes(1);
   });
 
@@ -517,6 +519,76 @@ describe("SurfingPage runtime validation", () => {
     expect(captureScreenshot).toHaveBeenCalledWith({
       format: "png",
       clip: { x: 0, y: 0, width: 120, height: 60, scale: 1 },
+      captureBeyondViewport: true,
+    });
+  });
+
+  it("offsets an element clip by the visual viewport scroll position", async () => {
+    const captureScreenshot = jest.fn().mockResolvedValue({ data: "base64png" });
+    const send = jest.fn(async (method: string) =>
+      method === "Page.getLayoutMetrics"
+        ? { visualViewport: { pageLeft: 30, pageTop: 500 } }
+        : snapshotData()
+    );
+    const conn = createMockCDPConnection({
+      client: Object.assign(new EventEmitter(), {
+        close: jest.fn(),
+        send,
+      }) as unknown as CDPConnection["client"],
+      DOM: {
+        getBoxModel: jest.fn().mockResolvedValue({
+          model: { border: [8, 3, 112, 3, 112, 57, 8, 57] },
+        }),
+      } as unknown as CDPConnection["DOM"],
+      Page: { captureScreenshot } as unknown as CDPConnection["Page"],
+    });
+    const page = new SurfingPage(conn);
+    setNodeMap(page, [["B1", 100]]);
+
+    // getBoxModel quads are viewport-relative; captureBeyondViewport clips in
+    // page coordinates, so a scrolled page must add pageLeft/pageTop.
+    await expect(page.screenshot({ elementId: "B1" })).resolves.toBe(
+      "base64png"
+    );
+    expect(send).toHaveBeenCalledWith("Page.getLayoutMetrics");
+    expect(captureScreenshot).toHaveBeenCalledWith({
+      format: "png",
+      clip: { x: 38, y: 503, width: 104, height: 54, scale: 1 },
+      captureBeyondViewport: true,
+    });
+  });
+
+  it("prefers cssVisualViewport offsets when both viewports are reported", async () => {
+    const captureScreenshot = jest.fn().mockResolvedValue({ data: "base64png" });
+    const send = jest.fn(async (method: string) =>
+      method === "Page.getLayoutMetrics"
+        ? {
+            cssVisualViewport: { pageLeft: 5, pageTop: 7 },
+            visualViewport: { pageLeft: 100, pageTop: 200 },
+          }
+        : snapshotData()
+    );
+    const conn = createMockCDPConnection({
+      client: Object.assign(new EventEmitter(), {
+        close: jest.fn(),
+        send,
+      }) as unknown as CDPConnection["client"],
+      DOM: {
+        getBoxModel: jest.fn().mockResolvedValue({
+          model: { border: [8, 3, 112, 3, 112, 57, 8, 57] },
+        }),
+      } as unknown as CDPConnection["DOM"],
+      Page: { captureScreenshot } as unknown as CDPConnection["Page"],
+    });
+    const page = new SurfingPage(conn);
+    setNodeMap(page, [["B1", 100]]);
+
+    await expect(page.screenshot({ elementId: "B1" })).resolves.toBe(
+      "base64png"
+    );
+    expect(captureScreenshot).toHaveBeenCalledWith({
+      format: "png",
+      clip: { x: 13, y: 10, width: 104, height: 54, scale: 1 },
       captureBeyondViewport: true,
     });
   });

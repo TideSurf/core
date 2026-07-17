@@ -61,15 +61,16 @@ export interface AttributedCDPNode extends CDPNode {
   parsedAttributes?: Record<string, string>;
 }
 
-function takeAttribute(
-  values: Record<string, string>,
-  key: string | undefined
-): string | undefined {
-  if (key === undefined) return undefined;
-  const value = values[key];
-  if (value !== undefined) delete values[key];
-  return value;
-}
+/**
+ * Attributes the element classifier reads beyond the pass-through set
+ * (element-classifier.ts checks these on the raw record).
+ */
+const CLASSIFIER_ATTRS = new Set([
+  "aria-hidden",
+  "hidden",
+  "role",
+  "style",
+]);
 
 function walkAttributes(
   node: CDPNode,
@@ -81,24 +82,32 @@ function walkAttributes(
     return parsed ?? parseAttributes(node.attributes);
   }
 
+  // Single pass: keep only what downstream consumers read (pass-through
+  // output attributes, classifier attributes, normalized markers) instead of
+  // cloning every attribute (class/style/data-*) and filtering later.
   const values = Object.create(null) as Record<string, string>;
+  let visible: string | undefined;
+  let hidden: string | undefined;
+  let state: string | undefined;
+  let text: string | undefined;
+  const readAttribute = (key: string, value: string): void => {
+    if (key === markers.visible) { visible = value; return; }
+    if (key === markers.hidden) { hidden = value; return; }
+    if (key === markers.state) { state = value; return; }
+    if (key === markers.text) { text = value; return; }
+    if (PASS_THROUGH_ATTRS.has(key) || CLASSIFIER_ATTRS.has(key)) {
+      values[key] = value;
+    }
+  };
   if (parsed) {
-    for (const key in parsed) values[key] = parsed[key];
+    for (const key in parsed) readAttribute(key, parsed[key]);
   } else {
     const flat = node.attributes;
     const length = flat?.length ?? 0;
     for (let index = 0; index < length; index += 2) {
-      values[flat![index]] = flat![index + 1];
+      readAttribute(flat![index], flat![index + 1]);
     }
   }
-  const visible = takeAttribute(values, markers.visible);
-  const hidden = takeAttribute(values, markers.hidden);
-  const state = takeAttribute(values, markers.state);
-  const text = takeAttribute(values, markers.text);
-  delete values["data-os-visible"];
-  delete values["data-os-hidden"];
-  delete values["data-os-state"];
-  delete values["data-os-text"];
   if (visible !== undefined) values["data-os-visible"] = visible;
   if (hidden !== undefined) values["data-os-hidden"] = hidden;
   if (state !== undefined) values["data-os-state"] = state;
@@ -485,6 +494,18 @@ function walkChildren(
 function postProcess(nodes: OSNode[]): OSNode[] {
   let length = 0;
   let mergeBarrier = false;
+  // Merge runs are buffered and joined once: concatenating the accumulated
+  // string on every merge is quadratic in the run's total length.
+  let mergeTarget: OSNode | null = null;
+  let mergeParts: string[] | null = null;
+  const flushMerge = (): void => {
+    if (mergeTarget !== null && mergeParts !== null) {
+      mergeTarget.text = mergeParts.join("");
+    }
+    mergeTarget = null;
+    mergeParts = null;
+  };
+
   for (let index = 0; index < nodes.length; index++) {
     const node = nodes[index];
     if (node.tag === "#text") {
@@ -499,18 +520,26 @@ function postProcess(nodes: OSNode[]): OSNode[] {
         previous.tag !== "#text" ||
         previous.visible !== node.visible
       ) {
+        flushMerge();
         nodes[length++] = node;
         mergeBarrier = false;
         continue;
       }
-      const prevText = previous.text ?? "";
+      if (mergeTarget !== previous) {
+        flushMerge();
+        mergeTarget = previous;
+        mergeParts = [previous.text ?? ""];
+      }
       const currText = node.text ?? "";
-      const needsSpace = prevText.length > 0 && currText.length > 0 &&
-        !prevText.endsWith(" ") && !currText.startsWith(" ");
-      previous.text = prevText + (needsSpace ? " " : "") + currText;
+      const lastPiece = mergeParts![mergeParts!.length - 1];
+      const needsSpace = lastPiece.length > 0 && currText.length > 0 &&
+        !lastPiece.endsWith(" ") && !currText.startsWith(" ");
+      if (needsSpace) mergeParts!.push(" ");
+      mergeParts!.push(currText);
       continue;
     }
 
+    flushMerge();
     const keep =
       node.id ||
       node.children.length > 0 ||
@@ -525,6 +554,7 @@ function postProcess(nodes: OSNode[]): OSNode[] {
     }
   }
 
+  flushMerge();
   nodes.length = length;
   return nodes;
 }

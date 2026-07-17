@@ -31,6 +31,7 @@ import { VERSION } from "./version.js";
 
 const DAEMON_STARTUP_TIMEOUT = 10_000;
 const SESSION_STATUS_TIMEOUT = 500;
+const MCP_CLOSE_GRACE_MS = 5_000;
 const DEFAULT_OPERATION_TIMEOUT = 10_000;
 const MAX_SEQUENTIAL_OPERATION_PHASES = 8;
 const REQUEST_TIMEOUT_MARGIN = 15_000;
@@ -130,18 +131,31 @@ async function sessionPolicy(
     getSessionPaths,
     isProcessRunning,
     readSessionState,
+    SessionProtocolError,
   } =
     await loadSessionModule();
   const candidate = readSessionState(getSessionPaths(invocation.session));
   if (!candidate?.ready || !isProcessRunning(candidate.pid)) {
     return invocation.sessionConfig;
   }
-  const { state } = await ensureSessionRequest(
-    sessionOptions(invocation),
-    { method: "status" },
-    SESSION_STATUS_TIMEOUT
-  );
-  return state.config;
+  try {
+    const { state } = await ensureSessionRequest(
+      sessionOptions(invocation),
+      { method: "status" },
+      SESSION_STATUS_TIMEOUT
+    );
+    return state.config;
+  } catch (error) {
+    // A slow-to-answer daemon (event loop busy serializing a large DOM,
+    // loaded machine) must not hard-fail the whole command on a 500ms probe:
+    // fall back to local config and let the actual tool request proceed with
+    // its own budget. The daemon enforces read-only and URL policy
+    // authoritatively server-side, so the local fallback is advisory only.
+    if (error instanceof SessionProtocolError) {
+      return invocation.sessionConfig;
+    }
+    throw error;
+  }
 }
 
 function readOnlyFailure(
@@ -450,8 +464,20 @@ async function runMcp(invocation: ParsedInvocation): Promise<number> {
     ]).then(() => undefined);
     return closingPromise;
   };
+  // A wedged in-flight tool can keep close() pending forever; SIGINT,
+  // SIGTERM, and stdin EOF must still terminate the process, so every exit
+  // path races the graceful close against a bounded grace period.
+  const closeWithGrace = (): Promise<void> => {
+    let graceTimer!: ReturnType<typeof setTimeout>;
+    return Promise.race([
+      close(),
+      new Promise<void>((resolve) => {
+        graceTimer = setTimeout(resolve, MCP_CLOSE_GRACE_MS);
+      }),
+    ]).finally(() => clearTimeout(graceTimer));
+  };
   const shutdown = (code: number) => {
-    void close()
+    void closeWithGrace()
       .catch(printError)
       .finally(() => process.exit(code));
   };
@@ -459,10 +485,12 @@ async function runMcp(invocation: ParsedInvocation): Promise<number> {
   const closeOnInputEnd = () => {
     if (inputEnded) return;
     inputEnded = true;
-    void close().catch((error) => {
-      printError(error);
-      process.exitCode = CLI_EXIT_CODES.protocol.code;
-    });
+    void closeWithGrace()
+      .catch((error) => {
+        printError(error);
+        process.exitCode = CLI_EXIT_CODES.protocol.code;
+      })
+      .finally(() => process.exit(process.exitCode ?? 0));
   };
   process.once("SIGINT", () => shutdown(130));
   process.once("SIGTERM", () => shutdown(143));

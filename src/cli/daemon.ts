@@ -18,6 +18,8 @@ import type { ToolResult } from "../types.js";
 
 const MAX_REQUEST_BYTES = 1024 * 1024;
 const REQUEST_IDLE_TIMEOUT_MS = 30_000;
+/** Grace period for in-flight tools to finish before shutdown proceeds. */
+const SHUTDOWN_QUEUE_DRAIN_MS = 10_000;
 
 interface IncomingRequest {
   id: string;
@@ -226,7 +228,16 @@ export async function runDaemon(
     closing = (async () => {
       const serverClosed = stopListening();
       for (const socket of sockets) socket.destroy();
-      await queue;
+      // Bound the drain: a tool configured with an extreme timeout must not
+      // stall shutdown until SIGKILL (which would orphan the owned Chrome).
+      let drainTimer!: ReturnType<typeof setTimeout>;
+      await Promise.race([
+        queue,
+        new Promise<void>((resolve) => {
+          drainTimer = setTimeout(resolve, SHUTDOWN_QUEUE_DRAIN_MS);
+        }),
+      ]);
+      clearTimeout(drainTimer);
       const cleanupError = await cleanupResources();
       await serverClosed;
       if (cleanupError) {
@@ -320,7 +331,8 @@ export async function runDaemon(
         try {
           if (
             authenticated.request.method !== "ping" &&
-            authenticated.request.method !== "status"
+            authenticated.request.method !== "status" &&
+            authenticated.request.method !== "stop"
           ) {
             if (socket.destroyed) return;
             if (
@@ -335,11 +347,16 @@ export async function runDaemon(
             stopping = true;
             void stopListening();
             const cleanupError = await cleanupResources();
+            const scheduleShutdown = (code: number) =>
+              setTimeout(() => void shutdown(code), 0);
             if (cleanupError) {
               send(socket, authenticated.id, {
                 success: false,
                 ...errorDetails(cleanupError),
-              }, () => setTimeout(() => void shutdown(1), 0));
+              }, () => scheduleShutdown(1));
+              // A disconnected client must not strand the daemon: shut down
+              // even when the response cannot be delivered.
+              if (socket.destroyed) scheduleShutdown(1);
               return;
             }
             send(socket, authenticated.id, {
@@ -348,7 +365,8 @@ export async function runDaemon(
                 stopped: true,
                 session: initial.session,
               },
-            }, () => setTimeout(() => void shutdown(0), 0));
+            }, () => scheduleShutdown(0));
+            if (socket.destroyed) scheduleShutdown(0);
             return;
           }
           const data = await handle(authenticated.request);
@@ -360,8 +378,11 @@ export async function runDaemon(
 
       if (
         authenticated.request.method === "ping" ||
-        authenticated.request.method === "status"
+        authenticated.request.method === "status" ||
+        authenticated.request.method === "stop"
       ) {
+        // Control-plane messages run out-of-band: a stop queued behind a
+        // long-running tool would be cancelled by its own queue deadline.
         void task();
       } else {
         queue = queue.then(task, task);

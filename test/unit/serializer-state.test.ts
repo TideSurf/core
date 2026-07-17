@@ -218,7 +218,8 @@ describe("serializer — input state enhancements", () => {
     const result = serialize([
       input("I1", { pattern: "[^@]+@[^@]+" }),
     ]);
-    expect(result).toBe("I1 pattern=[^@]+@[^@]+");
+    // Brackets are escaped so attribute text can never forge markers.
+    expect(result).toBe("I1 pattern=\\[^@\\]+@\\[^@\\]+");
   });
 
   it("serializes input with aria-disabled (treated like disabled)", () => {

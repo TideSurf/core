@@ -16,6 +16,7 @@ import {
   type SessionState,
 } from "../../src/cli/session.js";
 import { TOOL_REGISTRY } from "../../src/tools/registry.js";
+import { DAEMON_COMMAND } from "../../src/cli/daemon-argv.js";
 import { VERSION } from "../../src/version.js";
 
 const root = join(import.meta.dir, "..", "..");
@@ -323,12 +324,22 @@ describe("CLI process behavior", () => {
 });
 
 describe("orphaned daemon recovery", () => {
-  async function spawnFakeDaemon(): Promise<ChildProcess> {
-    const child = spawn(
-      process.execPath,
-      ["-e", "setInterval(() => {}, 1000)"],
-      { stdio: "ignore" }
-    );
+  async function spawnFakeDaemon(stateFile?: string): Promise<ChildProcess> {
+    // The fake daemon must carry the daemon argv markers: terminateDaemon
+    // verifies the victim's command line before signaling it, so a bare
+    // sleeper process (no __daemon marker) is correctly left alone.
+    const args = stateFile
+      ? [
+          "-e",
+          "setInterval(() => {}, 1000)",
+          DAEMON_COMMAND,
+          "--state-file",
+          stateFile,
+          "--startup-token",
+          "test",
+        ]
+      : ["-e", "setInterval(() => {}, 1000)"];
+    const child = spawn(process.execPath, args, { stdio: "ignore" });
     await once(child, "spawn");
     return child;
   }
@@ -364,7 +375,7 @@ describe("orphaned daemon recovery", () => {
   it("stop terminates a live daemon whose socket vanished", async () => {
     const session = `orphan-stop-${crypto.randomUUID()}`;
     const paths = getSessionPaths(session);
-    const fake = await spawnFakeDaemon();
+    const fake = await spawnFakeDaemon(paths.stateFile);
     writeSessionState(paths, orphanReadyState(session, paths, fake.pid!));
     try {
       const response = await sendLiveSessionRequest(session, { method: "stop" }, 5_000);
@@ -378,10 +389,30 @@ describe("orphaned daemon recovery", () => {
     }
   }, 20_000);
 
+  it("never terminates a foreign process holding a recycled daemon pid", async () => {
+    // A daemon that died without cleanup leaves its state file behind; when
+    // the OS recycles the pid, the sleeper on that pid must NOT be signaled.
+    const session = `orphan-foreign-${crypto.randomUUID()}`;
+    const paths = getSessionPaths(session);
+    const foreign = await spawnFakeDaemon(); // no daemon argv markers
+    writeSessionState(paths, orphanReadyState(session, paths, foreign.pid!));
+    try {
+      const response = await sendLiveSessionRequest(session, { method: "stop" }, 5_000);
+      expect(response).toBeNull();
+      // Give the recovery path time to (wrongly) signal the process.
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 1_000));
+      expect(isProcessRunning(foreign.pid!)).toBe(true);
+      expect(readSessionState(paths)).toBeNull();
+    } finally {
+      foreign.kill("SIGKILL");
+      removeSessionFiles(paths, true);
+    }
+  }, 20_000);
+
   it("terminates a live orphan before starting a replacement daemon", async () => {
     const session = `orphan-recover-${crypto.randomUUID()}`;
     const paths = getSessionPaths(session);
-    const fake = await spawnFakeDaemon();
+    const fake = await spawnFakeDaemon(paths.stateFile);
     writeSessionState(paths, orphanReadyState(session, paths, fake.pid!));
     let recovered: SessionState | undefined;
     try {

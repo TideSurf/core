@@ -22,6 +22,7 @@ import { downloadFromAction } from "../../src/cdp/download-manager.js";
 import {
   ActionCommittedError,
   CDPTimeoutError,
+  ElementNotFoundError,
   NavigationError,
   ValidationError,
 } from "../../src/errors.js";
@@ -444,8 +445,28 @@ describe("CDP operations", () => {
     expect(releaseObject).toHaveBeenCalledWith({ objectId: "object-1" });
   });
 
-  it("preserves a resolveNode protocol error", async () => {
+  it("translates a stale resolveNode protocol error into ElementNotFoundError", async () => {
     const protocolError = new Error("No node with given id found");
+    const conn = connection({
+      DOM: {
+        resolveNode: mock(async () => {
+          throw protocolError;
+        }),
+      } as unknown as CDPConnection["DOM"],
+    });
+
+    // A stale backendNodeId rejects resolveNode in the browser backend;
+    // callers must get the designed recovery hint, not a raw protocol error.
+    await expect(clickNode(conn, 99)).rejects.toBeInstanceOf(
+      ElementNotFoundError
+    );
+    await expect(clickNode(conn, 99)).rejects.toThrow(
+      /Read the page again to refresh its action IDs/
+    );
+  });
+
+  it("preserves non-staleness resolveNode protocol errors", async () => {
+    const protocolError = new Error("Inspected target navigated or closed");
     const conn = connection({
       DOM: {
         resolveNode: mock(async () => {
@@ -829,6 +850,8 @@ describe("CDP operations", () => {
     let resolveGrant!: () => void;
     const grant = new Promise<void>((resolve) => { resolveGrant = resolve; });
     const send = mock(async (method: string) => {
+      // Exercise the legacy fallback: no Browser.setPermission support.
+      if (method === "Browser.setPermission") throw new Error("Unknown method");
       if (method === "Browser.grantPermissions") return grant;
       return {};
     });
@@ -872,6 +895,7 @@ describe("CDP operations", () => {
     let grantCount = 0;
     const send = mock(async (method: string) => {
       events.push(method);
+      if (method === "Browser.setPermission") throw new Error("Unknown method");
       if (method === "Browser.grantPermissions" && grantCount++ === 0) {
         return lateGrant;
       }
@@ -926,6 +950,7 @@ describe("CDP operations", () => {
     let resetCount = 0;
     const send = mock(async (method: string) => {
       events.push(method);
+      if (method === "Browser.setPermission") throw new Error("Unknown method");
       if (method === "Browser.resetPermissions" && resetCount++ === 0) {
         return lateReset;
       }
@@ -957,6 +982,34 @@ describe("CDP operations", () => {
   });
 
   it("resets temporary clipboard permissions after writing", async () => {
+    const send = mock(async (method: string, params?: { setting?: string }) => {
+      if (method === "Browser.setPermission") throw new Error("Unknown method");
+      return {};
+    });
+    const evaluate = mock(async ({ expression }: { expression: string }) => ({
+      result: {
+        value: expression === "location.origin"
+          ? "https://example.com"
+          : undefined,
+      },
+    }));
+    const conn = connection({
+      client: Object.assign(new EventEmitter(), { send }) as unknown as CDPConnection["client"],
+      Runtime: { evaluate } as unknown as CDPConnection["Runtime"],
+    });
+
+    await clipboardWrite(conn, "text");
+
+    // The failed setPermission probe falls back to the legacy flow.
+    expect(send.mock.calls.map(([method]) => method)).toEqual([
+      "Browser.setPermission",
+      "Browser.grantPermissions",
+      "Page.bringToFront",
+      "Browser.resetPermissions",
+    ]);
+  });
+
+  it("grants and restores clipboard permissions per origin via setPermission", async () => {
     const send = mock(async () => ({}));
     const evaluate = mock(async ({ expression }: { expression: string }) => ({
       result: {
@@ -972,14 +1025,33 @@ describe("CDP operations", () => {
 
     await clipboardWrite(conn, "text");
 
-    expect(send.mock.calls.map(([method]) => method)).toEqual([
-      "Browser.grantPermissions",
+    // Targeted per-descriptor grants, revoked afterwards; never the
+    // context-wide grantPermissions/resetPermissions pair.
+    expect(
+      send.mock.calls.map(([method]) => method)
+    ).toEqual([
+      "Browser.setPermission",
+      "Browser.setPermission",
       "Page.bringToFront",
-      "Browser.resetPermissions",
+      "Browser.setPermission",
+      "Browser.setPermission",
     ]);
+    const settings = send.mock.calls
+      .filter(([method]) => method === "Browser.setPermission")
+      .map(([, params]) => (params as { setting?: string }).setting);
+    expect(settings).toEqual(["granted", "granted", "prompt", "prompt"]);
+    const permissionCalls = send.mock.calls.filter(
+      ([method]) => method === "Browser.setPermission"
+    );
+    expect(
+      permissionCalls.every(
+        ([, params]) =>
+          (params as { origin?: string }).origin === "https://example.com"
+      )
+    ).toBe(true);
   });
 
-  it("leaves permission overrides alone on a browser TideSurf did not launch", async () => {
+  it("restores clipboard permissions on a browser TideSurf did not launch", async () => {
     const send = mock(async () => ({}));
     const evaluate = mock(async ({ expression }: { expression: string }) => ({
       result: {
@@ -996,16 +1068,72 @@ describe("CDP operations", () => {
 
     await clipboardWrite(conn, "text");
 
+    // Attached browsers get targeted setPermission grants that are revoked
+    // afterwards: TideSurf's grant is never left behind.
     expect(send.mock.calls.map(([method]) => method)).toEqual([
+      "Browser.setPermission",
+      "Browser.setPermission",
+      "Page.bringToFront",
+      "Browser.setPermission",
+      "Browser.setPermission",
+    ]);
+    const settings = send.mock.calls
+      .filter(([method]) => method === "Browser.setPermission")
+      .map(([, params]) => (params as { setting?: string }).setting);
+    expect(settings).toEqual(["granted", "granted", "prompt", "prompt"]);
+  });
+
+  it("leaves permission overrides alone on an attached browser without setPermission support", async () => {
+    const send = mock(async (method: string) => {
+      if (method === "Browser.setPermission") throw new Error("Unknown method");
+      return {};
+    });
+    const evaluate = mock(async ({ expression }: { expression: string }) => ({
+      result: {
+        value: expression === "location.origin"
+          ? "https://example.com"
+          : undefined,
+      },
+    }));
+    const conn = connection({
+      ownsBrowser: false,
+      client: Object.assign(new EventEmitter(), { send }) as unknown as CDPConnection["client"],
+      Runtime: { evaluate } as unknown as CDPConnection["Runtime"],
+    });
+
+    await clipboardWrite(conn, "text");
+
+    expect(send.mock.calls.map(([method]) => method)).toEqual([
+      "Browser.setPermission",
       "Browser.grantPermissions",
       "Page.bringToFront",
     ]);
+  });
+
+  it("refuses a browser-wide clipboard grant on an attached opaque origin", async () => {
+    const send = mock(async () => ({}));
+    const evaluate = mock(async ({ expression }: { expression: string }) => ({
+      result: {
+        value: expression === "location.origin" ? "null" : undefined,
+      },
+    }));
+    const conn = connection({
+      ownsBrowser: false,
+      client: Object.assign(new EventEmitter(), { send }) as unknown as CDPConnection["client"],
+      Runtime: { evaluate } as unknown as CDPConnection["Runtime"],
+    });
+
+    await expect(clipboardWrite(conn, "text")).rejects.toThrow(
+      /non-opaque page origin/
+    );
+    expect(send).not.toHaveBeenCalled();
   });
 
   it("skips the deferred reset on an unowned browser when a grant completes late", async () => {
     let resolveGrant!: () => void;
     const grant = new Promise<void>((resolve) => { resolveGrant = resolve; });
     const send = mock(async (method: string) => {
+      if (method === "Browser.setPermission") throw new Error("Unknown method");
       if (method === "Browser.grantPermissions") return grant;
       return {};
     });
@@ -1079,6 +1207,7 @@ describe("CDP operations", () => {
   it("keeps a clipboard failure primary when permission reset also fails", async () => {
     const writeError = new Error("clipboard write failed");
     const send = mock(async (method: string) => {
+      if (method === "Browser.setPermission") throw new Error("Unknown method");
       if (method === "Browser.resetPermissions") throw new Error("reset failed");
       return {};
     });

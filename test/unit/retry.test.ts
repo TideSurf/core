@@ -1,5 +1,6 @@
 import { withRetry } from "../../src/cdp/retry.js";
 import {
+  ActionCommittedError,
   CDPConnectionError,
   CDPTimeoutError,
   ValidationError,
@@ -36,12 +37,34 @@ describe("withRetry", () => {
     expect(fn).toHaveBeenCalledTimes(3);
   });
 
-  it("does NOT retry CDPTimeoutError by default", async () => {
-    const fn = jest.fn().mockRejectedValue(new CDPTimeoutError("op", 1000));
+  it("retries CDPTimeoutError by default (pre-mutation timeouts are safe)", async () => {
+    const fn = jest
+      .fn()
+      .mockRejectedValueOnce(new CDPTimeoutError("op", 1000))
+      .mockResolvedValue("ok");
+
+    const result = await withRetry(fn, { maxAttempts: 3, initialDelayMs: 10 });
+    expect(result).toBe("ok");
+    expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  it("does NOT retry ActionCommittedError by default (side effects may have committed)", async () => {
+    const fn = jest
+      .fn()
+      .mockRejectedValue(new ActionCommittedError("Click", new Error("boom")));
 
     await expect(
       withRetry(fn, { maxAttempts: 3, initialDelayMs: 10 })
-    ).rejects.toThrow(CDPTimeoutError);
+    ).rejects.toThrow(ActionCommittedError);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it("does NOT retry deterministic errors by default", async () => {
+    const fn = jest.fn().mockRejectedValue(new ValidationError("bad input"));
+
+    await expect(
+      withRetry(fn, { maxAttempts: 3, initialDelayMs: 10 })
+    ).rejects.toThrow(ValidationError);
     expect(fn).toHaveBeenCalledTimes(1);
   });
 

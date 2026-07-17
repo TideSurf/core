@@ -8,16 +8,16 @@ TideSurf compresses the live DOM into model-readable text. Deep nesting, SVGs, a
 
 | Fixture | Source HTML | Rendered DOM | TideSurf | Source reduction | Ratio |
 |---|---:|---:|---:|---:|---:|
-| E-commerce | 5,348 tokens | 5,336 tokens | 1,217 tokens | 77% | 4.4x |
-| News | 4,807 tokens | 4,807 tokens | 1,126 tokens | 77% | 4.3x |
+| E-commerce | 5,348 tokens | 5,336 tokens | 1,218 tokens | 77% | 4.4x |
+| News | 4,807 tokens | 4,807 tokens | 1,127 tokens | 77% | 4.3x |
 
-The token-budget regression also reduces the 1217-token e-commerce state to 268 tokens with a 300-token target while retaining actionable IDs and visible omission markers.
+The token-budget regression also reduces the 1218-token e-commerce state to 254 tokens with a 300-token target while retaining actionable IDs and visible omission markers.
 
 ## Runtime guardrails
 
 Executable performance tests exercise a 65,536-branch tree and a 10,000-element page. They check near-linear parser and pruning growth, bounded output, stable source order, and retained action IDs. These gates run production code rather than copied benchmark implementations.
 
-The browser gate compares median `readPage()` time at 2,500 and 10,000 elements in one process. It rejects growth above 5.5x and keeps a 250 ms median ceiling for the larger page. Seven samples limit scheduler noise without hiding sustained slowdowns.
+The browser gate compares `readPage()` time at 2,500 and 10,000 elements in one process, interleaving measurement rounds so machine load hits both sides of the ratio. It rejects growth above 5.5x and keeps a 250 ms ceiling for the larger page, using per-size minima as the least-noise estimate of true cost.
 
 A 10,000-button release profile showed where time is spent after the current cleanup:
 

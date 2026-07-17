@@ -298,7 +298,7 @@ describeBench("Compression benchmarks", () => {
 
   it("speed: 10,000-element readPage stays bounded and near-linear", async () => {
     await surfing.navigate(fixtureUrls["basic.html"]);
-    const measure = async (elementCount: number) => {
+    const measure = async (elementCount: number, runs: number) => {
       await surfing.getPage().evaluate(`((elementCount) => {
         document.body.textContent = '';
         const fragment = document.createDocumentFragment();
@@ -318,23 +318,32 @@ describeBench("Compression benchmarks", () => {
 
       await surfing.readPage();
       const times: number[] = [];
-      for (let index = 0; index < 7; index++) {
+      for (let index = 0; index < runs; index++) {
         const start = performance.now();
         await surfing.readPage();
         times.push(performance.now() - start);
       }
-      times.sort((a, b) => a - b);
-      return { p50: times[Math.floor(times.length / 2)], times };
+      return times;
     };
 
-    const small = await measure(2_500);
-    const large = await measure(10_000);
-    const scale = large.p50 / small.p50;
+    // Interleave small/large measurement rounds so transient machine load
+    // hits both sides of the ratio, and compare minima (the least-noise
+    // estimate of true cost) instead of a single p50: a raw wall-clock p50
+    // ratio with a ~16ms denominator flakes on loaded machines.
+    let smallMin = Infinity;
+    let largeMin = Infinity;
+    for (let round = 0; round < 3; round++) {
+      const smallTimes = await measure(2_500, 3);
+      const largeTimes = await measure(10_000, 3);
+      smallMin = Math.min(smallMin, ...smallTimes);
+      largeMin = Math.min(largeMin, ...largeTimes);
+    }
+    const scale = largeMin / smallMin;
 
     console.log(
-      `\n  readPage (2,500 → 10,000 elements): p50=${small.p50.toFixed(1)}ms → ${large.p50.toFixed(1)}ms, scale=${scale.toFixed(2)}x, large range=${large.times[0].toFixed(1)}–${large.times.at(-1)!.toFixed(1)}ms`
+      `\n  readPage (2,500 to 10,000 elements): min=${smallMin.toFixed(1)}ms to ${largeMin.toFixed(1)}ms, scale=${scale.toFixed(2)}x`
     );
     expect(scale).toBeLessThan(5.5);
-    expect(large.p50).toBeLessThan(250);
+    expect(largeMin).toBeLessThan(250);
   }, 30000);
 });

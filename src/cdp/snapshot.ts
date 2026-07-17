@@ -951,15 +951,38 @@ export function decodeDOMSnapshot(
     }
   }
 
-  // Flat pairs stay the public CDPNode surface; the attached record lets
-  // walkDOM skip re-parsing them.
+  // Flat pairs stay the public CDPNode surface, but they are materialized
+  // lazily: the walker reads parsedAttributes exclusively, so eagerly
+  // building a second pointer array per element doubles attribute container
+  // overhead for the whole decode+walk phase for no consumer.
   for (const document of documents) {
     for (let index = 0; index < document.nodes.length; index++) {
       if (document.nodes[index].nodeType !== 1) continue;
       const node = document.nodes[index] as AttributedCDPNode;
       const attrs = document.attributes[index];
-      node.attributes = flattenAttributes(attrs);
       node.parsedAttributes = attrs;
+      Object.defineProperty(node, "attributes", {
+        get(this: AttributedCDPNode) {
+          const flat = flattenAttributes(this.parsedAttributes ?? {});
+          Object.defineProperty(this, "attributes", {
+            value: flat,
+            writable: true,
+            enumerable: true,
+            configurable: true,
+          });
+          return flat;
+        },
+        set(this: AttributedCDPNode, value: string[] | undefined) {
+          Object.defineProperty(this, "attributes", {
+            value,
+            writable: true,
+            enumerable: true,
+            configurable: true,
+          });
+        },
+        enumerable: true,
+        configurable: true,
+      });
     }
   }
 

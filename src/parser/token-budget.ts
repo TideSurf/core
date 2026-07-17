@@ -2,6 +2,7 @@ import type { OSNode } from "../types.js";
 import { validatePositiveNumber } from "../validation.js";
 import {
   CLOSED_FLAG,
+  HEADING_MAP,
   IFRAME_INACCESSIBLE_PLACEHOLDER,
   IFRAME_UNKNOWN_PLACEHOLDER,
   OBSCURED_FLAG,
@@ -24,6 +25,8 @@ interface PruneOptions {
   maxTokens: number;
   charsPerToken?: number;
   pageUrl?: string;
+  /** Characters already committed outside the tree (e.g. the page header). */
+  reservedChars?: number;
 }
 
 interface NodeMetrics {
@@ -66,6 +69,74 @@ const TRUNCATION_SIZE_WITHOUT_COUNT = formatTruncation("").length + 1;
 const IFRAME_INACCESSIBLE_SIZE = IFRAME_INACCESSIBLE_PLACEHOLDER.length + 1;
 const IFRAME_UNKNOWN_SIZE = IFRAME_UNKNOWN_PLACEHOLDER.length + 1;
 
+// Real LLM tokenizers emit roughly one token per CJK character versus one
+// token per `charsPerToken` Latin characters. Weight CJK code points at
+// `charsPerToken` units each so the character budget tracks the real token
+// budget on CJK-heavy pages.
+const CJK_RANGES: ReadonlyArray<readonly [number, number]> = [
+  [0x1100, 0x11ff], // Hangul Jamo
+  [0x2e80, 0x2eff], // CJK Radicals Supplement
+  [0x2f00, 0x2fdf], // Kangxi Radicals
+  [0x3000, 0x303f], // CJK Symbols and Punctuation
+  [0x3040, 0x309f], // Hiragana
+  [0x30a0, 0x30ff], // Katakana
+  [0x3100, 0x312f], // Bopomofo
+  [0x3130, 0x318f], // Hangul Compatibility Jamo
+  [0x31a0, 0x31bf], // Bopomofo Extended
+  [0x31f0, 0x31ff], // Katakana Phonetic Extensions
+  [0x3400, 0x4dbf], // CJK Unified Extension A
+  [0x4e00, 0x9fff], // CJK Unified Ideographs
+  [0xa000, 0xa4cf], // Yi Syllables
+  [0xac00, 0xd7af], // Hangul Syllables
+  [0xf900, 0xfaff], // CJK Compatibility Ideographs
+  [0xff00, 0xffef], // Fullwidth Forms
+  [0x20000, 0x2a6df], // CJK Extension B
+  [0x2a700, 0x2b73f], // CJK Extension C
+  [0x2b740, 0x2b81f], // CJK Extension D
+  [0x2b820, 0x2ceaf], // CJK Extension E/F
+  [0x2ceb0, 0x2ebef], // CJK Extension G/H
+  [0x2f800, 0x2fa1f], // CJK Compatibility Supplement
+];
+
+function isCjkCodePoint(codePoint: number): boolean {
+  let low = 0;
+  let high = CJK_RANGES.length - 1;
+  while (low <= high) {
+    const mid = (low + high) >> 1;
+    const [start, end] = CJK_RANGES[mid];
+    if (codePoint < start) high = mid - 1;
+    else if (codePoint > end) low = mid + 1;
+    else return true;
+  }
+  return false;
+}
+
+/**
+ * Iterate text by code point, invoking `visit` with the code point and its
+ * UTF-16 unit length.
+ */
+function forEachCodePoint(
+  text: string,
+  visit: (codePoint: number, units: number) => void
+): void {
+  for (let index = 0; index < text.length; index++) {
+    const code = text.charCodeAt(index);
+    if (
+      code >= 0xd800 &&
+      code <= 0xdbff &&
+      index + 1 < text.length
+    ) {
+      const next = text.charCodeAt(index + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        visit((code - 0xd800) * 0x400 + (next - 0xdc00) + 0x10000, 2);
+        index++;
+        continue;
+      }
+    }
+    visit(code, 1);
+  }
+}
+
 function stateSize(node: OSNode): number {
   let size = 0;
   const struck =
@@ -82,23 +153,36 @@ function stateSize(node: OSNode): number {
   return size;
 }
 
-function escapedQuoteSize(text: string): number {
-  let size = text.length;
-  for (let index = 0; index < text.length; index++) {
-    if (text.charCodeAt(index) === 34) size++;
-  }
+function escapedQuoteSize(text: string, cjkWeight = 1): number {
+  let size = 0;
+  forEachCodePoint(text, (codePoint, units) => {
+    size += isCjkCodePoint(codePoint) ? cjkWeight : units;
+    // Quotes and square brackets are backslash-escaped in attribute output.
+    if (codePoint === 34 || codePoint === 91 || codePoint === 93) size++;
+  });
   return size;
 }
 
-function escapedTextSize(text: string | undefined): number {
+function escapedTextSize(text: string | undefined, cjkWeight = 1): number {
   if (!text) return 0;
-  let size = text.length;
-  for (let index = 0; index < text.length; index++) {
-    const code = text.charCodeAt(index);
-    if (code === 38) size += 4;
-    else if (code === 60 || code === 62) size += 3;
-    else if (code === 34) size += 5;
-  }
+  let size = 0;
+  forEachCodePoint(text, (codePoint, units) => {
+    size += isCjkCodePoint(codePoint) ? cjkWeight : units;
+    if (codePoint === 38) size += 4; // & -> &amp;
+    else if (codePoint === 60 || codePoint === 62) size += 3; // < >
+    else if (codePoint === 34) size += 5; // " -> &quot;
+    else if (codePoint === 91 || codePoint === 93) size += 1; // [ ] -> \[ \]
+  });
+  return size;
+}
+
+/** Script-aware size of text emitted verbatim (already escaped upstream). */
+function plainTextSize(text: string | undefined, cjkWeight = 1): number {
+  if (!text) return 0;
+  let size = 0;
+  forEachCodePoint(text, (codePoint, units) => {
+    size += isCjkCodePoint(codePoint) ? cjkWeight : units;
+  });
   return size;
 }
 
@@ -126,13 +210,15 @@ function estimateOwnSize(
   node: OSNode,
   depth: number,
   url: UrlCompressionContext,
-  hasNonInteractiveText = hasText(node.text)
+  hasNonInteractiveText = hasText(node.text),
+  cjkWeight = 1,
+  inheritedDisabled = false
 ): number {
   const idSize = node.id?.length ?? 0;
   const attributes = node.attributes;
   const indentation = node.tag === "list" ? 0 : depth * 2;
 
-  if (node.tag === "#text") return indentation + escapedTextSize(node.text) + 1;
+  if (node.tag === "#text") return indentation + escapedTextSize(node.text, cjkWeight) + 1;
   if (node.tag === "truncated") {
     return indentation + TRUNCATION_SIZE_WITHOUT_COUNT +
       String(attributes["count"] ?? "?").length;
@@ -144,16 +230,16 @@ function estimateOwnSize(
       : 0;
     const fallbackSize = hasNonInteractiveText
       ? 0
-      : escapedTextSize(attributes["aria-label"] || attributes["title"]);
+      : escapedTextSize(attributes["aria-label"] || attributes["title"], cjkWeight);
     const targetSize = href && attributes["target"] === "_blank" ? 2 : 0;
-    return indentation + idSize + hrefSize + escapedTextSize(node.text) +
+    return indentation + idSize + hrefSize + escapedTextSize(node.text, cjkWeight) +
       fallbackSize + targetSize + stateSize(node) + 8;
   }
   if (node.tag === "button") {
     const fallbackSize = hasNonInteractiveText
       ? 0
-      : escapedTextSize(attributes["aria-label"] || attributes["title"]);
-    return indentation + idSize + escapedTextSize(node.text) + fallbackSize +
+      : escapedTextSize(attributes["aria-label"] || attributes["title"], cjkWeight);
+    return indentation + idSize + escapedTextSize(node.text, cjkWeight) + fallbackSize +
       stateSize(node) + 5;
   }
   if (node.tag === "input") {
@@ -161,17 +247,17 @@ function estimateOwnSize(
     const type = attributes["type"];
     const placeholder = attributes["placeholder"];
     const value = attributes["value"];
-    if (type && type !== "text") size += type.length + 1;
-    if (placeholder) size += escapedQuoteSize(placeholder) + 2;
-    if (value) size += escapedQuoteSize(value) + 4;
+    if (type && type !== "text") size += escapedQuoteSize(type, cjkWeight) + 1;
+    if (placeholder) size += escapedQuoteSize(placeholder, cjkWeight) + 2;
+    if (value) size += escapedQuoteSize(value, cjkWeight) + 4;
     const min = attributes["min"];
     const max = attributes["max"];
     const step = attributes["step"];
     const pattern = attributes["pattern"];
-    if (min !== undefined) size += min.length + 5;
-    if (max !== undefined) size += max.length + 5;
-    if (step !== undefined) size += step.length + 6;
-    if (pattern !== undefined) size += pattern.length + 9;
+    if (min !== undefined) size += escapedQuoteSize(min, cjkWeight) + 5;
+    if (max !== undefined) size += escapedQuoteSize(max, cjkWeight) + 5;
+    if (step !== undefined) size += escapedQuoteSize(step, cjkWeight) + 6;
+    if (pattern !== undefined) size += escapedQuoteSize(pattern, cjkWeight) + 9;
     if (attributes["readonly"] !== undefined) size += 9;
     if (attributes["required"] !== undefined) size += 9;
     if (attributes["checked"] !== undefined) size += 8;
@@ -184,7 +270,7 @@ function estimateOwnSize(
   }
   if (node.tag === "img") {
     const alt = attributes["alt"];
-    return indentation + (alt ? alt.length + 8 : 6);
+    return indentation + (alt ? escapedTextSize(alt, cjkWeight) + 8 : 6);
   }
   if (node.tag === "iframe") {
     const src = attributes["src"];
@@ -197,35 +283,50 @@ function estimateOwnSize(
     return indentation + Math.max(srcSize, emptySize);
   }
   if (HEADING_TAGS.has(node.tag)) {
-    return indentation + escapedTextSize(node.text) + 5;
+    // The serializer emits `${prefix} ${content}` plus a newline, so the
+    // overhead is the per-tag prefix length + 2 (h4-h6 use "####").
+    const prefixLength = HEADING_MAP[node.tag]?.length ?? 2;
+    return indentation + escapedTextSize(node.text, cjkWeight) + prefixLength + 2;
   }
   if (node.tag === "above" || node.tag === "below") {
-    return indentation + node.tag.length + (node.text?.length ?? 0) + 4;
+    // Summary text is pre-escaped at composition time and emitted verbatim.
+    return indentation + node.tag.length + plainTextSize(node.text, cjkWeight) + 4;
   }
   if (STRUCTURAL_CONTAINERS.has(node.tag)) {
     const ariaLabel = attributes["aria-label"];
     const summary = node.text?.trim();
     let descriptionSize = 0;
-    if (ariaLabel) descriptionSize = escapedTextSize(ariaLabel) + 2;
+    if (ariaLabel) descriptionSize = escapedTextSize(ariaLabel, cjkWeight) + 2;
     if (summary && summary !== ariaLabel) {
-      descriptionSize += escapedTextSize(summary) + (descriptionSize > 0 ? 3 : 2);
+      // Pre-escaped landmark summary, emitted verbatim.
+      descriptionSize += plainTextSize(summary, cjkWeight) + (descriptionSize > 0 ? 3 : 2);
     }
     return indentation + node.tag.length + (idSize > 0 ? idSize + 1 : 0) +
       descriptionSize + 1;
   }
   if (node.tag === "optgroup") {
     const label = attributes["aria-label"] || attributes["label"];
-    return indentation + (label ? label.length + 2 : 0) +
-      escapedTextSize(node.text);
+    const disabled = inheritedDisabled ||
+      attributes["disabled"] !== undefined ||
+      attributes["aria-disabled"] === "true";
+    // The serializer strikes disabled optgroup labels (~~label~~, +4).
+    return indentation + (label ? escapedTextSize(label, cjkWeight) + (disabled ? 4 : 0) + 2 : 0) +
+      escapedTextSize(node.text, cjkWeight);
   }
   if (node.tag === "item") {
-    return indentation + escapedTextSize(node.text) +
+    return indentation + escapedTextSize(node.text, cjkWeight) +
       (node.id ? idSize + 3 : 0) + 4;
   }
   if (node.tag === "option") {
     const selected = attributes["selected"] !== undefined ||
       attributes["aria-selected"] === "true";
-    return indentation + escapedTextSize(node.text) + (selected ? 2 : 0) + 4;
+    const disabled = inheritedDisabled ||
+      attributes["disabled"] !== undefined ||
+      attributes["aria-disabled"] === "true";
+    // The serializer strikes disabled options (~~text~~, +4), including
+    // disabled inherited from an optgroup.
+    return indentation + escapedTextSize(node.text, cjkWeight) +
+      (selected ? 2 : 0) + (disabled ? 4 : 0) + 4;
   }
   if (
     node.tag === "list" ||
@@ -233,15 +334,16 @@ function estimateOwnSize(
     node.tag === "cell" ||
     node.tag === "label"
   ) {
-    return indentation + (node.text?.length ?? 0) + 4;
+    return indentation + escapedTextSize(node.text, cjkWeight) + 4;
   }
-  return indentation + escapedTextSize(node.text) + 1;
+  return indentation + escapedTextSize(node.text, cjkWeight) + 1;
 }
 
 function childDepth(node: OSNode, depth: number): number {
   return STRUCTURAL_CONTAINERS.has(node.tag) ||
     node.tag === "iframe" ||
     node.tag === "select" ||
+    node.tag === "optgroup" ||
     node.tag === "row" ||
     node.tag === "cell" ||
     node.tag === "label" ||
@@ -257,7 +359,9 @@ function measureNode(
   url: UrlCompressionContext,
   metrics: Map<OSNode, NodeMetrics>,
   cache: boolean,
-  cacheDescendants = false
+  cacheDescendants = false,
+  cjkWeight = 1,
+  inheritedDisabled = false
 ): NodeMetrics {
   let totalSize = 0;
   let interactiveCount = node.id ? 1 : 0;
@@ -267,6 +371,12 @@ function measureNode(
 
   const nextDepth = childDepth(node, depth);
   const cacheChildren = cacheDescendants || node.children.length > 1;
+  // The serializer threads disabled from select/optgroup to their option
+  // descendants; mirror that here so the strike markers are accounted for.
+  const childInheritedDisabled = inheritedDisabled ||
+    ((node.tag === "select" || node.tag === "optgroup") &&
+      (node.attributes["disabled"] !== undefined ||
+        node.attributes["aria-disabled"] === "true"));
   for (const child of node.children) {
     const childMetrics = measureNode(
       child,
@@ -274,7 +384,9 @@ function measureNode(
       url,
       metrics,
       cacheChildren,
-      cacheDescendants
+      cacheDescendants,
+      cjkWeight,
+      childInheritedDisabled
     );
     totalSize += childMetrics.totalSize;
     interactiveCount += childMetrics.interactiveCount;
@@ -285,7 +397,14 @@ function measureNode(
     }
   }
 
-  const ownSize = estimateOwnSize(node, depth, url, hasNonInteractiveText);
+  const ownSize = estimateOwnSize(
+    node,
+    depth,
+    url,
+    hasNonInteractiveText,
+    cjkWeight,
+    inheritedDisabled
+  );
   totalSize += ownSize;
   const result = {
     ownSize,
@@ -301,10 +420,13 @@ function measureNode(
 
 function measureTree(
   nodes: OSNode[],
-  url: UrlCompressionContext
+  url: UrlCompressionContext,
+  cjkWeight = 1
 ): Map<OSNode, NodeMetrics> {
   const metrics = new Map<OSNode, NodeMetrics>();
-  for (const node of nodes) measureNode(node, 0, url, metrics, true);
+  for (const node of nodes) {
+    measureNode(node, 0, url, metrics, true, false, cjkWeight);
+  }
   return metrics;
 }
 
@@ -349,14 +471,15 @@ function fitInteractiveShell(
   node: OSNode,
   budget: number,
   depth: number,
-  url: UrlCompressionContext
+  url: UrlCompressionContext,
+  cjkWeight = 1
 ): FittedNode | undefined {
   const usefulShell = withoutFallbackLabels({
     ...node,
     children: [],
     text: undefined,
   });
-  const usefulShellSize = estimateOwnSize(usefulShell, depth, url, false);
+  const usefulShellSize = estimateOwnSize(usefulShell, depth, url, false, cjkWeight);
   if (usefulShellSize <= budget) {
     return {
       node: usefulShell,
@@ -366,7 +489,7 @@ function fitInteractiveShell(
   }
 
   const bareShell = { ...node, attributes: {}, children: [], text: undefined };
-  const bareShellSize = estimateOwnSize(bareShell, depth, url, false);
+  const bareShellSize = estimateOwnSize(bareShell, depth, url, false, cjkWeight);
   return bareShellSize <= budget
     ? { node: bareShell, size: bareShellSize, hasNonInteractiveText: false }
     : undefined;
@@ -377,7 +500,8 @@ function fitNode(
   budget: number,
   metrics: Map<OSNode, NodeMetrics>,
   depth: number,
-  url: UrlCompressionContext
+  url: UrlCompressionContext,
+  cjkWeight = 1
 ): FittedNode | undefined {
   const measured = metrics.get(node)!;
   if (measured.totalSize <= budget) {
@@ -389,22 +513,24 @@ function fitNode(
   }
   if (node.tag === "#text") {
     const text = node.text ?? "";
-    const minimumSize = depth * 2 + escapedTextSize("...") + 1;
+    const weightedSize = (value: string | undefined) =>
+      escapedTextSize(value, cjkWeight);
+    const minimumSize = depth * 2 + escapedTextSize("...", cjkWeight) + 1;
     if (budget < minimumSize) return undefined;
     const shortened = truncateGraphemes(text, budget, {
       suffix: "...",
-      measure: escapedTextSize,
+      measure: weightedSize,
       reservedSize: minimumSize,
     });
     const shortenedNode = { ...node, text: shortened };
     return {
       node: shortenedNode,
-      size: estimateOwnSize(shortenedNode, depth, url, true),
+      size: estimateOwnSize(shortenedNode, depth, url, true, cjkWeight),
       hasNonInteractiveText: Boolean(shortened.trim()),
     };
   }
   if (node.children.length === 0) {
-    if (node.id) return fitInteractiveShell(node, budget, depth, url);
+    if (node.id) return fitInteractiveShell(node, budget, depth, url, cjkWeight);
     return undefined;
   }
 
@@ -416,10 +542,10 @@ function fitNode(
       children: [],
       text: undefined,
     });
-    ownSize = estimateOwnSize(base, depth, url, false);
+    ownSize = estimateOwnSize(base, depth, url, false, cjkWeight);
     if (ownSize > budget) {
       base = { ...node, attributes: {}, children: [], text: undefined };
-      ownSize = estimateOwnSize(base, depth, url, false);
+      ownSize = estimateOwnSize(base, depth, url, false, cjkWeight);
       if (ownSize > budget) return undefined;
     }
   }
@@ -429,10 +555,11 @@ function fitNode(
     budget - ownSize,
     metrics,
     childDepth(node, depth),
-    url
+    url,
+    cjkWeight
   );
   if (childResult.nodes.length === 0) {
-    return node.id ? fitInteractiveShell(node, budget, depth, url) : undefined;
+    return node.id ? fitInteractiveShell(node, budget, depth, url, cjkWeight) : undefined;
   }
 
   const hasNonInteractiveText = hasText(base.text) ||
@@ -442,12 +569,13 @@ function fitNode(
     fittedNode,
     depth,
     url,
-    hasNonInteractiveText
+    hasNonInteractiveText,
+    cjkWeight
   );
 
   if (ownSize + childResult.size > budget && !hasNonInteractiveText) {
     fittedNode = withoutFallbackLabels(fittedNode);
-    ownSize = estimateOwnSize(fittedNode, depth, url, false);
+    ownSize = estimateOwnSize(fittedNode, depth, url, false, cjkWeight);
   }
 
   return ownSize + childResult.size <= budget
@@ -457,7 +585,7 @@ function fitNode(
         hasNonInteractiveText,
       }
     : node.id
-      ? fitInteractiveShell(node, budget, depth, url)
+      ? fitInteractiveShell(node, budget, depth, url, cjkWeight)
       : undefined;
 }
 
@@ -466,13 +594,14 @@ function fitList(
   budget: number,
   metrics: Map<OSNode, NodeMetrics>,
   depth: number,
-  url: UrlCompressionContext
+  url: UrlCompressionContext,
+  cjkWeight = 1
 ): FittedList {
   let totalSize = 0;
   let collectibleText = false;
   for (const node of nodes) {
     const measured = metrics.get(node) ??
-      measureNode(node, depth, url, metrics, true, true);
+      measureNode(node, depth, url, metrics, true, true, cjkWeight);
     totalSize += measured.totalSize;
     if (!node.id && measured.hasNonInteractiveText) collectibleText = true;
   }
@@ -485,7 +614,7 @@ function fitList(
   }
 
   const largestMarker = truncationNode(nodes.length);
-  const markerSize = estimateOwnSize(largestMarker, depth, url, true);
+  const markerSize = estimateOwnSize(largestMarker, depth, url, true, cjkWeight);
   const contentBudget = Math.max(0, budget - markerSize);
   const candidates = new Array<Candidate>(nodes.length);
   for (let index = 0; index < nodes.length; index++) {
@@ -509,7 +638,7 @@ function fitList(
         hasNonInteractiveText: measured.hasNonInteractiveText,
       };
     } else if (remaining > 0) {
-      fitted = fitNode(candidate.node, remaining, metrics, depth, url);
+      fitted = fitNode(candidate.node, remaining, metrics, depth, url, cjkWeight);
     }
 
     if (fitted) {
@@ -545,10 +674,13 @@ function fitList(
  * their identity; only containers whose children are pruned are copied.
  */
 export function pruneToFit(nodes: OSNode[], options: PruneOptions): OSNode[] {
-  const { maxTokens, charsPerToken = 4, pageUrl } = options;
+  const { maxTokens, charsPerToken = 4, pageUrl, reservedChars = 0 } = options;
   validatePositiveNumber(maxTokens, "maxTokens");
   validatePositiveNumber(charsPerToken, "charsPerToken");
   const url = createUrlCompressionContext(pageUrl);
-  const metrics = measureTree(nodes, url);
-  return fitList(nodes, maxTokens * charsPerToken, metrics, 0, url).nodes;
+  const metrics = measureTree(nodes, url, charsPerToken);
+  // CJK code points are weighted at charsPerToken units each, so the
+  // character budget tracks the real tokenizer budget on CJK-heavy pages.
+  const charBudget = Math.max(0, maxTokens * charsPerToken - reservedChars);
+  return fitList(nodes, charBudget, metrics, 0, url, charsPerToken).nodes;
 }

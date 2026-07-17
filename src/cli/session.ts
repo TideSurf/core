@@ -1,4 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import {
   closeSync,
   chmodSync,
@@ -16,13 +17,14 @@ import { join, resolve } from "node:path";
 import { connect as connectSocket } from "node:net";
 import type { ChromeChannel, ToolResult } from "../types.js";
 import { VERSION } from "../version.js";
-import { buildDaemonArgv } from "./daemon-argv.js";
+import { buildDaemonArgv, DAEMON_COMMAND } from "./daemon-argv.js";
 import { isValidSessionName, SESSION_NAME_ERROR } from "./session-name.js";
 import { MAX_SESSION_EXECUTION_TIMEOUT_MS } from "./timeouts.js";
 
 export const SESSION_PROTOCOL_VERSION = 2;
 const MAX_RESPONSE_BYTES = 64 * 1024 * 1024;
-const READY_POLL_INTERVAL_MS = 10;
+const READY_POLL_INITIAL_MS = 25;
+const READY_POLL_MAX_MS = 250;
 const MAX_UNIX_SOCKET_PATH_BYTES = 100;
 const SENT_REQUEST_ERRORS = new WeakSet<object>();
 
@@ -275,8 +277,46 @@ export function isProcessRunning(pid: number): boolean {
   }
 }
 
-async function terminateDaemon(pid: number): Promise<void> {
+function processCommandLine(pid: number): string | undefined {
+  try {
+    if (process.platform === "win32") {
+      return execFileSync(
+        "powershell",
+        [
+          "-NoProfile",
+          "-Command",
+          `(Get-CimInstance Win32_Process -Filter 'ProcessId=${pid}').CommandLine`,
+        ],
+        { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 2_000 }
+      );
+    }
+    return execFileSync("ps", ["-p", String(pid), "-o", "command="], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Confirm the process at `pid` really is this session's daemon before
+ * signaling it. A daemon that died without cleanup (SIGKILL, crash) leaves
+ * its state file behind; if the OS recycled the pid, kill(pid, 0) alone
+ * would deliver SIGTERM/SIGKILL to an innocent process holding that pid.
+ */
+function isExpectedDaemonProcess(pid: number, paths: SessionPaths): boolean {
+  const commandLine = processCommandLine(pid);
+  if (commandLine === undefined) return false; // cannot verify: do not signal
+  return (
+    commandLine.includes(DAEMON_COMMAND) &&
+    commandLine.includes(paths.stateFile)
+  );
+}
+
+async function terminateDaemon(pid: number, paths: SessionPaths): Promise<void> {
   if (pid === process.pid) return;
+  if (!isExpectedDaemonProcess(pid, paths)) return;
   try {
     process.kill(pid, "SIGTERM");
   } catch {
@@ -421,6 +461,7 @@ async function waitForReady(
 ): Promise<SessionState> {
   const deadline = Date.now() + timeoutMs;
   let lastError: unknown;
+  let pollInterval = READY_POLL_INITIAL_MS;
   while (Date.now() < deadline) {
     const state = readSessionState(paths);
     if (state && state.protocol !== SESSION_PROTOCOL_VERSION) {
@@ -436,9 +477,10 @@ async function waitForReady(
         lastError = error;
       }
     }
-    await new Promise((resolveDelay) =>
-      setTimeout(resolveDelay, READY_POLL_INTERVAL_MS)
-    );
+    // Back off exponentially: the daemon writes ready exactly once, so
+    // aggressive sync-I/O polling buys nothing.
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, pollInterval));
+    pollInterval = Math.min(pollInterval * 2, READY_POLL_MAX_MS);
   }
   throw new SessionProtocolError(
     `Session did not start within ${timeoutMs}ms${
@@ -561,7 +603,7 @@ export async function ensureSession(
       return verifyCompatibleSession(current, options);
     } catch (error) {
       if (isProcessRunning(current.pid) && !isStaleEndpointError(error)) throw error;
-      if (isProcessRunning(current.pid)) await terminateDaemon(current.pid);
+      if (isProcessRunning(current.pid)) await terminateDaemon(current.pid, paths);
       removeEndpointFiles(paths);
     }
   }
@@ -643,7 +685,7 @@ export async function ensureSession(
         return verifyCompatibleSession(raced, options);
       } catch (error) {
         if (isProcessRunning(raced.pid) && !isStaleEndpointError(error)) throw error;
-        if (isProcessRunning(raced.pid)) await terminateDaemon(raced.pid);
+        if (isProcessRunning(raced.pid)) await terminateDaemon(raced.pid, paths);
         removeEndpointFiles(paths);
       }
     }
@@ -726,7 +768,7 @@ export async function ensureSessionRequest<T>(
       };
     } catch (error) {
       if (!isStaleEndpointError(error)) throw error;
-      if (isProcessRunning(compatible.pid)) await terminateDaemon(compatible.pid);
+      if (isProcessRunning(compatible.pid)) await terminateDaemon(compatible.pid, paths);
       removeEndpointFiles(paths);
     }
   }
@@ -792,7 +834,7 @@ export async function sendLiveSessionRequest<T>(
     };
   } catch (error) {
     if (!isStaleEndpointError(error)) throw error;
-    if (isProcessRunning(ready.pid)) await terminateDaemon(ready.pid);
+    if (isProcessRunning(ready.pid)) await terminateDaemon(ready.pid, paths);
     removeSessionFiles(paths);
     return null;
   }

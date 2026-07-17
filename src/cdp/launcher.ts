@@ -1,12 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import {
   accessSync,
   constants,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
   statSync,
+  writeFileSync,
 } from "node:fs";
 import { rm } from "node:fs/promises";
 import { createServer } from "node:net";
@@ -84,6 +86,8 @@ export interface DiscoverResult {
   port: number;
   host: string;
   targetId: string;
+  /** Browser websocket path from DevToolsActivePort, when known. */
+  browserPath?: string;
 }
 
 export interface DiscoverActiveOptions {
@@ -99,11 +103,97 @@ interface DevToolsActivePort {
 
 class DevToolsEndpointMismatchError extends ChromeLaunchError {}
 
+/** Normalize loopback aliases so the same browser keys maps identically. */
+export function normalizeEndpointHost(host: string): string {
+  const trimmed = host.trim().toLowerCase();
+  if (trimmed === "localhost" || trimmed === "::1" || trimmed === "[::1]") {
+    return "127.0.0.1";
+  }
+  return trimmed;
+}
+
+function endpointKey(host: string, port: number): string {
+  return `${normalizeEndpointHost(host)}:${port}`;
+}
+
 const ownedBrowserEndpoints = new Set<string>();
+/** Browser websocket path recorded at launch, used to re-verify ownership. */
+const ownedBrowserWsPaths = new Map<string, string>();
+/** Endpoints whose ownership was already re-verified in this process. */
+const verifiedOwnedEndpoints = new Set<string>();
+
+function registerOwnedBrowserEndpoint(
+  host: string,
+  port: number,
+  browserWsPath: string | undefined
+): void {
+  const key = endpointKey(host, port);
+  ownedBrowserEndpoints.add(key);
+  if (browserWsPath) ownedBrowserWsPaths.set(key, browserWsPath);
+  // The launch flow itself verified the browser's identity.
+  verifiedOwnedEndpoints.add(key);
+}
+
+/** Forget an owned endpoint once its browser is stopped through normal paths. */
+export function releaseOwnedBrowserEndpoint(host: string, port: number): void {
+  const key = endpointKey(host, port);
+  ownedBrowserEndpoints.delete(key);
+  ownedBrowserWsPaths.delete(key);
+  verifiedOwnedEndpoints.delete(key);
+}
+
+/** Force ownership re-verification after the connection to a browser drops. */
+export function noteOwnedBrowserDisconnected(host: string, port: number): void {
+  verifiedOwnedEndpoints.delete(endpointKey(host, port));
+}
 
 /** True when TideSurf launched (and therefore owns) the browser at host:port. */
 export function isOwnedBrowserEndpoint(host: string, port: number): boolean {
-  return ownedBrowserEndpoints.has(`${host}:${port}`);
+  return ownedBrowserEndpoints.has(endpointKey(host, port));
+}
+
+/**
+ * Ownership check that re-verifies the browser's identity before trusting the
+ * process-local registry. A port can be recycled by a foreign Chrome after the
+ * owned browser died; without re-verification, TideSurf would treat that
+ * foreign browser as owned and wipe its browser-wide permission overrides.
+ */
+export async function verifyOwnedBrowserEndpoint(
+  host: string,
+  port: number,
+  timeoutMs = 1_000
+): Promise<boolean> {
+  const key = endpointKey(host, port);
+  if (!ownedBrowserEndpoints.has(key)) return false;
+  if (verifiedOwnedEndpoints.has(key)) return true;
+  const expectedPath = ownedBrowserWsPaths.get(key);
+  if (!expectedPath) {
+    // No identity was recorded at launch; fall back to registry membership.
+    return true;
+  }
+  try {
+    const version = await withTimeout(
+      CDP.Version({ port, host: normalizeEndpointHost(host), useHostName: true }),
+      Math.max(1, timeoutMs),
+      "owned browser verification"
+    );
+    let actualPath: string | undefined;
+    try {
+      actualPath = browserPathFromVersion(version);
+    } catch {
+      actualPath = undefined;
+    }
+    if (actualPath !== undefined && actualPath === expectedPath) {
+      verifiedOwnedEndpoints.add(key);
+      return true;
+    }
+    // A foreign browser occupies the endpoint: drop the stale ownership claim.
+    releaseOwnedBrowserEndpoint(host, port);
+    return false;
+  } catch {
+    // The browser cannot be identified; do not claim ownership of it.
+    return false;
+  }
 }
 
 function selectedChannels(channel?: ChromeChannel): readonly ChromeChannel[] {
@@ -385,8 +475,174 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Chrome processes whose spawn failed ("error" fired before "exit"). */
+const spawnFailedProcesses = new WeakSet<ChildProcess>();
+
 function processExited(proc: ChildProcess): boolean {
-  return proc.exitCode !== null || proc.signalCode !== null;
+  return (
+    proc.exitCode !== null ||
+    proc.signalCode !== null ||
+    spawnFailedProcesses.has(proc)
+  );
+}
+
+// --- Orphaned browser registry -----------------------------------------------
+// Node's "exit" event never fires on SIGKILL/OOM-kill and there is no portable
+// parent-death signal, so an owned Chrome can outlive its parent process.
+// Launches are recorded in a shared tmpdir registry so that any later TideSurf
+// process can reap browsers whose parent is gone (and their temp profiles).
+
+interface OrphanRecord {
+  chromePid: number;
+  parentPid: number;
+  userDataDir: string;
+  ownsTempDir: boolean;
+  createdAt: number;
+}
+
+const ORPHAN_REGISTRY_DIR = join(tmpdir(), "tidesurf-orphans");
+
+function orphanRecordPath(parentPid: number, chromePid: number): string {
+  return join(ORPHAN_REGISTRY_DIR, `${parentPid}-${chromePid}.json`);
+}
+
+function registerOrphanedBrowser(record: OrphanRecord): void {
+  try {
+    mkdirSync(ORPHAN_REGISTRY_DIR, { recursive: true, mode: 0o700 });
+    writeFileSync(
+      orphanRecordPath(record.parentPid, record.chromePid),
+      JSON.stringify(record),
+      { mode: 0o600 }
+    );
+  } catch {
+    // Bookkeeping is best-effort; never fail a launch over it.
+  }
+}
+
+/** Remove the orphan record once the browser is stopped through normal paths. */
+export function unregisterOrphanedBrowser(
+  parentPid: number,
+  chromePid: number
+): void {
+  try {
+    rmSync(orphanRecordPath(parentPid, chromePid), { force: true });
+  } catch {
+    // best-effort
+  }
+}
+
+function pidIsAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException | undefined)?.code === "EPERM";
+  }
+}
+
+function processCommandLine(pid: number): string | undefined {
+  if (process.platform === "win32") return undefined;
+  try {
+    return execFileSync("ps", ["-p", String(pid), "-o", "command="], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return undefined;
+  }
+}
+
+function isOwnedTempProfileDir(userDataDir: string): boolean {
+  return userDataDir.startsWith(join(tmpdir(), "tidesurf-"));
+}
+
+/**
+ * Reap browsers recorded by now-dead TideSurf processes and remove their
+ * temporary profiles. A recorded Chrome is only signaled when its command
+ * line proves it is the recorded browser (guard against pid reuse).
+ * Best-effort; never throws.
+ */
+export async function reapOrphanedBrowsers(): Promise<void> {
+  let entries: string[];
+  try {
+    entries = readdirSync(ORPHAN_REGISTRY_DIR);
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (!entry.endsWith(".json")) continue;
+    const filePath = join(ORPHAN_REGISTRY_DIR, entry);
+    let record: OrphanRecord;
+    try {
+      record = JSON.parse(readFileSync(filePath, "utf8")) as OrphanRecord;
+    } catch {
+      continue;
+    }
+    const { chromePid, parentPid, userDataDir, ownsTempDir } = record;
+    if (
+      !Number.isInteger(chromePid) ||
+      chromePid <= 0 ||
+      !Number.isInteger(parentPid) ||
+      parentPid <= 0 ||
+      typeof userDataDir !== "string"
+    ) {
+      continue;
+    }
+    if (parentPid === process.pid) continue; // our own live launch
+    if (pidIsAlive(parentPid)) continue; // owner still alive and responsible
+
+    // The owner is dead. Decide whether the recorded Chrome still runs.
+    let chromeAlive = pidIsAlive(chromePid);
+    if (chromeAlive) {
+      const commandLine = processCommandLine(chromePid);
+      if (commandLine === undefined) {
+        // Cannot verify the process identity (e.g. Windows): leave it alone.
+        continue;
+      }
+      if (!commandLine.includes(userDataDir)) {
+        // The pid was recycled by an unrelated process; the recorded
+        // Chrome is actually gone.
+        chromeAlive = false;
+      }
+    }
+
+    if (chromeAlive) {
+      try {
+        process.kill(chromePid, "SIGTERM");
+      } catch {
+        // already gone
+      }
+      const termDeadline = Date.now() + 2_000;
+      while (pidIsAlive(chromePid) && Date.now() < termDeadline) {
+        await delay(25);
+      }
+      if (pidIsAlive(chromePid)) {
+        try {
+          process.kill(chromePid, "SIGKILL");
+        } catch {
+          // already gone
+        }
+        const killDeadline = Date.now() + 1_000;
+        while (pidIsAlive(chromePid) && Date.now() < killDeadline) {
+          await delay(25);
+        }
+      }
+      if (pidIsAlive(chromePid)) continue; // survived both signals; retry later
+    }
+
+    if (ownsTempDir && isOwnedTempProfileDir(userDataDir)) {
+      try {
+        rmSync(userDataDir, { recursive: true, force: true });
+      } catch {
+        continue; // keep the record so a later sweep can retry
+      }
+    }
+    try {
+      rmSync(filePath, { force: true });
+    } catch {
+      // best-effort
+    }
+  }
 }
 
 function captureStartupStderr(stream: Readable | null): {
@@ -477,11 +733,17 @@ function waitForProcessExit(proc: ChildProcess, timeout: number): Promise<boolea
       settled = true;
       clearTimeout(timer);
       proc.removeListener("exit", onExit);
+      proc.removeListener("close", onClose);
       resolve(value);
     };
     const onExit = () => finish(true);
+    // "close" also fires when the process failed to spawn at all, a case
+    // where "exit" never fires (spawn failure leaves exitCode null on Bun
+    // and on Node's synchronous spawn-error path).
+    const onClose = () => finish(true);
     const timer = setTimeout(() => finish(false), timeout);
     proc.once("exit", onExit);
+    proc.once("close", onClose);
     if (processExited(proc)) finish(true);
   });
 }
@@ -557,7 +819,14 @@ async function waitForLaunchedBrowser(
         const page = targets.find(
           (target) => target.type === "page"
         );
-        if (page) return { port, host: LOCAL_CDP_HOST, targetId: page.id };
+        if (page) {
+          return {
+            port,
+            host: LOCAL_CDP_HOST,
+            targetId: page.id,
+            browserPath: active?.browserPath,
+          };
+        }
       } catch (error) {
         if (error instanceof DevToolsEndpointMismatchError) throw error;
         lastError = error;
@@ -577,6 +846,7 @@ async function waitForLaunchedBrowser(
 
 /** Launch one isolated Chrome process and return its real CDP endpoint. */
 export async function launchChrome(options: LaunchOptions = {}): Promise<LaunchResult> {
+  await reapOrphanedBrowsers();
   const chromePath = resolveChromeExecutable({
     chromePath: options.chromePath,
     channel: options.channel,
@@ -631,6 +901,13 @@ export async function launchChrome(options: LaunchOptions = {}): Promise<LaunchR
       stdio: ["ignore", "pipe", "pipe"],
     });
     proc = launchedProcess;
+    // A failed spawn never fires "exit" on some runtimes; mark the process so
+    // terminateChromeProcess does not stall waiting for a process that never
+    // existed. This listener intentionally stays attached for the process
+    // lifetime.
+    launchedProcess.once("error", () => {
+      spawnFailedProcesses.add(launchedProcess);
+    });
     launchedProcess.stdout?.resume();
     const stderr = captureStartupStderr(launchedProcess.stderr);
 
@@ -653,7 +930,32 @@ export async function launchChrome(options: LaunchOptions = {}): Promise<LaunchR
       if (onSpawnError) launchedProcess.removeListener("error", onSpawnError);
       stderr.stop();
     });
-    ownedBrowserEndpoints.add(`${endpoint.host}:${endpoint.port}`);
+    let browserPath = endpoint.browserPath;
+    if (!browserPath) {
+      // Explicit-port launches probe via /json/list only; record the browser's
+      // identity now so later connections can re-verify ownership (the port
+      // may be recycled by a foreign Chrome after this browser dies).
+      try {
+        const version = await withTimeout(
+          CDP.Version({ port: endpoint.port, host: LOCAL_CDP_HOST, useHostName: true }),
+          1_000,
+          "Chrome identity"
+        );
+        browserPath = browserPathFromVersion(version);
+      } catch {
+        browserPath = undefined;
+      }
+    }
+    registerOwnedBrowserEndpoint(endpoint.host, endpoint.port, browserPath);
+    if (typeof launchedProcess.pid === "number") {
+      registerOrphanedBrowser({
+        chromePid: launchedProcess.pid,
+        parentPid: process.pid,
+        userDataDir,
+        ownsTempDir,
+        createdAt: Date.now(),
+      });
+    }
     return {
       process: launchedProcess,
       ...endpoint,
@@ -662,6 +964,9 @@ export async function launchChrome(options: LaunchOptions = {}): Promise<LaunchR
     };
   } catch (error) {
     const exited = proc ? await terminateChromeProcess(proc) : true;
+    if (proc && typeof proc.pid === "number") {
+      unregisterOrphanedBrowser(process.pid, proc.pid);
+    }
     const launchError = error instanceof ChromeLaunchError
       ? error
       : new ChromeLaunchError(

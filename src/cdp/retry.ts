@@ -1,4 +1,8 @@
-import { CDPTimeoutError, ValidationError } from "../errors.js";
+import {
+  CDPConnectionError,
+  CDPTimeoutError,
+  ValidationError,
+} from "../errors.js";
 import { MAX_TIMER_DELAY_MS } from "../validation.js";
 
 export interface RetryOptions {
@@ -8,8 +12,18 @@ export interface RetryOptions {
   retryable?: (err: unknown) => boolean;
 }
 
+/**
+ * Default retry predicate: only transient infrastructure failures are
+ * retried. CDPTimeoutError means the operation never reached the browser's
+ * commit point (mutation paths convert possibly-committed timeouts into
+ * ActionCommittedError), and CDPConnectionError means the transport failed
+ * before the command ran. ActionCommittedError is never retried by default:
+ * the action may already have taken effect, so re-issuing it could repeat a
+ * side effect (e.g. a double form submit). Deterministic errors (validation,
+ * element lookup) are never retried: they cannot succeed without new input.
+ */
 const DEFAULT_RETRYABLE = (err: unknown): boolean =>
-  !(err instanceof CDPTimeoutError);
+  err instanceof CDPTimeoutError || err instanceof CDPConnectionError;
 
 /**
  * Retry a function with exponential backoff.

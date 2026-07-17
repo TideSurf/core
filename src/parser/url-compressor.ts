@@ -49,6 +49,31 @@ export function compressUrlWithContext(
   return compressed;
 }
 
+/**
+ * Remove tracking parameters from a raw query string without touching the
+ * encoding of the remaining parameters. Unlike URLSearchParams.delete (which
+ * re-serializes every pair through the form-urlencoded serializer — turning
+ * %20 into +, / into %2F, and bare flags into flag=), this filters the raw
+ * pairs textually so untouched params stay byte-identical.
+ */
+function stripTrackingParams(search: string): string {
+  if (search.length <= 1) return search;
+  const parts = search.slice(1).split("&");
+  const kept: string[] = [];
+  let removed = false;
+  for (const part of parts) {
+    const equals = part.indexOf("=");
+    const name = equals === -1 ? part : part.slice(0, equals);
+    if (TRACKING_PARAMS.has(name) || name.startsWith("utm_")) {
+      removed = true;
+      continue;
+    }
+    kept.push(part);
+  }
+  if (!removed) return search;
+  return kept.length === 0 ? "" : `?${kept.join("&")}`;
+}
+
 function compressParsedUrl(
   href: string,
   context: UrlCompressionContext
@@ -58,14 +83,6 @@ function compressParsedUrl(
     url = new URL(href);
   } catch {
     return href;
-  }
-
-  if (url.search.length > 1) {
-    for (const param of [...url.searchParams.keys()]) {
-      if (TRACKING_PARAMS.has(param) || param.startsWith("utm_")) {
-        url.searchParams.delete(param);
-      }
-    }
   }
 
   if (!context.originResolved) {
@@ -81,7 +98,7 @@ function compressParsedUrl(
   const sameOrigin = context.pageOrigin !== undefined &&
     url.origin === context.pageOrigin;
 
-  const search = url.search;
+  const search = stripTrackingParams(url.search);
   const hash = url.hash;
   let path = url.pathname;
 

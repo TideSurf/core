@@ -87,6 +87,44 @@ describe("BrowserController dead browser recovery", () => {
     expect(result.alreadyRunning).toBe(false);
     await controller.close();
   });
+
+  it("awaits the dead browser's close before relaunching its profile", async () => {
+    const controller = new BrowserController(sessionConfig());
+    const first = surfInstance();
+    const second = surfInstance();
+    const events: string[] = [];
+    let releaseClose!: () => void;
+    const closeGate = new Promise<void>((resolveClose) => {
+      releaseClose = resolveClose;
+    });
+    // The evicted handle's close tears down the old Chrome; a relaunch with
+    // the same profile must wait for it or hits "profile is already active".
+    Reflect.set(first.surf, "close", mock(async () => {
+      events.push("close:start");
+      await closeGate;
+      events.push("close:end");
+    }));
+    let acquireCalls = 0;
+    Reflect.set(controller, "acquire", mock(async () => {
+      acquireCalls++;
+      events.push("acquire");
+      return acquireCalls === 1 ? first.surf : second.surf;
+    }));
+
+    await controller.start();
+    expect(await controller.getBrowser()).toBe(first.surf);
+    markDisconnected(first.surf);
+    events.length = 0;
+
+    const pending = controller.getBrowser();
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 10));
+    expect(events).toEqual(["close:start"]);
+
+    releaseClose();
+    await expect(pending).resolves.toBe(second.surf);
+    expect(events).toEqual(["close:start", "close:end", "acquire"]);
+    await controller.close();
+  });
 });
 
 describe("BrowserController pinned endpoints", () => {

@@ -104,4 +104,46 @@ describe("compressUrl", () => {
     );
     expect(result).toBe("/page?q=1#top");
   });
+
+  it("keeps percent-encoded spaces as %20 when stripping trackers", () => {
+    // URLSearchParams.delete would re-serialize the remainder as q=hello+world.
+    const result = compressUrl(
+      "https://example.com/search?q=hello%20world&utm_source=google"
+    );
+    expect(result).toBe("example.com/search?q=hello%20world");
+  });
+
+  it("keeps encoded slashes as %2F when stripping trackers", () => {
+    const result = compressUrl(
+      "https://example.com/p?next=%2Fdocs%2Fapi&fbclid=abc"
+    );
+    expect(result).toBe("example.com/p?next=%2Fdocs%2Fapi");
+  });
+
+  it("keeps bare flags without inventing values when stripping trackers", () => {
+    const result = compressUrl(
+      "https://example.com/p?preview&x=1&utm_campaign=test"
+    );
+    expect(result).toBe("example.com/p?preview&x=1");
+  });
+
+  it("leaves tracker-free queries byte-identical", () => {
+    expect(compressUrl("https://example.com/p?preview&x=1")).toBe(
+      "example.com/p?preview&x=1"
+    );
+    expect(compressUrl("https://example.com/p?q=a%20b&next=%2Fx")).toBe(
+      "example.com/p?q=a%20b&next=%2Fx"
+    );
+    expect(compressUrl("https://example.com/p?q=a+b")).toBe(
+      "example.com/p?q=a+b"
+    );
+  });
+
+  it("preserves raw params when relativizing same-origin URLs", () => {
+    const result = compressUrl(
+      "https://example.com/s?q=a%20b&utm_term=k#frag",
+      "https://example.com/"
+    );
+    expect(result).toBe("/s?q=a%20b#frag");
+  });
 });

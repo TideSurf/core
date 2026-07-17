@@ -756,4 +756,76 @@ describe("session recovery", () => {
       removeSessionFiles(paths, true);
     }
   });
+
+  it("answers stop out-of-band while a long tool is still running", async () => {
+    const name = `stop-oob-${randomUUID()}`;
+    const paths = getSessionPaths(name);
+    writeSessionState(paths, {
+      protocol: SESSION_PROTOCOL_VERSION,
+      version: VERSION,
+      session: name,
+      secret: "9".repeat(64),
+      socketPath: paths.socketPath,
+      config,
+      pid: process.pid,
+      ready: false,
+      startupId: randomUUID(),
+    });
+
+    let releaseTool!: () => void;
+    let markToolStarted!: () => void;
+    const toolGate = new Promise<void>((resolveTool) => {
+      releaseTool = resolveTool;
+    });
+    const toolStarted = new Promise<void>((resolveStarted) => {
+      markToolStarted = resolveStarted;
+    });
+    const controller: DaemonController = {
+      status: () => ({ running: false }),
+      start: async () => ({ running: false }),
+      execute: async () => {
+        markToolStarted();
+        await toolGate;
+        return { success: true };
+      },
+      close: async () => {},
+    };
+
+    await runDaemon(paths.stateFile, {
+      controllerFactory: () => controller,
+      installProcessHandlers: false,
+    });
+    const ready = readSessionState(paths)!;
+    const tool = sendSessionRequest(ready, {
+      method: "tool",
+      name: "long",
+      input: {},
+    }, 5_000);
+    let toolSettled = false;
+    void tool.then(
+      () => { toolSettled = true; },
+      () => { toolSettled = true; }
+    );
+
+    try {
+      await toolStarted;
+      // A queued stop would sit behind the gated tool until its own queue
+      // deadline cancelled it; out-of-band stop answers immediately.
+      const stopped = await sendSessionRequest<{ stopped: boolean }>(
+        ready,
+        { method: "stop" },
+        2_000
+      );
+      expect(stopped.stopped).toBe(true);
+      expect(toolSettled).toBe(false);
+    } finally {
+      releaseTool();
+      await tool.catch(() => undefined);
+      const deadline = Date.now() + 2_000;
+      while (readSessionState(paths) && Date.now() < deadline) {
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 10));
+      }
+      removeSessionFiles(paths, true);
+    }
+  });
 });

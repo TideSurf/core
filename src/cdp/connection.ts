@@ -12,7 +12,11 @@ import {
   MAX_TIMER_DELAY_MS,
   validateScreenshotDimensions,
 } from "../validation.js";
-import { isOwnedBrowserEndpoint } from "./launcher.js";
+import {
+  normalizeEndpointHost,
+  noteOwnedBrowserDisconnected,
+  verifyOwnedBrowserEndpoint,
+} from "./launcher.js";
 import { withTimeout } from "./timeout.js";
 
 const CLIPBOARD_READ_COOLDOWN_MS = 5_000;
@@ -80,10 +84,24 @@ function registerClipboardCoordinator(
 
 function serializeClipboard<T>(
   conn: CDPConnection,
+  deadline: number | undefined,
   operation: () => Promise<T>
 ): Promise<T> {
   const coordinator = clipboardCoordinator(conn);
-  const result = coordinator.tail.then(operation);
+  // Bound only the wait for the tail: a wedged tail (e.g. a grant/reset
+  // reply Chrome never sends) must reject the caller instead of hanging
+  // every queued clipboard op. Once dequeued, the operation runs under its
+  // own internal deadline. A timed-out wait rejects before the operation
+  // starts, so no late side effect runs after the caller gave up.
+  const waitForTail =
+    deadline === undefined
+      ? coordinator.tail
+      : withTimeout(
+          coordinator.tail,
+          Math.max(1, deadline - Date.now()),
+          "clipboard:queue"
+        );
+  const result = waitForTail.then(operation);
   coordinator.tail = result.then(
     () => undefined,
     () => undefined
@@ -221,13 +239,47 @@ async function runMutation<T>(
   }
 }
 
+const CLIPBOARD_PERMISSION_DESCRIPTORS = ["clipboard-read", "clipboard-write"];
+
+/**
+ * Grant or restore clipboard permissions for one origin via targeted
+ * per-descriptor Browser.setPermission calls. Unlike Browser.grantPermissions
+ * (which rejects every unlisted permission) and Browser.resetPermissions
+ * (which wipes every override in the browser context), this touches only the
+ * clipboard descriptors, so it is safe on browsers TideSurf does not own.
+ * Returns false when the browser does not support the command.
+ */
+async function trySetClipboardPermissions(
+  conn: CDPConnection,
+  origin: string,
+  setting: "granted" | "prompt",
+  timeoutMs: number,
+  operation: string
+): Promise<boolean> {
+  try {
+    for (const name of CLIPBOARD_PERMISSION_DESCRIPTORS) {
+      await withTimeout(
+        conn.client.send("Browser.setPermission", {
+          permission: { name },
+          setting,
+          origin,
+        }),
+        Math.max(1, timeoutMs),
+        operation
+      );
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function withClipboardPermissionsUnlocked<T>(
   conn: CDPConnection,
-  timeout: number,
+  deadline: number,
   operation: (deadline: number) => Promise<T>,
   committedOperation?: string
 ): Promise<T> {
-  const deadline = Date.now() + timeout;
   const originResult = await runtimeEvaluate(
     conn,
     {
@@ -242,6 +294,58 @@ async function withClipboardPermissionsUnlocked<T>(
     originResult.result.value !== "null"
       ? originResult.result.value
       : undefined;
+
+  if (!conn.ownsBrowser && origin === undefined) {
+    // Without an origin, Browser.grantPermissions applies browser-wide. Never
+    // do that to a browser TideSurf does not own.
+    throw new TideSurfError(
+      "Clipboard access on an attached browser requires a non-opaque page origin; " +
+        "refusing to grant browser-wide clipboard permissions."
+    );
+  }
+
+  if (origin !== undefined) {
+    // Preferred path: targeted per-descriptor grants, revoked afterwards.
+    const acquired = await trySetClipboardPermissions(
+      conn,
+      origin,
+      "granted",
+      remainingTimeout(deadline),
+      "clipboard:setPermission:grant"
+    );
+    if (acquired) {
+      let operationFailed = true;
+      try {
+        await withTimeout(
+          conn.client.send("Page.bringToFront"),
+          remainingTimeout(deadline),
+          "clipboard:bringToFront"
+        );
+        const result = await operation(deadline);
+        operationFailed = false;
+        return result;
+      } finally {
+        const restored = await trySetClipboardPermissions(
+          conn,
+          origin,
+          "prompt",
+          Math.min(remainingTimeout(deadline), 1_000),
+          "clipboard:setPermission:restore"
+        );
+        if (!restored && !operationFailed) {
+          const restoreError = new TideSurfError(
+            "Failed to restore clipboard permissions after the operation"
+          );
+          throw committedOperation
+            ? new ActionCommittedError(committedOperation, restoreError)
+            : restoreError;
+        }
+      }
+    }
+    // Older Chromium without Browser.setPermission: fall through to the
+    // legacy browser-context grant flow.
+  }
+
   const params: Record<string, unknown> = {
     permissions: ["clipboardReadWrite", "clipboardSanitizedWrite"],
   };
@@ -295,7 +399,7 @@ async function withClipboardPermissionsUnlocked<T>(
       }
       if (!grantCompleted) {
         void grant
-          .then(() => serializeClipboard(conn, reset))
+          .then(() => serializeClipboard(conn, undefined, reset))
           .catch(() => undefined);
       }
     }
@@ -308,10 +412,13 @@ function withClipboardPermissions<T>(
   operation: (deadline: number) => Promise<T>,
   committedOperation?: string
 ): Promise<T> {
-  return serializeClipboard(conn, () =>
+  // The deadline starts at enqueue time so that waiting on the serialization
+  // tail consumes the operation's budget.
+  const deadline = Date.now() + timeout;
+  return serializeClipboard(conn, deadline, () =>
     withClipboardPermissionsUnlocked(
       conn,
-      timeout,
+      deadline,
       operation,
       committedOperation
     )
@@ -369,15 +476,17 @@ export async function connect(options: {
 
     const { DOM, Page, Runtime, Emulation } = client;
 
+    // All four commands are independent and CDP processes per-session commands
+    // in send order, so one Promise.all saves a round-trip per connect.
     await withTimeout(
-      Promise.all([DOM.enable(), Page.enable(), Runtime.enable()]),
+      Promise.all([
+        DOM.enable(),
+        Page.enable(),
+        Runtime.enable(),
+        Page.setLifecycleEventsEnabled({ enabled: true }),
+      ]),
       remainingTimeout(deadline),
       "CDP domain enable"
-    );
-    await withTimeout(
-      Page.setLifecycleEventsEnabled({ enabled: true }),
-      remainingTimeout(deadline),
-      "CDP lifecycle enable"
     );
 
     const conn = {
@@ -387,12 +496,25 @@ export async function connect(options: {
       Runtime,
       Emulation,
       disconnected: false,
-      ownsBrowser: isOwnedBrowserEndpoint(host, port),
+      // Re-verifies browser identity when the endpoint claims to be owned,
+      // so a foreign Chrome that recycled a dead owned browser's port is
+      // never treated as owned.
+      ownsBrowser: await verifyOwnedBrowserEndpoint(
+        host,
+        port,
+        Math.min(remainingTimeout(deadline), 1_000)
+      ),
     };
     client.once("disconnect", () => {
       conn.disconnected = true;
+      // Force ownership re-verification on the next connect: the owned
+      // browser may have died and its port may now serve a foreign Chrome.
+      noteOwnedBrowserDisconnected(host, port);
     });
-    registerClipboardCoordinator(conn, `${host}:${port}`);
+    registerClipboardCoordinator(
+      conn,
+      `${normalizeEndpointHost(host)}:${port}`
+    );
     return conn;
   } catch (err) {
     abandoned = true;
@@ -536,11 +658,30 @@ async function withResolvedNode<T>(
 ): Promise<T> {
   const deadline = Date.now() + timeout;
   const remaining = () => remainingTimeout(deadline);
-  const { object } = await withTimeout(
-    conn.DOM.resolveNode({ backendNodeId }),
-    remaining(),
-    `${operation}:resolve`
-  );
+  let object: { objectId?: string };
+  try {
+    ({ object } = await withTimeout(
+      conn.DOM.resolveNode({ backendNodeId }),
+      remaining(),
+      `${operation}:resolve`
+    ));
+  } catch (error) {
+    // A stale backendNodeId (navigation, DOM churn) makes Chrome reject
+    // resolveNode with a protocol error; surface it as the designed
+    // ElementNotFoundError so callers get the re-read recovery hint.
+    if (
+      error instanceof Error &&
+      /no node with given|node not found|could not find node/i.test(
+        error.message
+      )
+    ) {
+      throw new ElementNotFoundError(
+        `backendNodeId:${backendNodeId}`,
+        "The mapped node no longer exists."
+      );
+    }
+    throw error;
+  }
   const objectId = object.objectId;
   if (!objectId) throw new ElementNotFoundError(`backendNodeId:${backendNodeId}`);
 

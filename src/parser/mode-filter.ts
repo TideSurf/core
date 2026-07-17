@@ -1,4 +1,5 @@
 import type { OSNode } from "../types.js";
+import { escapeHtml } from "./serializer.js";
 import { graphemeCount, truncateGraphemes } from "./truncation.js";
 
 const MAX_FILTER_DEPTH = 500;
@@ -52,6 +53,20 @@ const EMPTY_TEXT: TextSummary = { value: "", count: 0 };
 
 function summarizeText(text: string | undefined, limit: number): TextSummary {
   const value = truncateGraphemes(text ?? "", limit);
+  return { value, count: value ? undefined : 0 };
+}
+
+/**
+ * Page-text pieces for offscreen/landmark summaries are escaped at
+ * composition time, so the TideSurf-generated interactive-count markers
+ * ("[1 link, 1 button]") they are combined with keep their literal brackets
+ * while page-controlled text can never forge element markers.
+ */
+function escapeSummaryText(
+  text: string | undefined,
+  limit: number
+): TextSummary {
+  const value = escapeHtml(truncateGraphemes(text ?? "", limit));
   return { value, count: value ? undefined : 0 };
 }
 
@@ -159,13 +174,13 @@ export function summarizeOffscreenNode(
   textLimit: number
 ): { counts: Record<string, number>; text: string } {
   const counts = emptyCounts();
-  const text = summarizeText(node.text, textLimit);
+  const text = escapeSummaryText(node.text, textLimit);
 
   const visit = (current: OSNode, depth: number): void => {
     if (depth > MAX_FILTER_DEPTH) return;
     addInteractiveId(counts, current.id);
     if (!isFull(text, textLimit)) {
-      appendText(text, summarizeText(current.text, textLimit), textLimit);
+      appendText(text, escapeSummaryText(current.text, textLimit), textLimit);
     }
     for (const child of current.children) visit(child, depth + 1);
   };
@@ -233,7 +248,7 @@ function summarizeMinimal(node: OSNode, depth: number): MinimalResult {
     addInteractiveId(counts, node.id);
   }
   const isLandmark = LANDMARK_TAGS.has(node.tag);
-  const text = summarizeText(node.text, SUMMARY_TEXT_LIMIT);
+  const text = escapeSummaryText(node.text, SUMMARY_TEXT_LIMIT);
   let childCounts: InteractiveCounts | undefined;
   let childLandmarks: LandmarkList | undefined;
 

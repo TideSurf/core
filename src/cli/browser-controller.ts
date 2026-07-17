@@ -47,11 +47,15 @@ function endpointFromUrl(value: string): { host: string; port: number } {
   return { host: url.hostname.replace(/^\[|\]$/g, ""), port };
 }
 
+/** Grace period for in-flight operations before close() proceeds anyway. */
+const CLOSE_DRAIN_TIMEOUT_MS = 10_000;
+
 export class BrowserController {
   private readonly config: SessionConfig;
   private browser: TideSurf | null = null;
   private source: "launched" | "attached" | undefined;
   private opening: Promise<TideSurf> | null = null;
+  private disposal: Promise<void> | null = null;
   private operationTail: Promise<void> = Promise.resolve();
   private closing: Promise<void> | null = null;
   private closed = false;
@@ -101,7 +105,15 @@ export class BrowserController {
     if (connected) return browser;
     this.browser = null;
     this.source = undefined;
-    void browser.close().catch(() => undefined);
+    // Track the disposal so acquire() can wait for the old Chrome to fully
+    // terminate before relaunching with the same profile (a fire-and-forget
+    // close races the relaunch into "profile is already active").
+    const disposal = browser.close()
+      .catch(() => undefined)
+      .finally(() => {
+        if (this.disposal === disposal) this.disposal = null;
+      });
+    this.disposal = disposal;
     return null;
   }
 
@@ -144,7 +156,13 @@ export class BrowserController {
     const browser = this.liveBrowser();
     if (browser) return browser;
     if (!this.opening) {
-      this.opening = this.acquire().then((browser) => {
+      this.opening = (async () => {
+        // Serialize acquisition behind any in-flight disposal of a dead
+        // handle's browser (fast-path: no disposal, no deferral).
+        const pendingDisposal = this.disposal;
+        if (pendingDisposal) await pendingDisposal;
+        return this.acquire();
+      })().then((browser) => {
         this.browser = browser;
         return browser;
       }).finally(() => {
@@ -309,8 +327,18 @@ export class BrowserController {
     if (this.closing) return this.closing;
     this.closed = true;
     this.closing = (async () => {
-      await this.operationTail;
+      // Bound the drain: closing the browser tears down the CDP socket,
+      // which is also what unblocks a wedged in-flight operation.
+      let drainTimer!: ReturnType<typeof setTimeout>;
+      await Promise.race([
+        this.operationTail,
+        new Promise<void>((resolve) => {
+          drainTimer = setTimeout(resolve, CLOSE_DRAIN_TIMEOUT_MS);
+        }),
+      ]);
+      clearTimeout(drainTimer);
       await this.opening?.catch(() => undefined);
+      await this.disposal;
       const browser = this.browser;
       this.browser = null;
       this.source = undefined;

@@ -13,7 +13,7 @@ import type {
 import * as cdp from "./connection.js";
 import { captureDOMSnapshot } from "./snapshot.js";
 import { walkDOM } from "../parser/dom-walker.js";
-import { serialize, wrapPage } from "../parser/serializer.js";
+import { serialize, wrapPage, pageHeader } from "../parser/serializer.js";
 import { pruneToFit } from "../parser/token-budget.js";
 import { filterViewportOnly } from "../parser/viewport-filter.js";
 import { filterInteractive, filterMinimal } from "../parser/mode-filter.js";
@@ -190,7 +190,14 @@ export class SurfingPage {
     }
 
     if (options.maxTokens) {
-      nodes = pruneToFit(nodes, { maxTokens: options.maxTokens, pageUrl: url });
+      // The header (title + URL meta) is prepended after pruning, so reserve
+      // its exact size from the budget first; otherwise output drifts over.
+      const headerSize = pageHeader(url, title, scrollPosition).length + 2;
+      nodes = pruneToFit(nodes, {
+        maxTokens: options.maxTokens,
+        pageUrl: url,
+        reservedChars: headerSize,
+      });
     }
 
     const body = serialize(nodes, 0, url);
@@ -388,10 +395,25 @@ export class SurfingPage {
       const maxX = Math.max(border[0], border[2], border[4], border[6]);
       const maxY = Math.max(border[1], border[3], border[5], border[7]);
 
+      // getBoxModel quads are relative to the visual viewport, but
+      // captureScreenshot with captureBeyondViewport interprets clip in page
+      // coordinates: add the scroll offset or a scrolled page mis-clips.
+      const metrics = (await withTimeout(
+        this.conn.client.send("Page.getLayoutMetrics"),
+        this.timeout ?? 5_000,
+        "screenshot:getLayoutMetrics"
+      )) as {
+        cssVisualViewport?: { pageLeft?: number; pageTop?: number };
+        visualViewport?: { pageLeft?: number; pageTop?: number };
+      };
+      const visualViewport = metrics.cssVisualViewport ?? metrics.visualViewport;
+      const pageLeft = visualViewport?.pageLeft ?? 0;
+      const pageTop = visualViewport?.pageTop ?? 0;
+
       return cdp.captureScreenshot(this.conn, {
         clip: {
-          x,
-          y,
+          x: x + pageLeft,
+          y: y + pageTop,
           width: maxX - x,
           height: maxY - y,
           scale: 1,

@@ -11,7 +11,9 @@ import {
 import {
   discoverBrowser,
   launchChrome,
+  releaseOwnedBrowserEndpoint,
   terminateChromeProcess,
+  unregisterOrphanedBrowser,
 } from "./cdp/launcher.js";
 import { connect, disconnect, type CDPConnection } from "./cdp/connection.js";
 import { SurfingPage, isSurfingPageConnected } from "./cdp/page.js";
@@ -713,7 +715,16 @@ export class TideSurf {
     }
 
     if (this.pendingPageWork.size > 0) {
-      await Promise.allSettled([...this.pendingPageWork]);
+      // Bound the drain: page.disconnect below tears down the CDP socket,
+      // which is also what unblocks wedged in-flight page work.
+      let drainTimer!: ReturnType<typeof setTimeout>;
+      await Promise.race([
+        Promise.allSettled([...this.pendingPageWork]),
+        new Promise<void>((resolve) => {
+          drainTimer = setTimeout(resolve, 10_000);
+        }),
+      ]);
+      clearTimeout(drainTimer);
     }
 
     const pages = new Set(this.pages.values());
@@ -730,6 +741,17 @@ export class TideSurf {
     const proc = this.chromeProcess;
     this.chromeProcess = null;
     const exited = proc ? await terminateChromeProcess(proc) : true;
+
+    if (proc) {
+      // The browser is gone: drop ownership and orphan-registry records so a
+      // foreign Chrome that later occupies this endpoint is never treated
+      // as TideSurf-owned.
+      if (typeof proc.pid === "number") {
+        unregisterOrphanedBrowser(process.pid, proc.pid);
+      }
+      const info = CONNECTION_INFO.get(this);
+      if (info) releaseOwnedBrowserEndpoint(info.host, info.port);
+    }
 
     let profileCleanup: { error: unknown } | undefined;
     if (this.ownsTempDir && exited) {

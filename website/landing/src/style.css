@@ -210,6 +210,11 @@ pre {
   margin-top: 0.55rem;
 }
 
+/* Level the row: match the install box height (2.75rem) at every breakpoint. */
+.hero-actions > .patch-control {
+  min-height: 2.75rem;
+}
+
 .install {
   width: min(33rem, 100%);
   min-height: 2.75rem;

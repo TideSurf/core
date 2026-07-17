@@ -77,19 +77,24 @@
   text-decoration: none;
   cursor: pointer;
   transition:
-    color var(--control-speed) ease,
-    background-color var(--control-speed) ease;
+    color 0.45s var(--ease-out),
+    background-color 0.45s var(--ease-out),
+    transform 0.45s var(--ease-out);
 }
 
 .patch-control:hover {
   color: var(--ink);
   background: color-mix(in srgb, var(--patch-color) 42%, var(--paper));
-  transform: none;
+  transform: scale(1.12) rotate(-3deg);
+  /* The scaled, rotated chip can overlap tight siblings (nav rows, theme switch); paint it above them. */
+  position: relative;
+  z-index: 1;
 }
 
 .patch-control:active {
   background: color-mix(in srgb, var(--patch-color) 54%, var(--paper));
-  transform: none;
+  transform: scale(0.96) rotate(0deg);
+  transition-duration: 0.08s;
 }
 
 .patch-control:focus-visible {
@@ -119,5 +124,12 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+
+  /* The global duration kill above leaves hover/active transforms applied
+     instantly; remove the scale/rotate itself for reduced-motion users. */
+  .patch-control:hover,
+  .patch-control:active {
+    transform: none;
   }
 }
