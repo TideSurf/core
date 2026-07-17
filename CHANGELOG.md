@@ -2,6 +2,42 @@
 
 ## Unreleased
 
+## 0.6.3 (2026-07-18)
+
+KIMI K3 edition.
+
+### Security
+
+- Clipboard operations on attached browsers (browsers TideSurf did not launch) now grant clipboard permission per origin through targeted `Browser.setPermission` calls and restore it to "prompt" afterwards, instead of leaving a persistent grant behind. Browser-wide grants on opaque origins are refused on attached browsers; the legacy grant/reset permission flow remains as a fallback on browsers TideSurf owns.
+- Serialized page text now escapes square brackets alongside the existing HTML escapes, so page-controlled text can no longer forge element action markers such as `[B1]` in `readPage` output. TideSurf-generated markers and count summaries keep their literal brackets.
+- Stale-session recovery now verifies a process's command line before signaling it, so a foreign process holding a recycled daemon pid is never terminated.
+- Owned-browser endpoint claims are re-verified against the browser's websocket identity after disconnects and released on close, and localhost/127.0.0.1 aliases are normalized. A foreign Chrome that recycles a dead owned browser's port is never treated as owned, so TideSurf never resets browser-wide permissions on a browser it does not own.
+
+### Fixed
+
+- `tidesurf stop` is handled out-of-band like ping and status and is exempt from queue deadlines: it can no longer be cancelled by its own queue deadline while stuck behind a long-running tool.
+- Orphaned owned Chrome processes and their temporary profiles are now reaped. Launches record the Chrome pid and profile in a shared registry (cleaned up on close), and every launch reaps browsers whose parent process died (SIGKILL/OOM), verifying the command line before signaling.
+- A failed Chrome spawn no longer stalls browser termination for about ten seconds: a spawn failure now counts as exited, and termination also waits for the process's close event.
+- Daemon and MCP shutdown drains are bounded: shutdown, controller close, and MCP close race in-flight work against a grace period instead of waiting unboundedly, so SIGINT, SIGTERM, or stdin EOF can no longer hang the process on a wedged tool.
+- Fixed-profile relaunches wait for the previous dead browser's close to finish, eliminating spurious "profile is already active" failures after transient disconnects.
+- The default retry predicate now retries only transient infrastructure failures (`CDPTimeoutError`, `CDPConnectionError`) and never retries `ActionCommittedError` or deterministic errors — the inverse of the old default, which could re-issue committed side effects.
+- Stale element IDs after navigation or DOM churn now surface `ElementNotFoundError` with the "read the page again" recovery hint instead of a raw CDP protocol error.
+- Element screenshots on scrolled pages now add the visual-viewport scroll offset, fixing mis-clipped captures.
+- `readPage` `maxTokens` now reserves the page header (title + URL line) from the budget, so output no longer drifts over budget on long-title pages; titles are whitespace-sanitized.
+- `readPage` `maxTokens` now counts CJK text at roughly one token per character instead of four characters per token, keeping Japanese, Chinese, and Korean pages within the real token budget.
+- Token-budget estimator fixes: h4-h6 heading prefixes, disabled option/optgroup strike markers (including inherited disabled state), and optgroup child indentation are now counted exactly.
+- URL compression strips tracking parameters textually, so untouched parameters keep their exact encoding (`%20` stays `%20`, bare flags stay bare) instead of being re-serialized.
+- CLI commands no longer hard-fail when the 500 ms session status probe times out on a busy daemon; they fall back to local config, and the daemon still enforces policy server-side.
+
+### Performance
+
+- Attribute walking now does a single pass over element attributes instead of cloning every attribute and filtering afterwards.
+- Decoded snapshot attribute arrays are materialized lazily on first access instead of eagerly for every element.
+- Post-processing text merging is buffered and joined once instead of concatenating per merge.
+- CDP connect folds lifecycle-event enablement into the domain-enable round-trip, saving one round trip per tab.
+- `waitForReady` polls with exponential backoff (25 to 250 ms) instead of a 10 ms sync-I/O poll.
+- The 10,000-element `readPage` scaling bench now measures interleaved minima instead of a single wall-clock p50 ratio, making it flake-resistant.
+
 ## 0.6.2 (2026-07-16)
 
 ### Changed
