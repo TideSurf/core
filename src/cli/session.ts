@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { execFileSync } from "node:child_process";
+import { execFile, type ChildProcess } from "node:child_process";
 import {
   closeSync,
   chmodSync,
@@ -17,7 +17,7 @@ import { join, resolve } from "node:path";
 import { connect as connectSocket } from "node:net";
 import type { ChromeChannel, ToolResult } from "../types.js";
 import { VERSION } from "../version.js";
-import { buildDaemonArgv, DAEMON_COMMAND } from "./daemon-argv.js";
+import { buildDaemonArgv, matchesDaemonArgv } from "./daemon-argv.js";
 import { isValidSessionName, SESSION_NAME_ERROR } from "./session-name.js";
 import { MAX_SESSION_EXECUTION_TIMEOUT_MS } from "./timeouts.js";
 
@@ -139,6 +139,17 @@ export class SessionStateError extends Error {
   }
 }
 
+class DeadSessionStartupError extends SessionProtocolError {
+  readonly state: SessionState;
+
+  constructor(state: SessionState, logFile: string) {
+    super(
+      `Session daemon ${state.pid} exited before becoming ready. Log: ${logFile}`
+    );
+    this.state = state;
+  }
+}
+
 export function validateSessionName(name: string): string {
   if (!isValidSessionName(name)) throw new SessionProtocolError(SESSION_NAME_ERROR);
   return name;
@@ -255,11 +266,95 @@ export function writeSessionState(paths: SessionPaths, state: SessionState): voi
   renameSync(temporary, paths.stateFile);
 }
 
+function isSameSessionGeneration(
+  current: SessionState | null,
+  expected: SessionState
+): current is SessionState {
+  return Boolean(
+    current &&
+    current.session === expected.session &&
+    current.socketPath === expected.socketPath &&
+    current.secret === expected.secret &&
+    current.startupId === expected.startupId
+  );
+}
+
+/** True while the canonical state file still belongs to `expected`. */
+export function isSessionStateCurrent(
+  paths: SessionPaths,
+  expected: SessionState
+): boolean {
+  return isSameSessionGeneration(readSessionState(paths), expected);
+}
+
+/** Replace state only while the canonical file still belongs to this startup. */
+export function writeSessionStateIfCurrent(
+  paths: SessionPaths,
+  expected: SessionState,
+  next: SessionState
+): boolean {
+  const lock = readStartupLock(paths);
+  if (
+    !isSameSessionGeneration(readSessionState(paths), expected) ||
+    (lock !== null && lock.startupId !== expected.startupId)
+  ) {
+    return false;
+  }
+  writeSessionState(paths, next);
+  return true;
+}
+
 export function removeSessionFiles(paths: SessionPaths, removeLog = false): void {
   rmSync(paths.stateFile, { force: true });
   rmSync(paths.lockFile, { force: true });
   if (process.platform !== "win32") rmSync(paths.socketPath, { force: true });
   if (removeLog) rmSync(paths.logFile, { force: true });
+}
+
+/**
+ * Remove shared session artifacts only while they still belong to `expected`.
+ * The state file is removed last so a replacement generation makes every
+ * preceding identity check fail closed rather than losing its endpoint.
+ */
+export function removeSessionFilesIfCurrent(
+  paths: SessionPaths,
+  expected: SessionState,
+  removeLog = false
+): boolean {
+  const stillOwned = () => {
+    const lock = readStartupLock(paths);
+    return (
+      isSameSessionGeneration(readSessionState(paths), expected) &&
+      (lock === null || lock.startupId === expected.startupId)
+    );
+  };
+  if (!stillOwned()) return false;
+
+  if (process.platform !== "win32") {
+    rmSync(paths.socketPath, { force: true });
+  }
+  if (!stillOwned()) return false;
+
+  if (removeLog) {
+    rmSync(paths.logFile, { force: true });
+    if (!stillOwned()) return false;
+  }
+
+  rmSync(paths.stateFile, { force: true });
+  // Keep this generation's lock until every shared artifact is gone. A rival
+  // startup must claim a different lock before it can publish replacement
+  // state, which makes the checks above fail before touching its files.
+  removeStartupLock(paths, expected.startupId);
+  return true;
+}
+
+/** Remove only this generation's startup lock. */
+export function removeSessionLockIfCurrent(
+  paths: SessionPaths,
+  expected: SessionState
+): boolean {
+  if (!isSessionStateCurrent(paths, expected)) return false;
+  return removeStartupLock(paths, expected.startupId);
 }
 
 export function isProcessRunning(pid: number): boolean {
@@ -277,57 +372,177 @@ export function isProcessRunning(pid: number): boolean {
   }
 }
 
-function queryWindowsCommandLine(pid: number): string | undefined {
-  try {
-    return execFileSync(
-      "powershell",
-      [
-        "-NoProfile",
-        "-Command",
-        `(Get-CimInstance Win32_Process -Filter 'ProcessId=${pid}').CommandLine`,
-      ],
-      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 5_000 }
-    );
-  } catch {
-    return undefined;
+const PROCESS_IDENTITY_QUERY_MS = 5_000;
+
+function parsePosixCommandLine(commandLine: string): string[] | undefined {
+  const argv: string[] = [];
+  let token = "";
+  let tokenStarted = false;
+  let quote: "'" | '"' | null = null;
+  let escaped = false;
+
+  for (const character of commandLine.trim()) {
+    if (escaped) {
+      token += character;
+      tokenStarted = true;
+      escaped = false;
+      continue;
+    }
+    if (character === "\\" && quote !== "'") {
+      escaped = true;
+      tokenStarted = true;
+      continue;
+    }
+    if (quote) {
+      if (character === quote) quote = null;
+      else token += character;
+      tokenStarted = true;
+      continue;
+    }
+    if (character === "'" || character === '"') {
+      quote = character;
+      tokenStarted = true;
+      continue;
+    }
+    if (/\s/.test(character)) {
+      if (tokenStarted) {
+        argv.push(token);
+        token = "";
+        tokenStarted = false;
+      }
+      continue;
+    }
+    token += character;
+    tokenStarted = true;
   }
+  if (escaped) token += "\\";
+  if (quote) return undefined;
+  if (tokenStarted) argv.push(token);
+  return argv;
 }
 
-function processCommandLine(pid: number): string | undefined {
-  if (process.platform !== "win32") {
-    try {
-      return execFileSync("ps", ["-p", String(pid), "-o", "command="], {
+// CommandLineToArgvW-compatible handling for quoted paths and backslashes.
+function parseWindowsCommandLine(commandLine: string): string[] | undefined {
+  const argv: string[] = [];
+  let index = 0;
+  while (index < commandLine.length) {
+    while (/\s/.test(commandLine[index] ?? "")) index++;
+    if (index >= commandLine.length) break;
+    let token = "";
+    let inQuotes = false;
+    while (index < commandLine.length) {
+      let backslashes = 0;
+      while (commandLine[index] === "\\") {
+        backslashes++;
+        index++;
+      }
+      if (commandLine[index] === '"') {
+        token += "\\".repeat(Math.floor(backslashes / 2));
+        if (backslashes % 2 === 1) {
+          token += '"';
+        } else {
+          inQuotes = !inQuotes;
+        }
+        index++;
+        continue;
+      }
+      token += "\\".repeat(backslashes);
+      const character = commandLine[index];
+      if (character === undefined || (!inQuotes && /\s/.test(character))) break;
+      token += character;
+      index++;
+    }
+    if (inQuotes) return undefined;
+    argv.push(token);
+    while (/\s/.test(commandLine[index] ?? "")) index++;
+  }
+  return argv;
+}
+
+function execFileText(
+  executable: string,
+  args: string[],
+  deadline: number
+): Promise<string | undefined> {
+  const timeout = deadline - Date.now();
+  if (timeout <= 0) return Promise.resolve(undefined);
+  return new Promise((resolveOutput) => {
+    execFile(
+      executable,
+      args,
+      {
         encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-      });
+        windowsHide: true,
+        timeout,
+      },
+      (error, stdout) => resolveOutput(error ? undefined : stdout)
+    );
+  });
+}
+
+async function processArgv(
+  pid: number,
+  deadline = Date.now() + PROCESS_IDENTITY_QUERY_MS
+): Promise<string[] | undefined> {
+  if (process.platform === "linux") {
+    try {
+      const commandLine = readFileSync(`/proc/${pid}/cmdline`, "utf8");
+      const argv = commandLine.split("\0");
+      if (argv.at(-1) === "") argv.pop();
+      return argv.length > 0 ? argv : undefined;
     } catch {
       return undefined;
     }
   }
-  // A loaded Windows host can take seconds to answer a CIM query. Timing
-  // out must fail closed (never signal), but it must not permanently blind
-  // stale-daemon recovery, so allow one retry before giving up.
-  return queryWindowsCommandLine(pid) ?? queryWindowsCommandLine(pid);
-}
 
-/**
- * Confirm the process at `pid` really is this session's daemon before
- * signaling it. A daemon that died without cleanup (SIGKILL, crash) leaves
- * its state file behind; if the OS recycled the pid, kill(pid, 0) alone
- * would deliver SIGTERM/SIGKILL to an innocent process holding that pid.
- */
-function isExpectedDaemonProcess(pid: number, paths: SessionPaths): boolean {
-  const commandLine = processCommandLine(pid);
-  if (commandLine === undefined) return false; // cannot verify: do not signal
-  return (
-    commandLine.includes(DAEMON_COMMAND) &&
-    commandLine.includes(paths.stateFile)
+  if (process.platform === "win32") {
+    // One asynchronous CIM query gets one absolute deadline. A timeout or
+    // parse failure fails closed; it never blocks the event loop or retries
+    // with a second independent five-second budget.
+    const commandLine = await execFileText(
+      "powershell",
+      [
+        "-NoProfile",
+        "-Command",
+        `(Get-CimInstance Win32_Process -Filter 'ProcessId=${pid}' | Select-Object -ExpandProperty CommandLine)`,
+      ],
+      deadline
+    );
+    return commandLine === undefined
+      ? undefined
+      : parseWindowsCommandLine(commandLine.trim());
+  }
+
+  const commandLine = await execFileText(
+    "ps",
+    ["-ww", "-p", String(pid), "-o", "command="],
+    deadline
   );
+  return commandLine === undefined
+    ? undefined
+    : parsePosixCommandLine(commandLine);
 }
 
-async function terminateDaemon(pid: number, paths: SessionPaths): Promise<void> {
+/** Confirm the complete daemon argv identity before signaling a stale pid. */
+async function isExpectedDaemonProcess(
+  state: SessionState,
+  paths: SessionPaths
+): Promise<boolean> {
+  if (!state.startupId) return false;
+  const argv = await processArgv(state.pid);
+  return Boolean(argv && matchesDaemonArgv(argv, {
+    stateFile: paths.stateFile,
+    startupToken: state.startupId,
+  }));
+}
+
+async function terminateDaemon(
+  state: SessionState,
+  paths: SessionPaths
+): Promise<void> {
+  const { pid } = state;
   if (pid === process.pid) return;
-  if (!isExpectedDaemonProcess(pid, paths)) return;
+  if (!(await isExpectedDaemonProcess(state, paths))) return;
   try {
     process.kill(pid, "SIGTERM");
   } catch {
@@ -338,6 +553,10 @@ async function terminateDaemon(pid: number, paths: SessionPaths): Promise<void> 
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
   }
   if (!isProcessRunning(pid)) return;
+
+  // The pid can be recycled after SIGTERM. Re-read its complete argv before
+  // escalating so SIGKILL is never sent on the strength of an old handle.
+  if (!(await isExpectedDaemonProcess(state, paths))) return;
   try {
     process.kill(pid, "SIGKILL");
   } catch {
@@ -349,9 +568,11 @@ async function terminateDaemon(pid: number, paths: SessionPaths): Promise<void> 
   }
 }
 
-function removeEndpointFiles(paths: SessionPaths): void {
-  rmSync(paths.stateFile, { force: true });
-  if (process.platform !== "win32") rmSync(paths.socketPath, { force: true });
+function removeEndpointFiles(
+  paths: SessionPaths,
+  state: SessionState
+): boolean {
+  return removeSessionFilesIfCurrent(paths, state);
 }
 
 function isStaleEndpointError(error: unknown): boolean {
@@ -503,9 +724,7 @@ async function waitForReady(
     ) {
       deadSince ??= Date.now();
       if (Date.now() - deadSince >= 500) {
-        throw new SessionProtocolError(
-          `Session daemon ${state.pid} exited before becoming ready. Log: ${paths.logFile}`
-        );
+        throw new DeadSessionStartupError(state, paths.logFile);
       }
     } else {
       deadSince = undefined;
@@ -587,16 +806,36 @@ function readStartupLock(paths: SessionPaths): StartupLock | null {
   }
 }
 
-// Delete only the lock we judged stale: re-read and abort if it changed
-// hands. A lock replaced in the window between this re-read and rmSync can
-// still be lost; the daemon startup-token check keeps that residual window
-// from producing two live daemons.
+function removeStartupLock(
+  paths: SessionPaths,
+  startupId: string | undefined
+): boolean {
+  if (!startupId) return false;
+  const latest = readStartupLock(paths);
+  if (latest?.startupId !== startupId) return false;
+  rmSync(paths.lockFile, { force: true });
+  return true;
+}
+
+// Delete only the exact lock instance we observed. A replacement startup can
+// reuse the canonical path without an older finally block deleting its lock.
 function removeObservedLock(
   paths: SessionPaths,
   observed: StartupLock | null
 ): void {
   const latest = readStartupLock(paths);
-  if (latest?.startupId !== observed?.startupId) return;
+  if (observed) {
+    if (
+      !latest ||
+      latest.pid !== observed.pid ||
+      latest.startupId !== observed.startupId ||
+      latest.createdAt !== observed.createdAt
+    ) {
+      return;
+    }
+  } else if (latest !== null) {
+    return;
+  }
   rmSync(paths.lockFile, { force: true });
 }
 
@@ -613,7 +852,7 @@ export interface SessionRequestResult<T> {
   data: T;
 }
 
-export async function ensureSession(
+async function ensureSessionAttempt(
   options: EnsureSessionOptions
 ): Promise<SessionState> {
   const paths = getSessionPaths(options.session);
@@ -636,8 +875,8 @@ export async function ensureSession(
       return verifyCompatibleSession(current, options);
     } catch (error) {
       if (isProcessRunning(current.pid) && !isStaleEndpointError(error)) throw error;
-      if (isProcessRunning(current.pid)) await terminateDaemon(current.pid, paths);
-      removeEndpointFiles(paths);
+      if (isProcessRunning(current.pid)) await terminateDaemon(current, paths);
+      removeEndpointFiles(paths, current);
     }
   }
 
@@ -655,27 +894,31 @@ export async function ensureSession(
       await sendSessionRequest(latest, { method: "ping" }, 500);
       return verifyCompatibleSession(latest, options);
     }
-    removeEndpointFiles(paths);
+    removeEndpointFiles(paths, current);
     removeObservedLock(paths, lock);
   }
   if (current?.ready && !isProcessRunning(current.pid)) {
-    removeEndpointFiles(paths);
+    removeEndpointFiles(paths, current);
   }
 
   let ownsLock = false;
+  let ownedLock: StartupLock | null = null;
+  let ownedState: SessionState | null = null;
   const startupId = randomUUID();
   try {
     const lockDeadline = Date.now() + timeoutMs;
     while (!ownsLock && Date.now() < lockDeadline) {
       try {
-        writeFileSync(paths.lockFile, `${JSON.stringify({
+        const candidateLock: StartupLock = {
           pid: process.pid,
           startupId,
           createdAt: Date.now(),
-        } satisfies StartupLock)}\n`, {
+        };
+        writeFileSync(paths.lockFile, `${JSON.stringify(candidateLock)}\n`, {
           flag: "wx",
           mode: 0o600,
         });
+        ownedLock = candidateLock;
         ownsLock = true;
       } catch (error) {
         const code = (error as NodeJS.ErrnoException).code;
@@ -718,8 +961,8 @@ export async function ensureSession(
         return verifyCompatibleSession(raced, options);
       } catch (error) {
         if (isProcessRunning(raced.pid) && !isStaleEndpointError(error)) throw error;
-        if (isProcessRunning(raced.pid)) await terminateDaemon(raced.pid, paths);
-        removeEndpointFiles(paths);
+        if (isProcessRunning(raced.pid)) await terminateDaemon(raced, paths);
+        removeEndpointFiles(paths, raced);
       }
     }
 
@@ -736,6 +979,7 @@ export async function ensureSession(
       startupId,
     };
     writeSessionState(paths, pending);
+    ownedState = pending;
 
     const entryPath = resolve(options.entryPath ?? process.argv[1]);
     if (!existsSync(entryPath)) {
@@ -744,9 +988,10 @@ export async function ensureSession(
 
     const logFd = openSync(paths.logFile, "a", 0o600);
     if (process.platform !== "win32") chmodSync(paths.logFile, 0o600);
+    let child!: ChildProcess;
     try {
       const { spawn } = await import("node:child_process");
-      const child = spawn(
+      child = spawn(
         process.execPath,
         [entryPath, ...buildDaemonArgv({
           stateFile: paths.stateFile,
@@ -764,20 +1009,60 @@ export async function ensureSession(
       closeSync(logFd);
     }
 
-    return verifyCompatibleSession(await waitForReady(paths, timeoutMs), options);
+    let rejectChildExit!: (error: DeadSessionStartupError) => void;
+    const childExit = new Promise<never>((_resolve, reject) => {
+      rejectChildExit = reject;
+    });
+    const onChildExit = () => rejectChildExit(
+      new DeadSessionStartupError(
+        { ...pending, pid: child.pid ?? pending.pid },
+        paths.logFile
+      )
+    );
+    child.once("exit", onChildExit);
+    child.once("error", onChildExit);
+    if (child.exitCode !== null || child.signalCode !== null) onChildExit();
+    try {
+      return verifyCompatibleSession(
+        await Promise.race([waitForReady(paths, timeoutMs), childExit]),
+        options
+      );
+    } finally {
+      child.removeListener("exit", onChildExit);
+      child.removeListener("error", onChildExit);
+    }
   } catch (error) {
     const state = readSessionState(paths);
     if (
-      !state ||
-      !isProcessRunning(state.pid) ||
-      (state.startupId === startupId && state.pid === process.pid)
+      state &&
+      ownedState &&
+      isSameSessionGeneration(state, ownedState) &&
+      (!isProcessRunning(state.pid) || state.pid === process.pid)
     ) {
-      removeEndpointFiles(paths);
+      removeEndpointFiles(paths, ownedState);
     }
     throw error;
   } finally {
-    if (ownsLock) rmSync(paths.lockFile, { force: true });
+    if (ownsLock) removeObservedLock(paths, ownedLock);
   }
+}
+
+export async function ensureSession(
+  options: EnsureSessionOptions
+): Promise<SessionState> {
+  const paths = getSessionPaths(options.session);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      return await ensureSessionAttempt(options);
+    } catch (error) {
+      if (!(error instanceof DeadSessionStartupError) || attempt > 0) throw error;
+      // A joined or freshly spawned pending daemon died. Remove only that
+      // generation and make one bounded retry within this ensureSession call.
+      removeEndpointFiles(paths, error.state);
+      removeStartupLock(paths, error.state.startupId);
+    }
+  }
+  throw new SessionProtocolError("Session startup retry was exhausted");
 }
 
 /**
@@ -801,8 +1086,8 @@ export async function ensureSessionRequest<T>(
       };
     } catch (error) {
       if (!isStaleEndpointError(error)) throw error;
-      if (isProcessRunning(compatible.pid)) await terminateDaemon(compatible.pid, paths);
-      removeEndpointFiles(paths);
+      if (isProcessRunning(compatible.pid)) await terminateDaemon(compatible, paths);
+      removeEndpointFiles(paths, compatible);
     }
   }
 
@@ -831,7 +1116,7 @@ export async function sendLiveSessionRequest<T>(
     );
   }
   if (!state || !running) {
-    if (state) removeSessionFiles(paths);
+    if (state) removeSessionFilesIfCurrent(paths, state);
     return null;
   }
   if (!state.ready && request.method === "status") {
@@ -867,8 +1152,8 @@ export async function sendLiveSessionRequest<T>(
     };
   } catch (error) {
     if (!isStaleEndpointError(error)) throw error;
-    if (isProcessRunning(ready.pid)) await terminateDaemon(ready.pid, paths);
-    removeSessionFiles(paths);
+    if (isProcessRunning(ready.pid)) await terminateDaemon(ready, paths);
+    removeSessionFilesIfCurrent(paths, ready);
     return null;
   }
 }

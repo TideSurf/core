@@ -57,6 +57,7 @@ export class BrowserController {
   private opening: Promise<TideSurf> | null = null;
   private disposal: Promise<void> | null = null;
   private operationTail: Promise<void> = Promise.resolve();
+  private readonly browserFreeOperations = new Set<Promise<unknown>>();
   private closing: Promise<void> | null = null;
   private closed = false;
   private readonly dispatchOptions: ToolDispatchOptions;
@@ -307,11 +308,31 @@ export class BrowserController {
     // and the serialized queue: they only read the filesystem and must not
     // wedge behind a stuck browser operation.
     if (tool.requiresBrowser === false) {
-      return executeValidatedToolSpec(null, tool, input, context);
+      return this.runBrowserFree(() =>
+        executeValidatedToolSpec(null, tool, input, context)
+      );
     }
     return this.runSerialized(async () =>
       executeValidatedToolSpec(await this.getBrowser(), tool, input, context)
     );
+  }
+
+  private runBrowserFree<T>(operation: () => Promise<T>): Promise<T> {
+    if (this.closed) {
+      return Promise.reject(new CDPConnectionError("Browser controller is closed"));
+    }
+    let result: Promise<T>;
+    try {
+      result = operation();
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    this.browserFreeOperations.add(result);
+    void result.then(
+      () => this.browserFreeOperations.delete(result),
+      () => this.browserFreeOperations.delete(result)
+    );
+    return result;
   }
 
   private runSerialized<T>(operation: () => Promise<T>): Promise<T> {
@@ -337,7 +358,10 @@ export class BrowserController {
       // which is also what unblocks a wedged in-flight operation.
       let drainTimer!: ReturnType<typeof setTimeout>;
       await Promise.race([
-        this.operationTail,
+        Promise.allSettled([
+          this.operationTail,
+          ...this.browserFreeOperations,
+        ]),
         new Promise<void>((resolve) => {
           drainTimer = setTimeout(resolve, CLOSE_DRAIN_TIMEOUT_MS);
         }),

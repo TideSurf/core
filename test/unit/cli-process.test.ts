@@ -326,10 +326,12 @@ describe("CLI process behavior", () => {
 });
 
 describe("orphaned daemon recovery", () => {
-  async function spawnFakeDaemon(stateFile?: string): Promise<ChildProcess> {
-    // The fake daemon must carry the daemon argv markers: terminateDaemon
-    // verifies the victim's command line before signaling it, so a bare
-    // sleeper process (no __daemon marker) is correctly left alone.
+  async function spawnFakeDaemon(
+    stateFile?: string,
+    startupToken = "test"
+  ): Promise<ChildProcess> {
+    // The fake daemon must carry the exact daemon argv contract: recovery
+    // verifies every token before signaling the recorded pid.
     const args = stateFile
       ? [
           "-e",
@@ -338,7 +340,7 @@ describe("orphaned daemon recovery", () => {
           "--state-file",
           stateFile,
           "--startup-token",
-          "test",
+          startupToken,
         ]
       : ["-e", "setInterval(() => {}, 1000)"];
     const child = spawn(process.execPath, args, { stdio: "ignore" });
@@ -371,6 +373,7 @@ describe("orphaned daemon recovery", () => {
       },
       pid,
       ready: true,
+      startupId: "test",
     };
   }
 
@@ -407,6 +410,24 @@ describe("orphaned daemon recovery", () => {
       expect(readSessionState(paths)).toBeNull();
     } finally {
       foreign.kill("SIGKILL");
+      removeSessionFiles(paths, true);
+    }
+  }, 20_000);
+
+  it("does not signal a daemon-argv decoy with the wrong startup token", async () => {
+    const session = `orphan-decoy-${crypto.randomUUID()}`;
+    const paths = getSessionPaths(session);
+    const decoy = await spawnFakeDaemon(paths.stateFile, "not-this-generation");
+    writeSessionState(paths, orphanReadyState(session, paths, decoy.pid!));
+    try {
+      const response = await sendLiveSessionRequest(session, { method: "stop" }, 5_000);
+      expect(response).toBeNull();
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
+      expect(isProcessRunning(decoy.pid!)).toBe(true);
+      expect(readSessionState(paths)).toBeNull();
+    } finally {
+      decoy.kill("SIGKILL");
+      await awaitExit(decoy);
       removeSessionFiles(paths, true);
     }
   }, 20_000);

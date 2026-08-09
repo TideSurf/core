@@ -127,6 +127,45 @@ describe("BrowserController dead browser recovery", () => {
   });
 });
 
+describe("BrowserController browser-free lifecycle", () => {
+  it("tracks accepted browser-free work during close and rejects it after close", async () => {
+    const controller = new BrowserController(sessionConfig());
+    let release!: () => void;
+    let markStarted!: () => void;
+    const gate = new Promise<void>((resolveGate) => {
+      release = resolveGate;
+    });
+    const started = new Promise<void>((resolveStarted) => {
+      markStarted = resolveStarted;
+    });
+    const runBrowserFree = Reflect.get(controller, "runBrowserFree") as (
+      operation: () => Promise<string>
+    ) => Promise<string>;
+    const operation = runBrowserFree.call(controller, async () => {
+      markStarted();
+      await gate;
+      return "done";
+    });
+    await started;
+
+    const closing = controller.close();
+    let closeSettled = false;
+    void closing.then(
+      () => { closeSettled = true; },
+      () => { closeSettled = true; }
+    );
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 20));
+    expect(closeSettled).toBe(false);
+
+    release();
+    await expect(operation).resolves.toBe("done");
+    await expect(closing).resolves.toBeUndefined();
+    await expect(controller.execute("list_skills", {})).rejects.toBeInstanceOf(
+      CDPConnectionError
+    );
+  });
+});
+
 describe("BrowserController pinned endpoints", () => {
   it("fails fast in connect mode without falling back to other browsers", async () => {
     const controller = new BrowserController(

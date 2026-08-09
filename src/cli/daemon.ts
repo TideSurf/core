@@ -6,15 +6,18 @@ import { BrowserController } from "./browser-controller.js";
 import {
   SESSION_PROTOCOL_VERSION,
   getSessionPaths,
+  isSessionStateCurrent,
   readSessionState,
-  removeSessionFiles,
-  writeSessionState,
+  removeSessionFilesIfCurrent,
+  removeSessionLockIfCurrent,
+  writeSessionStateIfCurrent,
   SessionProtocolError,
   type SessionRequest,
   type SessionState,
 } from "./session.js";
 import type { SessionConfig } from "./session.js";
 import type { ToolResult } from "../types.js";
+import { getToolSpec } from "../tools/registry.js";
 
 const MAX_REQUEST_BYTES = 1024 * 1024;
 const REQUEST_IDLE_TIMEOUT_MS = 30_000;
@@ -168,7 +171,14 @@ export async function runDaemon(
       "Session state file no longer carries this daemon's startup token"
     );
   }
-  writeSessionState(paths, { ...initial, pid: process.pid, ready: false });
+  const claimed: SessionState = {
+    ...initial,
+    pid: process.pid,
+    ready: false,
+  };
+  if (!writeSessionStateIfCurrent(paths, initial, claimed)) {
+    throw new SessionProtocolError("Session state file changed during startup");
+  }
 
   const controller = options.controllerFactory
     ? options.controllerFactory(initial.config)
@@ -179,6 +189,7 @@ export async function runDaemon(
   let serverClosing: Promise<void> | null = null;
   let resourceCleanup: Promise<Error | undefined> | null = null;
   let queue: Promise<void> = Promise.resolve();
+  const outOfBandTools = new Set<Promise<void>>();
   let stopping = false;
   const sockets = new Set<Socket>();
 
@@ -202,16 +213,11 @@ export async function runDaemon(
       }
       if (failures.length === 0) {
         try {
-          removeSessionFiles(paths);
+          // A replacement may have claimed the canonical paths while this
+          // generation was shutting down. In that case cleanup is a no-op.
+          removeSessionFilesIfCurrent(paths, claimed, true);
         } catch (error) {
           failures.push(`session cleanup: ${errorDetails(error).error}`);
-        }
-      }
-      if (failures.length === 0) {
-        try {
-          rmSync(paths.logFile, { force: true });
-        } catch (error) {
-          failures.push(`log cleanup: ${errorDetails(error).error}`);
         }
       }
       if (failures.length === 0) return undefined;
@@ -232,7 +238,7 @@ export async function runDaemon(
       // stall shutdown until SIGKILL (which would orphan the owned Chrome).
       let drainTimer!: ReturnType<typeof setTimeout>;
       await Promise.race([
-        queue,
+        Promise.allSettled([queue, ...outOfBandTools]),
         new Promise<void>((resolve) => {
           drainTimer = setTimeout(resolve, SHUTDOWN_QUEUE_DRAIN_MS);
         }),
@@ -376,6 +382,9 @@ export async function runDaemon(
         }
       };
 
+      const browserFree =
+        authenticated.request.method === "tool" &&
+        getToolSpec(authenticated.request.name)?.requiresBrowser === false;
       if (
         authenticated.request.method === "ping" ||
         authenticated.request.method === "status" ||
@@ -384,12 +393,31 @@ export async function runDaemon(
         // Control-plane messages run out-of-band: a stop queued behind a
         // long-running tool would be cancelled by its own queue deadline.
         void task();
+      } else if (browserFree) {
+        // Filesystem-only tools do not touch browser state, so they may bypass
+        // a wedged browser queue. Track them separately so signal shutdown
+        // still drains their promises before process cleanup.
+        const running = task();
+        outOfBandTools.add(running);
+        void running.then(
+          () => outOfBandTools.delete(running),
+          () => outOfBandTools.delete(running)
+        );
       } else {
         queue = queue.then(task, task);
       }
     });
     socket.on("error", () => socket.destroy());
   };
+
+  if (!isSessionStateCurrent(paths, claimed)) {
+    try {
+      await controller.close();
+    } catch (closeError) {
+      console.error(`[tidesurf] Browser shutdown failed: ${errorDetails(closeError).error}`);
+    }
+    throw new SessionProtocolError("Session state file changed during startup");
+  }
 
   if (process.platform !== "win32") {
     if (await endpointInUse(paths.socketPath)) {
@@ -401,6 +429,16 @@ export async function runDaemon(
       throw new SessionProtocolError(
         `Session "${initial.session}" is already served by a live daemon socket`
       );
+    }
+    // The endpoint probe is asynchronous; a replacement can publish state
+    // while it is in flight. Re-check before unlinking the canonical socket.
+    if (!isSessionStateCurrent(paths, claimed)) {
+      try {
+        await controller.close();
+      } catch (closeError) {
+        console.error(`[tidesurf] Browser shutdown failed: ${errorDetails(closeError).error}`);
+      }
+      throw new SessionProtocolError("Session state file changed during startup");
     }
     rmSync(paths.socketPath, { force: true });
   }
@@ -420,10 +458,11 @@ export async function runDaemon(
     } catch (closeError) {
       console.error(`[tidesurf] Browser shutdown failed: ${errorDetails(closeError).error}`);
     }
-    // EADDRINUSE means another daemon owns the endpoint; its files are not ours to remove.
+    // EADDRINUSE means another daemon owns the endpoint; shared files are
+    // removed only if this startup generation still owns them.
     if ((error as NodeJS.ErrnoException).code !== "EADDRINUSE") {
       try {
-        removeSessionFiles(paths);
+        removeSessionFilesIfCurrent(paths, claimed);
       } catch (cleanupError) {
         console.error(`[tidesurf] Session cleanup failed: ${errorDetails(cleanupError).error}`);
       }
@@ -463,8 +502,10 @@ export async function runDaemon(
     startedAt: new Date().toISOString(),
   };
   try {
-    writeSessionState(paths, ready);
-    rmSync(paths.lockFile, { force: true });
+    if (!writeSessionStateIfCurrent(paths, current, ready)) {
+      throw new SessionProtocolError("Session state file changed during startup");
+    }
+    removeSessionLockIfCurrent(paths, ready);
   } catch (error) {
     await shutdown(1);
     throw error;

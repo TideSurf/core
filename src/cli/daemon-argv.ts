@@ -17,17 +17,44 @@ export function buildDaemonArgv(args: DaemonStartArgs): string[] {
   ];
 }
 
+function daemonArgvError(): Error {
+  const error = new Error(
+    "Daemon requires exactly __daemon --state-file <path> --startup-token <token>"
+  );
+  error.name = "SessionProtocolError";
+  return error;
+}
+
 export function parseDaemonArgv(argv: string[]): DaemonStartArgs {
-  const optionValue = (flag: string): string | undefined => {
-    const index = argv.indexOf(flag);
-    return index === -1 ? undefined : argv[index + 1];
-  };
-  const stateFile = optionValue("--state-file");
-  const startupToken = optionValue("--startup-token");
-  if (!stateFile || !startupToken) {
-    const error = new Error("Daemon requires --state-file and --startup-token");
-    error.name = "SessionProtocolError";
-    throw error;
+  if (
+    argv.length !== 5 ||
+    argv[0] !== DAEMON_COMMAND ||
+    argv[1] !== "--state-file" ||
+    !argv[2] ||
+    argv[3] !== "--startup-token" ||
+    !argv[4]
+  ) {
+    throw daemonArgvError();
   }
-  return { stateFile, startupToken };
+  return { stateFile: argv[2], startupToken: argv[4] };
+}
+
+/** Match the complete internal daemon argv suffix using exact tokens. */
+export function matchesDaemonArgv(
+  argv: readonly string[],
+  expected: DaemonStartArgs
+): boolean {
+  for (let index = 0; index < argv.length; index++) {
+    if (argv[index] !== DAEMON_COMMAND) continue;
+    try {
+      const parsed = parseDaemonArgv(argv.slice(index));
+      return (
+        parsed.stateFile === expected.stateFile &&
+        parsed.startupToken === expected.startupToken
+      );
+    } catch {
+      // An exact command token with a malformed suffix is not our daemon.
+    }
+  }
+  return false;
 }

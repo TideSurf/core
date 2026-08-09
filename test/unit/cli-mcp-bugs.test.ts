@@ -425,6 +425,27 @@ describe("daemon argv contract", () => {
       [DAEMON_COMMAND],
       [DAEMON_COMMAND, "--state-file", "/tmp/x.json"],
       [DAEMON_COMMAND, "--startup-token", "tok"],
+      [
+        DAEMON_COMMAND,
+        "--state-file",
+        "/tmp/x.json",
+        "--startup-token",
+        "tok",
+        "--startup-token",
+        "decoy",
+      ],
+      [
+        DAEMON_COMMAND,
+        "--state-file=/tmp/x.json",
+        "--startup-token=tok",
+      ],
+      [
+        DAEMON_COMMAND,
+        "--startup-token",
+        "tok",
+        "--state-file",
+        "/tmp/x.json",
+      ],
     ]) {
       let caught: unknown;
       try {

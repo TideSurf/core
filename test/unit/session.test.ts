@@ -20,6 +20,7 @@ import {
   isProcessRunning,
   readSessionState,
   removeSessionFiles,
+  removeSessionFilesIfCurrent,
   sendLiveSessionRequest,
   sendSessionRequest,
   validateSessionName,
@@ -383,6 +384,61 @@ describe("session recovery", () => {
     }
   });
 
+  it("does not let stale generation cleanup delete replacement files", () => {
+    const name = `generation-files-${randomUUID()}`;
+    const paths = getSessionPaths(name);
+    const oldState: SessionState = {
+      protocol: SESSION_PROTOCOL_VERSION,
+      version: VERSION,
+      session: name,
+      secret: "1".repeat(64),
+      socketPath: paths.socketPath,
+      config,
+      pid: process.pid,
+      ready: true,
+      startupId: randomUUID(),
+    };
+    const replacement: SessionState = {
+      ...oldState,
+      secret: "2".repeat(64),
+      ready: false,
+      startupId: randomUUID(),
+    };
+    try {
+      writeSessionState(paths, oldState);
+      writeFileSync(paths.lockFile, `${JSON.stringify({
+        pid: process.pid,
+        startupId: oldState.startupId,
+        createdAt: 1,
+      })}\n`, { mode: 0o600 });
+      writeFileSync(paths.logFile, "replacement log\n", { mode: 0o600 });
+      if (process.platform !== "win32") {
+        writeFileSync(paths.socketPath, "replacement socket sentinel", { mode: 0o600 });
+      }
+
+      writeSessionState(paths, replacement);
+      writeFileSync(paths.lockFile, `${JSON.stringify({
+        pid: process.pid,
+        startupId: replacement.startupId,
+        createdAt: 2,
+      })}\n`, { mode: 0o600 });
+
+      expect(removeSessionFilesIfCurrent(paths, oldState, true)).toBe(false);
+      expect(readSessionState(paths)?.startupId).toBe(replacement.startupId);
+      expect(JSON.parse(readFileSync(paths.lockFile, "utf8")).startupId).toBe(
+        replacement.startupId
+      );
+      expect(readFileSync(paths.logFile, "utf8")).toContain("replacement log");
+      if (process.platform !== "win32") {
+        expect(readFileSync(paths.socketPath, "utf8")).toBe(
+          "replacement socket sentinel"
+        );
+      }
+    } finally {
+      removeSessionFiles(paths, true);
+    }
+  });
+
   it("reads only structurally valid state", () => {
     const name = `state-${randomUUID()}`;
     const paths = getSessionPaths(name);
@@ -597,6 +653,87 @@ describe("session recovery", () => {
     }
   });
 
+  it("does not let an old shutdown delete a replacement generation", async () => {
+    const name = `shutdown-generation-${randomUUID()}`;
+    const paths = getSessionPaths(name);
+    const startupId = randomUUID();
+    writeSessionState(paths, {
+      protocol: SESSION_PROTOCOL_VERSION,
+      version: VERSION,
+      session: name,
+      secret: "7".repeat(64),
+      socketPath: paths.socketPath,
+      config,
+      pid: process.pid,
+      ready: false,
+      startupId,
+    });
+
+    let releaseClose!: () => void;
+    let markCloseStarted!: () => void;
+    const closeGate = new Promise<void>((resolveClose) => {
+      releaseClose = resolveClose;
+    });
+    const closeStarted = new Promise<void>((resolveStarted) => {
+      markCloseStarted = resolveStarted;
+    });
+    const controller: DaemonController = {
+      status: () => ({ running: false }),
+      start: async () => ({ running: false }),
+      execute: async () => ({ success: true }),
+      close: async () => {
+        markCloseStarted();
+        await closeGate;
+      },
+    };
+    const previousExitCode = process.exitCode;
+
+    await runDaemon(paths.stateFile, {
+      controllerFactory: () => controller,
+      installProcessHandlers: false,
+    });
+    const oldReady = readSessionState(paths)!;
+    const stopping = sendSessionRequest<{ stopped: boolean }>(
+      oldReady,
+      { method: "stop" },
+      2_000
+    );
+
+    try {
+      await closeStarted;
+      const replacement: SessionState = {
+        ...oldReady,
+        secret: "8".repeat(64),
+        pid: process.pid,
+        ready: false,
+        startupId: randomUUID(),
+      };
+      writeSessionState(paths, replacement);
+      writeFileSync(paths.lockFile, `${JSON.stringify({
+        pid: process.pid,
+        startupId: replacement.startupId,
+        createdAt: Date.now(),
+      })}\n`, { mode: 0o600 });
+      writeFileSync(paths.logFile, "replacement diagnostics\n", { mode: 0o600 });
+
+      releaseClose();
+      await expect(stopping).resolves.toMatchObject({ stopped: true });
+      expect(readSessionState(paths)?.startupId).toBe(replacement.startupId);
+      expect(JSON.parse(readFileSync(paths.lockFile, "utf8")).startupId).toBe(
+        replacement.startupId
+      );
+      expect(readFileSync(paths.logFile, "utf8")).toContain(
+        "replacement diagnostics"
+      );
+    } finally {
+      releaseClose();
+      await stopping.catch(() => undefined);
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 50));
+      process.exitCode = previousExitCode;
+      removeSessionFiles(paths, true);
+    }
+  });
+
   it("acknowledges concurrent stop requests without dropping either socket", async () => {
     const name = `stop-concurrent-${randomUUID()}`;
     const paths = getSessionPaths(name);
@@ -757,6 +894,84 @@ describe("session recovery", () => {
     }
   });
 
+  it("runs browser-free tools outside the browser serialization queue", async () => {
+    const name = `queue-browser-free-${randomUUID()}`;
+    const paths = getSessionPaths(name);
+    writeSessionState(paths, {
+      protocol: SESSION_PROTOCOL_VERSION,
+      version: VERSION,
+      session: name,
+      secret: "6".repeat(64),
+      socketPath: paths.socketPath,
+      config,
+      pid: process.pid,
+      ready: false,
+      startupId: randomUUID(),
+    });
+
+    let releaseBrowser!: () => void;
+    let markBrowserStarted!: () => void;
+    const browserGate = new Promise<void>((resolveBrowser) => {
+      releaseBrowser = resolveBrowser;
+    });
+    const browserStarted = new Promise<void>((resolveStarted) => {
+      markBrowserStarted = resolveStarted;
+    });
+    const events: string[] = [];
+    const controller: DaemonController = {
+      status: () => ({ running: false }),
+      start: async () => ({ running: false }),
+      execute: async (name) => {
+        events.push(`start:${name}`);
+        if (name === "get_state") {
+          markBrowserStarted();
+          await browserGate;
+        }
+        events.push(`end:${name}`);
+        return { success: true, data: name };
+      },
+      close: async () => {},
+    };
+
+    await runDaemon(paths.stateFile, {
+      controllerFactory: () => controller,
+      installProcessHandlers: false,
+    });
+    const ready = readSessionState(paths)!;
+    const browserTool = sendSessionRequest(ready, {
+      method: "tool",
+      name: "get_state",
+      input: {},
+    }, 3_000);
+
+    try {
+      await browserStarted;
+      const browserFree = sendSessionRequest<{ success: boolean; data: string }>(
+        ready,
+        { method: "tool", name: "list_skills", input: {} },
+        1_000
+      );
+      await expect(browserFree).resolves.toMatchObject({
+        success: true,
+        data: "list_skills",
+      });
+      expect(events).toEqual([
+        "start:get_state",
+        "start:list_skills",
+        "end:list_skills",
+      ]);
+
+      releaseBrowser();
+      await expect(browserTool).resolves.toMatchObject({ success: true });
+      await sendSessionRequest(ready, { method: "stop" }, 2_000);
+    } finally {
+      releaseBrowser();
+      await browserTool.catch(() => undefined);
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
+      removeSessionFiles(paths, true);
+    }
+  });
+
   it("answers stop out-of-band while a long tool is still running", async () => {
     const name = `stop-oob-${randomUUID()}`;
     const paths = getSessionPaths(name);
@@ -831,13 +1046,14 @@ describe("session recovery", () => {
 });
 
 describe("startup failure handling", () => {
-  it("fails fast when the recorded startup dies before becoming ready", async () => {
+  it("cleans a dead pending startup and retries once in the same ensure call", async () => {
     const name = `unit-${randomUUID()}`;
     const paths = getSessionPaths(name);
     const sleeper = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
       stdio: "ignore",
     });
     const startupId = randomUUID();
+    let recovered: SessionState | undefined;
     try {
       await once(sleeper, "spawn");
       if (typeof sleeper.pid !== "number") throw new Error("sleeper has no pid");
@@ -866,17 +1082,22 @@ describe("startup failure handling", () => {
       }, 200);
 
       const started = Date.now();
-      await expect(
-        ensureSession({ session: name, config, entryPath, timeoutMs: 10_000 })
-      ).rejects.toThrow(/exited before becoming ready/);
-      // Without the dead-startup check this burns the full 10s timeout.
-      expect(Date.now() - started).toBeLessThan(5_000);
+      recovered = await ensureSession({
+        session: name,
+        config,
+        entryPath,
+        timeoutMs: 10_000,
+      });
+      expect(recovered.ready).toBe(true);
+      expect(recovered.pid).not.toBe(sleeper.pid);
+      expect(Date.now() - started).toBeLessThan(8_000);
     } finally {
       try {
         sleeper.kill("SIGKILL");
       } catch {
         // already gone
       }
+      await stop(recovered);
       removeSessionFiles(paths, true);
       rmSync(paths.lockFile, { force: true });
     }
