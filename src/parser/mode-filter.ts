@@ -56,20 +56,6 @@ function summarizeText(text: string | undefined, limit: number): TextSummary {
   return { value, count: value ? undefined : 0 };
 }
 
-/**
- * Page-text pieces for offscreen/landmark summaries are escaped at
- * composition time, so the TideSurf-generated interactive-count markers
- * ("[1 link, 1 button]") they are combined with keep their literal brackets
- * while page-controlled text can never forge element markers.
- */
-function escapeSummaryText(
-  text: string | undefined,
-  limit: number
-): TextSummary {
-  const value = escapeHtml(truncateGraphemes(text ?? "", limit));
-  return { value, count: value ? undefined : 0 };
-}
-
 function appendText(
   current: TextSummary,
   next: TextSummary,
@@ -174,19 +160,20 @@ export function summarizeOffscreenNode(
   textLimit: number
 ): { counts: Record<string, number>; text: string } {
   const counts = emptyCounts();
-  const text = escapeSummaryText(node.text, textLimit);
+  const text = summarizeText(node.text, textLimit);
 
   const visit = (current: OSNode, depth: number): void => {
     if (depth > MAX_FILTER_DEPTH) return;
     addInteractiveId(counts, current.id);
     if (!isFull(text, textLimit)) {
-      appendText(text, escapeSummaryText(current.text, textLimit), textLimit);
+      appendText(text, summarizeText(current.text, textLimit), textLimit);
     }
     for (const child of current.children) visit(child, depth + 1);
   };
 
   for (const child of node.children) visit(child, 0);
-  return { counts, text: text.value };
+  // Compose and truncate raw graphemes first, then escape page text once.
+  return { counts, text: escapeHtml(text.value) };
 }
 
 export function interactiveSummary(counts: Record<string, number>): string {
@@ -248,7 +235,7 @@ function summarizeMinimal(node: OSNode, depth: number): MinimalResult {
     addInteractiveId(counts, node.id);
   }
   const isLandmark = LANDMARK_TAGS.has(node.tag);
-  const text = escapeSummaryText(node.text, SUMMARY_TEXT_LIMIT);
+  const text = summarizeText(node.text, SUMMARY_TEXT_LIMIT);
   let childCounts: InteractiveCounts | undefined;
   let childLandmarks: LandmarkList | undefined;
 
@@ -267,10 +254,13 @@ function summarizeMinimal(node: OSNode, depth: number): MinimalResult {
   }
 
   const countSummary = interactiveSummary(childCounts ?? EMPTY_COUNTS);
-  const trimmedText = text.value.trim();
-  const summary = trimmedText && countSummary
-    ? `${trimmedText} ${countSummary}`
-    : trimmedText || countSummary;
+  // Escaping before appendText would count `&amp;` and `\\[` as multiple raw
+  // graphemes and could truncate inside an escape. Escape exactly once after
+  // the raw summary has reached its grapheme boundary.
+  const escapedText = escapeHtml(text.value.trim());
+  const summary = escapedText && countSummary
+    ? `${escapedText} ${countSummary}`
+    : escapedText || countSummary;
   const landmark: LandmarkLink = {
     node: {
       tag: node.tag,

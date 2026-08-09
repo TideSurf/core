@@ -30,6 +30,12 @@ describe("weightedTextLength", () => {
     expect(weightedTextLength("タイトル", 4)).toBe(16);
     expect(weightedTextLength("abタイトル", 4)).toBe(18);
   });
+
+  it("covers supplementary CJK extensions I, G, and H", () => {
+    for (const codePoint of [0x2ebf0, 0x30000, 0x31350, 0x323af]) {
+      expect(weightedTextLength(String.fromCodePoint(codePoint), 4)).toBe(4);
+    }
+  });
 });
 
 describe("pruneToFit", () => {
@@ -359,6 +365,29 @@ describe("pruneToFit", () => {
     expect(estimateTokens(frameOutput)).toBeLessThanOrEqual(5);
   });
 
+  it("weights supplementary CJK characters inside unparsed URLs", () => {
+    const extensionG = String.fromCodePoint(0x30000);
+    const link: OSNode = {
+      tag: "link",
+      id: "L1",
+      attributes: { href: `/${extensionG.repeat(10)}` },
+      children: [makeText("Go")],
+    };
+
+    const output = serialize(pruneToFit([link], { maxTokens: 13 }));
+
+    expect(output).toBe("[L1] Go");
+    expect(weightedTextLength(output, 4)).toBeLessThanOrEqual(13 * 4);
+  });
+
+  it("charges backslash and control expansion at the truncation boundary", () => {
+    const hostile = `${"\\".repeat(12)}${"[".repeat(12)}${"\r".repeat(12)}`;
+    const output = serialize(pruneToFit([makeText(hostile)], { maxTokens: 13 }));
+
+    expect(output.length).toBeLessThanOrEqual(13 * 4);
+    expect(output).not.toContain("\r");
+  });
+
   it("accounts for quote escaping and state flags on form controls", () => {
     const input: OSNode = {
       tag: "input",
@@ -569,6 +598,35 @@ describe("pruneToFit", () => {
 
     expect(estimateTokens(serialized)).toBeLessThanOrEqual(50);
     expect(serialized).toContain("truncated");
+  });
+
+  it("fits oversized title and URL headers at raw grapheme boundaries", () => {
+    const grapheme = "👩‍💻";
+    const measure = (text: string) => weightedTextLength(text, 4);
+    const titleHeader = pageHeader(
+      "https://e.co/x",
+      grapheme.repeat(30),
+      undefined,
+      { maxSize: 40, measure }
+    );
+    const fittedTitle = titleHeader.split("\n")[0].slice(2).replace(/\.\.\.$/, "");
+
+    expect(measure(titleHeader)).toBeLessThanOrEqual(40);
+    expect(titleHeader).toContain("\n> e.co/x");
+    expect(fittedTitle.replaceAll(grapheme, "")).toBe("");
+
+    const extensionG = String.fromCodePoint(0x30000);
+    const urlHeader = pageHeader(
+      `bad/${extensionG.repeat(30)}`,
+      grapheme.repeat(30),
+      undefined,
+      { maxSize: 40, measure }
+    );
+    const fittedUrl = urlHeader.split("\n> ")[1].replace(/\.\.\.$/, "");
+
+    expect(measure(urlHeader)).toBeLessThanOrEqual(40);
+    expect(urlHeader.startsWith("# \n> bad/")).toBe(true);
+    expect(fittedUrl.slice(4).replaceAll(extensionG, "")).toBe("");
   });
 
   it("reserves header characters so wrapPage output stays within maxTokens", () => {

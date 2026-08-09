@@ -18,15 +18,39 @@ export interface UrlCompressionContext {
   cache: Map<string, string>;
 }
 
+/** Percent-encode characters that can create or obscure output lines. */
+export function percentEncodeUnsafeControls(text: string): string {
+  let result = "";
+  let chunkStart = 0;
+  for (let index = 0; index < text.length; index++) {
+    const code = text.charCodeAt(index);
+    let replacement: string | undefined;
+    if (code <= 0x1f || code === 0x7f) {
+      replacement = `%${code.toString(16).toUpperCase().padStart(2, "0")}`;
+    } else if (code === 0x85) {
+      replacement = "%C2%85";
+    } else if (code === 0x2028) {
+      replacement = "%E2%80%A8";
+    } else if (code === 0x2029) {
+      replacement = "%E2%80%A9";
+    }
+    if (replacement === undefined) continue;
+    result += text.slice(chunkStart, index) + replacement;
+    chunkStart = index + 1;
+  }
+  return chunkStart === 0 ? text : result + text.slice(chunkStart);
+}
+
 /**
- * Compressed URLs are interpolated into `[id](url)` and `[iframe: url]`
- * action markers, but compression intentionally preserves the page's exact
- * path and query encoding, including `[`, `]`, `(`, and `)`. Escape those
- * characters at the structural boundary so a page-controlled URL can never
- * close its marker early or forge another marker like [B1].
+ * Compressed URLs are interpolated into `[id](url)`, `[iframe: url]`, and
+ * page-header markers, but compression intentionally preserves structural
+ * characters. Escape existing backslashes before adding our own escapes so
+ * attacker-controlled slash parity cannot expose `[`, `]`, `(`, or `)`.
  */
 export function escapeUrlMarkers(url: string): string {
-  return url.replaceAll(/[\[\]()]/g, (char) => `\\${char}`);
+  const escapedBackslashes = url.replaceAll("\\", "\\\\");
+  return percentEncodeUnsafeControls(escapedBackslashes)
+    .replaceAll(/[\[\]()]/g, (char) => `\\${char}`);
 }
 
 export function createUrlCompressionContext(

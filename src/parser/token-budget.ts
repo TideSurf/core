@@ -94,9 +94,12 @@ const CJK_RANGES: ReadonlyArray<readonly [number, number]> = [
   [0x20000, 0x2a6df], // CJK Extension B
   [0x2a700, 0x2b73f], // CJK Extension C
   [0x2b740, 0x2b81f], // CJK Extension D
-  [0x2b820, 0x2ceaf], // CJK Extension E/F
-  [0x2ceb0, 0x2ebef], // CJK Extension G/H
+  [0x2b820, 0x2ceaf], // CJK Extension E
+  [0x2ceb0, 0x2ebef], // CJK Extension F
+  [0x2ebf0, 0x2ee5f], // CJK Extension I
   [0x2f800, 0x2fa1f], // CJK Compatibility Supplement
+  [0x30000, 0x3134f], // CJK Extension G
+  [0x31350, 0x323af], // CJK Extension H
 ];
 
 function isCjkCodePoint(codePoint: number): boolean {
@@ -154,12 +157,31 @@ function stateSize(node: OSNode): number {
   return size;
 }
 
+function encodedUnsafeControlSize(codePoint: number): number | undefined {
+  if (codePoint <= 0x1f || codePoint === 0x7f) return 3;
+  if (codePoint === 0x85) return 6;
+  if (codePoint === 0x2028 || codePoint === 0x2029) return 9;
+  return undefined;
+}
+
 function escapedQuoteSize(text: string, cjkWeight = 1): number {
   let size = 0;
   forEachCodePoint(text, (codePoint, units) => {
+    const controlSize = encodedUnsafeControlSize(codePoint);
+    if (controlSize !== undefined) {
+      size += controlSize;
+      return;
+    }
     size += isCjkCodePoint(codePoint) ? cjkWeight : units;
-    // Quotes and square brackets are backslash-escaped in attribute output.
-    if (codePoint === 34 || codePoint === 91 || codePoint === 93) size++;
+    // Existing backslashes are doubled; quotes and brackets receive one too.
+    if (
+      codePoint === 34 ||
+      codePoint === 92 ||
+      codePoint === 91 ||
+      codePoint === 93
+    ) {
+      size++;
+    }
   });
   return size;
 }
@@ -168,11 +190,22 @@ function escapedTextSize(text: string | undefined, cjkWeight = 1): number {
   if (!text) return 0;
   let size = 0;
   forEachCodePoint(text, (codePoint, units) => {
+    const controlSize = encodedUnsafeControlSize(codePoint);
+    if (controlSize !== undefined) {
+      size += controlSize;
+      return;
+    }
     size += isCjkCodePoint(codePoint) ? cjkWeight : units;
     if (codePoint === 38) size += 4; // & -> &amp;
     else if (codePoint === 60 || codePoint === 62) size += 3; // < >
     else if (codePoint === 34) size += 5; // " -> &quot;
-    else if (codePoint === 91 || codePoint === 93) size += 1; // [ ] -> \[ \]
+    else if (
+      codePoint === 92 ||
+      codePoint === 91 ||
+      codePoint === 93
+    ) {
+      size += 1; // \\, [, and ] receive a backslash.
+    }
   });
   return size;
 }
@@ -236,7 +269,10 @@ function estimateOwnSize(
   if (node.tag === "link") {
     const href = attributes["href"];
     const hrefSize = href
-      ? escapeUrlMarkers(compressUrlWithContext(href, url)).length
+      ? plainTextSize(
+          escapeUrlMarkers(compressUrlWithContext(href, url)),
+          cjkWeight
+        )
       : 0;
     const fallbackSize = hasNonInteractiveText
       ? 0
@@ -285,7 +321,10 @@ function estimateOwnSize(
   if (node.tag === "iframe") {
     const src = attributes["src"];
     const srcSize = src
-      ? escapeUrlMarkers(compressUrlWithContext(src, url)).length + 14
+      ? plainTextSize(
+          escapeUrlMarkers(compressUrlWithContext(src, url)),
+          cjkWeight
+        ) + 14
       : 0;
     const emptySize = attributes["status"] === "inaccessible"
       ? IFRAME_INACCESSIBLE_SIZE

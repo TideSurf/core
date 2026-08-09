@@ -189,21 +189,29 @@ export class SurfingPage {
       if (belowSummary) nodes.push(belowSummary);
     }
 
+    let fittedHeader: string | undefined;
     if (options.maxTokens) {
-      // The header (title + URL meta) is prepended after pruning, so reserve
-      // its exact size from the budget first; otherwise output drifts over.
-      // The reservation must use the same CJK weighting as the budget units
-      // (pruneToFit defaults to charsPerToken 4), not raw UTF-16 length.
-      const headerSize = weightedTextLength(pageHeader(url, title, scrollPosition), 4) + 2;
+      // Fit the header itself before reserving it. A hostile title or URL may
+      // otherwise exceed the whole budget even after the body is removed.
+      const charBudget = options.maxTokens * 4;
+      fittedHeader = pageHeader(url, title, scrollPosition, {
+        maxSize: charBudget,
+        measure: (text) => weightedTextLength(text, 4),
+      });
+      const headerSize = weightedTextLength(fittedHeader, 4);
       nodes = pruneToFit(nodes, {
         maxTokens: options.maxTokens,
         pageUrl: url,
-        reservedChars: headerSize,
+        reservedChars: headerSize + (fittedHeader ? 2 : 0),
       });
     }
 
     const body = serialize(nodes, 0, url);
-    const content = wrapPage(body, url, title, scrollPosition);
+    const content = fittedHeader === undefined
+      ? wrapPage(body, url, title, scrollPosition)
+      : fittedHeader && body
+        ? `${fittedHeader}\n\n${body}`
+        : fittedHeader || body;
 
     this.lastNodeMap = retainNodeMap(nodes, nodeMap);
 

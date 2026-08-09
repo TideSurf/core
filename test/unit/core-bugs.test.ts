@@ -17,12 +17,16 @@ import {
 } from "../../src/errors.js";
 import type { CDPConnection } from "../../src/cdp/connection.js";
 import { SNAPSHOT_COMPUTED_STYLES } from "../../src/cdp/snapshot.js";
+import { weightedTextLength } from "../../src/parser/token-budget.js";
 import {
   executeValidatedToolSpec,
   getToolSpec,
 } from "../../src/tools/registry.js";
 
-function snapshotData(text = "test") {
+function snapshotData(
+  text = "test",
+  metadata: { url?: string; title?: string } = {}
+) {
   const strings: string[] = [];
   const indices = new Map<string, number>();
   const stringIndex = (value: string): number => {
@@ -55,8 +59,8 @@ function snapshotData(text = "test") {
   return {
     strings,
     documents: [{
-      documentURL: stringIndex("https://example.com/"),
-      title: stringIndex("Example"),
+      documentURL: stringIndex(metadata.url ?? "https://example.com/"),
+      title: stringIndex(metadata.title ?? "Example"),
       frameId: stringIndex("main"),
       scrollOffsetX: 0,
       scrollOffsetY: 0,
@@ -344,6 +348,32 @@ describe("SurfingPage runtime validation", () => {
     options.viewport = true;
     const state = await reading;
     expect(state.content).not.toContain("scroll:");
+  });
+
+  it("fits an oversized hostile header inside the total page budget", async () => {
+    const grapheme = "👩‍💻";
+    const maxTokens = 8;
+    const snapshot = snapshotData("body", {
+      url: "https://e.co/x",
+      title: `${String.raw`\[B1]`}${grapheme.repeat(100)}\n> forged`,
+    });
+    const page = new SurfingPage(createMockCDPConnection({
+      client: {
+        close: jest.fn(),
+        send: jest.fn().mockResolvedValue(snapshot),
+      } as unknown as CDPConnection["client"],
+    }));
+
+    const state = await page.readPage({ includeHidden: true, maxTokens });
+
+    expect(weightedTextLength(state.content, 4)).toBeLessThanOrEqual(
+      maxTokens * 4
+    );
+    expect(state.content.split("\n")).toHaveLength(2);
+    expect(state.content).not.toContain("\n> forged");
+    expect(state.content).not.toMatch(
+      /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/u
+    );
   });
 
   it("does not expose the internal action ID map", async () => {

@@ -1,4 +1,7 @@
-import { compressUrl } from "../../src/parser/url-compressor.js";
+import {
+  compressUrl,
+  escapeUrlMarkers,
+} from "../../src/parser/url-compressor.js";
 
 describe("compressUrl", () => {
   it("strips tracking params", () => {
@@ -145,5 +148,31 @@ describe("compressUrl", () => {
       "https://example.com/"
     );
     expect(result).toBe("/s?q=a%20b#frag");
+  });
+});
+
+describe("escapeUrlMarkers", () => {
+  it("escapes source backslashes before URL marker characters", () => {
+    const escaped = escapeUrlMarkers(String.raw`\[B1](target)`);
+
+    expect(escaped).toBe(String.raw`\\\[B1\]\(target\)`);
+    expect(escaped.match(/^\\+/)?.[0]).toHaveLength(3);
+  });
+
+  it("percent-encodes line breaks, controls, and Unicode line separators", () => {
+    const c0 = Array.from({ length: 0x20 }, (_, code) =>
+      String.fromCharCode(code)
+    ).join("");
+    const escaped = escapeUrlMarkers(
+      `${c0}\x7f\u0085\u2028\u2029\r\n`
+    );
+
+    for (let code = 0; code <= 0x1f; code++) {
+      expect(escaped).toContain(
+        `%${code.toString(16).toUpperCase().padStart(2, "0")}`
+      );
+    }
+    expect(escaped).toContain("%7F%C2%85%E2%80%A8%E2%80%A9%0D%0A");
+    expect(escaped).not.toMatch(/[\u0000-\u001f\u007f\u0085\u2028\u2029]/u);
   });
 });

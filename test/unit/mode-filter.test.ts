@@ -145,6 +145,27 @@ describe("filterMinimal", () => {
     expect(result[0].text).toBe(expected);
   });
 
+  it("truncates raw heading graphemes before escaping exactly once", () => {
+    const prefix = "a".repeat(99);
+    const result = filterMinimal([
+      makeNode("heading", [makeText(`${prefix}&tail`)]),
+    ]);
+
+    expect(result[0].text).toBe(`${prefix}&amp;`);
+    expect(serialize(result)).toBe(`## ${prefix}&amp;`);
+    expect(serialize(result)).not.toContain("&amp;amp;");
+  });
+
+  it("keeps a marker escape whole at the minimal-summary boundary", () => {
+    const prefix = "a".repeat(98);
+    const result = filterMinimal([
+      makeNode("heading", [makeText(`${prefix}${String.raw`\[`}tail`)]),
+    ]);
+
+    expect(result[0].text).toBe(`${prefix}${String.raw`\\\[`}`);
+    expect(serialize(result)).toBe(`## ${prefix}${String.raw`\\\[`}`);
+  });
+
   it("keeps landmark tags with text summaries", () => {
     const nodes: OSNode[] = [
       makeNode("heading", [makeText("Welcome to the site")]),

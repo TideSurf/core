@@ -4,22 +4,29 @@ import {
   compressUrlWithContext,
   createUrlCompressionContext,
   escapeUrlMarkers,
+  percentEncodeUnsafeControls,
   type UrlCompressionContext,
 } from "./url-compressor.js";
-import { formatTruncation } from "./truncation.js";
+import { formatTruncation, truncateGraphemes } from "./truncation.js";
 
 function escapeQuotes(text: string): string {
-  // Attribute interpolations: escape quotes and square brackets so
-  // page-controlled attributes can never forge element markers like [B1].
-  return text.replace(/["\[\]]/g, (char) => `\\${char}`);
+  // Escape page-provided backslashes before adding structural escapes. An odd
+  // escape parity then remains odd even when the source already contains `\\`.
+  const escapedBackslashes = text.replaceAll("\\", "\\\\");
+  return percentEncodeUnsafeControls(escapedBackslashes)
+    .replace(/["\[\]]/g, (char) => `\\${char}`);
 }
 
 export function escapeHtml(text: string): string {
+  // Backslashes must be doubled before marker escapes are introduced, or a
+  // source `\\[B1]` can turn the generated bracket escape into even parity.
+  const escapedBackslashes = text.replaceAll("\\", "\\\\");
+  const safeText = percentEncodeUnsafeControls(escapedBackslashes);
   let result = "";
   let chunkStart = 0;
-  for (let index = 0; index < text.length; index++) {
+  for (let index = 0; index < safeText.length; index++) {
     let replacement: string | undefined;
-    const code = text.charCodeAt(index);
+    const code = safeText.charCodeAt(index);
     if (code === 38) replacement = "&amp;";
     else if (code === 60) replacement = "&lt;";
     else if (code === 62) replacement = "&gt;";
@@ -29,10 +36,10 @@ export function escapeHtml(text: string): string {
     else if (code === 91) replacement = "\\[";
     else if (code === 93) replacement = "\\]";
     if (!replacement) continue;
-    result += text.slice(chunkStart, index) + replacement;
+    result += safeText.slice(chunkStart, index) + replacement;
     chunkStart = index + 1;
   }
-  return chunkStart === 0 ? text : result + text.slice(chunkStart);
+  return chunkStart === 0 ? safeText : result + safeText.slice(chunkStart);
 }
 
 function pushIfNotEmpty(parts: string[], value: string): void {
@@ -567,28 +574,96 @@ function compressPageUrl(url: string): string {
   return compressUrl(url);
 }
 
+export interface PageHeaderFitOptions {
+  /** Maximum additive budget units available to the header. */
+  maxSize: number;
+  /** Measure already-escaped output. Defaults to UTF-16 length. */
+  measure?: (text: string) => number;
+}
+
+function fitEscapedGraphemes(
+  raw: string,
+  maxSize: number,
+  escape: (text: string) => string,
+  measure: (text: string) => number
+): string {
+  const escaped = escape(raw);
+  if (measure(escaped) <= maxSize) return escaped;
+  if (maxSize <= 0) return "";
+
+  const fullSuffix = "...";
+  const suffix = measure(fullSuffix) <= maxSize ? fullSuffix : "";
+  const shortened = truncateGraphemes(raw, maxSize, {
+    suffix,
+    measure: (grapheme) => measure(escape(grapheme)),
+    reservedSize: measure(suffix),
+  });
+  return escape(shortened);
+}
+
 /**
  * Build the page header lines (title + URL meta) that wrapPage prepends to
- * the serialized body. Exposed so callers can reserve its size from a token
- * budget before fitting the body.
+ * the serialized body. With a fit budget, page-controlled components are
+ * truncated only at raw grapheme boundaries and then escaped exactly once.
  */
 export function pageHeader(
   url: string,
   title: string,
-  scrollPosition?: ScrollPosition
+  scrollPosition?: ScrollPosition,
+  fit?: PageHeaderFitOptions
 ): string {
-  // Page titles are page-controlled: collapse whitespace so a newline can
-  // never inject extra header lines, and escape it like any other text.
-  const safeTitle = escapeHtml(title.replace(/\s+/g, " ").trim());
-  const lines: string[] = [`# ${safeTitle}`];
+  // Collapse title whitespace before escaping so it cannot inject a line.
+  const normalizedTitle = title.replace(/\s+/g, " ").trim();
+  const compressedUrl = compressPageUrl(url);
+  const safeTitle = escapeHtml(normalizedTitle);
+  const safeUrl = escapeUrlMarkers(compressedUrl);
+  const titlePrefix = "# ";
+  const metaPrefix = "\n> ";
+  let scrollSuffix = scrollPosition
+    ? ` | ${scrollPosition.scrollY}/${scrollPosition.scrollHeight} ${scrollPosition.viewportHeight}vh`
+    : "";
 
-  const compUrl = compressPageUrl(url);
-  let metaLine = `> ${compUrl}`;
-  if (scrollPosition) {
-    metaLine += ` | ${scrollPosition.scrollY}/${scrollPosition.scrollHeight} ${scrollPosition.viewportHeight}vh`;
+  if (!fit) {
+    return `${titlePrefix}${safeTitle}${metaPrefix}${safeUrl}${scrollSuffix}`;
   }
-  lines.push(metaLine);
-  return lines.join("\n");
+
+  const maxSize = Number.isFinite(fit.maxSize)
+    ? Math.max(0, fit.maxSize)
+    : 0;
+  const measure = fit.measure ?? ((text: string) => text.length);
+  const scaffold = titlePrefix + metaPrefix;
+  if (measure(scaffold) > maxSize) {
+    return truncateGraphemes(scaffold, maxSize, { measure });
+  }
+
+  // Scroll metadata is generated rather than page-controlled. Omit it only
+  // when the fixed header scaffold itself otherwise cannot fit.
+  if (measure(scaffold) + measure(scrollSuffix) > maxSize) {
+    scrollSuffix = "";
+  }
+  const fixedSize = measure(scaffold) + measure(scrollSuffix);
+  if (
+    fixedSize + measure(safeTitle) + measure(safeUrl) <=
+    maxSize
+  ) {
+    return `${titlePrefix}${safeTitle}${metaPrefix}${safeUrl}${scrollSuffix}`;
+  }
+
+  // Preserve the URL while shrinking an oversized title first. If the URL is
+  // itself too large, it receives the remaining budget and is then truncated.
+  const fittedTitle = fitEscapedGraphemes(
+    normalizedTitle,
+    Math.max(0, maxSize - fixedSize - measure(safeUrl)),
+    escapeHtml,
+    measure
+  );
+  const fittedUrl = fitEscapedGraphemes(
+    compressedUrl,
+    Math.max(0, maxSize - fixedSize - measure(fittedTitle)),
+    escapeUrlMarkers,
+    measure
+  );
+  return `${titlePrefix}${fittedTitle}${metaPrefix}${fittedUrl}${scrollSuffix}`;
 }
 
 /**
