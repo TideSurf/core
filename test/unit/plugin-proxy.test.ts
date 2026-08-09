@@ -17,6 +17,7 @@ import type {
 } from "../../src/mcp/adapter.js";
 import {
   buildPluginStdioEnvironment,
+  createControlledPluginHttpFetch,
   proxyPluginMcpServers,
   type McpClientLike,
   type McpRequestOptionsLike,
@@ -355,6 +356,47 @@ describe("plugin proxy SDK contracts and deterministic ordering", () => {
     ]);
     await proxy.close();
   });
+
+  it("forces manual redirect handling and rejects redirect responses", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const controlled = createControlledPluginHttpFetch(
+      "https://example.test/mcp",
+      async (url, init) => {
+        requests.push({ url: String(url), init });
+        return new Response(null, {
+          status: 302,
+          headers: { Location: "https://other.test/mcp" },
+        });
+      }
+    );
+
+    await expect(
+      controlled("https://example.test/mcp", {
+        redirect: "follow",
+        headers: { Authorization: "Bearer configured" },
+      })
+    ).rejects.toThrow("redirect rejected");
+    expect(requests).toHaveLength(1);
+    expect(requests[0].init?.redirect).toBe("manual");
+  });
+
+  it("does not issue cross-origin HTTP requests with configured headers", async () => {
+    let requests = 0;
+    const controlled = createControlledPluginHttpFetch(
+      "https://example.test/mcp",
+      async () => {
+        requests++;
+        return new Response(null, { status: 200 });
+      }
+    );
+
+    await expect(
+      controlled("https://other.test/mcp", {
+        headers: { Authorization: "Bearer configured" },
+      })
+    ).rejects.toThrow("differs from configured origin");
+    expect(requests).toBe(0);
+  });
 });
 
 describe("plugin stdio trust boundaries", () => {
@@ -470,6 +512,39 @@ describe("plugin proxy startup bounds", () => {
     release();
     const proxy = await pending;
     expect(maximum).toBe(4);
+    await proxy.close();
+  });
+
+  it("shares one startup deadline across concurrent waves", async () => {
+    const names = Array.from({ length: 8 }, (_, index) => `wave-${index}`);
+    const behaviors = Object.fromEntries(
+      names.map((name) => [
+        name,
+        {
+          connect: () => delay(25),
+          tools: [tool(`${name}_tool`)],
+        },
+      ])
+    );
+    const logs: string[] = [];
+    const fixture = harness(behaviors);
+    const started = Date.now();
+    const proxy = await proxyPluginMcpServers({
+      server: new FakeServer(),
+      plugins: [fakePlugin({ servers: names })],
+      factories: fixture.factories,
+      log: (line) => logs.push(line),
+      timeouts: { startupMs: 40, closeGraceMs: 20 },
+    });
+
+    expect(Date.now() - started).toBeLessThan(100);
+    expect(fixture.clients).toHaveLength(8);
+    expect(proxy.servers.map((entry) => entry.server)).toEqual(names.slice(0, 4));
+    const firstWaveBudget = fixture.clients[0].connectOptions[0]?.maxTotalTimeout ?? 0;
+    const secondWaveBudget = fixture.clients[4].connectOptions[0]?.maxTotalTimeout ?? 0;
+    expect(firstWaveBudget).toBeGreaterThan(secondWaveBudget);
+    expect(secondWaveBudget).toBeLessThan(30);
+    expect(logs.filter((line) => line.includes("timed out after 40ms"))).toHaveLength(4);
     await proxy.close();
   });
 
@@ -598,6 +673,59 @@ describe("tools/list pagination and resource caps", () => {
     expect(fixture.clients[0].listCalls).toHaveLength(100);
     expect(fixture.clients[0].closeCalls).toBe(1);
     expect(proxy.servers).toEqual([]);
+  });
+
+  it("rejects oversized cursors, tool names, and descriptions", async () => {
+    const logs: string[] = [];
+    const fixture = harness({
+      cursor: {
+        listTools: () => ({ tools: [], nextCursor: "x".repeat(4 * 1024 + 1) }),
+      },
+      name: { tools: [tool("x".repeat(257))] },
+      description: {
+        tools: [{
+          ...tool("described"),
+          description: "x".repeat(16 * 1024 + 1),
+        }],
+      },
+    });
+    const proxy = await proxyPluginMcpServers({
+      server: new FakeServer(),
+      plugins: [fakePlugin({ servers: ["cursor", "name", "description"] })],
+      factories: fixture.factories,
+      log: (line) => logs.push(line),
+    });
+
+    expect(proxy.servers).toEqual([]);
+    expect(logs.some((line) => line.includes("cursor exceeds 4096-byte limit"))).toBe(true);
+    expect(logs.some((line) => line.includes("name exceeds 256-byte limit"))).toBe(true);
+    expect(logs.some((line) => line.includes("description exceeds 16384-byte limit"))).toBe(true);
+    expect(fixture.clients.every((client) => client.closeCalls === 1)).toBe(true);
+    await proxy.close();
+  });
+
+  it("caps aggregate retained tools/list data", async () => {
+    const logs: string[] = [];
+    const tools = Array.from({ length: 20 }, (_, index) =>
+      tool(`large_${index}`, {
+        type: "object",
+        description: "x".repeat(240 * 1024),
+      })
+    );
+    const host = new FakeServer();
+    const proxy = await proxyPluginMcpServers({
+      server: host,
+      plugins: [fakePlugin({ servers: ["large"] })],
+      factories: harness({ large: { tools } }).factories,
+      log: (line) => logs.push(line),
+    });
+
+    expect(host.visible().length).toBeGreaterThan(0);
+    expect(host.visible().length).toBeLessThan(tools.length);
+    expect(logs.some((line) => line.includes("aggregate retained data limit 4194304 bytes"))).toBe(
+      true
+    );
+    await proxy.close();
   });
 
   it("caps tools at 128 per server and 256 globally", async () => {

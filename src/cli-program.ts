@@ -33,6 +33,8 @@ import { VERSION } from "./version.js";
 const DAEMON_STARTUP_TIMEOUT = 10_000;
 const SESSION_STATUS_TIMEOUT = 500;
 const MCP_CLOSE_GRACE_MS = 5_000;
+const MCP_STARTUP_QUEUE_MAX_MESSAGES = 128;
+const MCP_STARTUP_QUEUE_MAX_BYTES = 1024 * 1024;
 const DEFAULT_OPERATION_TIMEOUT = 10_000;
 const MAX_SEQUENTIAL_OPERATION_PHASES = 8;
 const REQUEST_TIMEOUT_MARGIN = 15_000;
@@ -728,27 +730,81 @@ async function runMcp(invocation: ParsedInvocation): Promise<number> {
   // first tools/list deterministic without sacrificing early shutdown.
   const rawTransport = new StdioServerTransport();
   const queuedMessages: Array<{ message: unknown; extra?: unknown }> = [];
+  let queuedMessageBytes = 0;
   let releasedMessages = false;
+  let hostQueueError: Error | undefined;
+  let signalHostQueueFailure!: () => void;
+  const hostQueueFailure = new Promise<void>((resolveFailure) => {
+    signalHostQueueFailure = resolveFailure;
+  });
+  const failHostQueue = (error: Error): void => {
+    if (hostQueueError !== undefined) return;
+    hostQueueError = error;
+    queuedMessages.length = 0;
+    queuedMessageBytes = 0;
+    pluginStartupAbort.abort(error);
+    signalHostQueueFailure();
+  };
+  const enqueueHostMessage = (received: unknown, extra?: unknown): void => {
+    let encoded: string | undefined;
+    try {
+      encoded = JSON.stringify(received);
+    } catch (error) {
+      failHostQueue(
+        new Error(`MCP startup message is not serializable: ${message(error)}`)
+      );
+      return;
+    }
+    if (encoded === undefined) {
+      failHostQueue(new Error("MCP startup message is not serializable"));
+      return;
+    }
+    const bytes = Buffer.byteLength(encoded);
+    if (
+      queuedMessages.length >= MCP_STARTUP_QUEUE_MAX_MESSAGES ||
+      bytes > MCP_STARTUP_QUEUE_MAX_BYTES - queuedMessageBytes
+    ) {
+      failHostQueue(
+        new Error(
+          `MCP startup message queue exceeded ${MCP_STARTUP_QUEUE_MAX_MESSAGES} messages or ${MCP_STARTUP_QUEUE_MAX_BYTES} serialized bytes`
+        )
+      );
+      return;
+    }
+    queuedMessages.push({ message: received, extra });
+    queuedMessageBytes += bytes;
+  };
+  const waitForHostQueue = async <T>(pending: Promise<T>): Promise<T> => {
+    const outcome = await Promise.race([
+      pending.then((value) => ({ failed: false as const, value })),
+      hostQueueFailure.then(() => ({ failed: true as const })),
+    ]);
+    if (outcome.failed) throw hostQueueError!;
+    return outcome.value;
+  };
   const hostTransport: McpRuntimeTransport = {
     start: async () => {
       rawTransport.onclose = () => hostTransport.onclose?.();
       rawTransport.onerror = (error) => hostTransport.onerror?.(error);
-      rawTransport.onmessage = (message, extra) => {
-        if (releasedMessages) hostTransport.onmessage?.(message, extra);
-        else queuedMessages.push({ message, extra });
+      rawTransport.onmessage = (received, extra) => {
+        if (releasedMessages) hostTransport.onmessage?.(received, extra);
+        else enqueueHostMessage(received, extra);
       };
       await rawTransport.start();
     },
     send: (value, sendOptions) => rawTransport.send(value, sendOptions),
     close: async () => {
       queuedMessages.length = 0;
+      queuedMessageBytes = 0;
       await rawTransport.close();
     },
   };
   const releaseHostMessages = (): void => {
     if (releasedMessages) return;
     releasedMessages = true;
-    for (const entry of queuedMessages.splice(0)) {
+    const pending = queuedMessages.splice(0);
+    queuedMessageBytes = 0;
+    for (const entry of pending) {
       hostTransport.onmessage?.(entry.message, entry.extra);
     }
   };
@@ -762,14 +818,14 @@ async function runMcp(invocation: ParsedInvocation): Promise<number> {
     !invocation.sessionConfig.readOnly &&
     !nestedPluginChild;
   try {
-    await server.connect(hostTransport);
+    await waitForHostQueue(server.connect(hostTransport));
 
     if (proxyPlugins) {
-      const clientModules = await Promise.all([
+      const clientModules = await waitForHostQueue(Promise.all([
         import("@modelcontextprotocol/sdk/client/index.js").catch(() => undefined),
         import("@modelcontextprotocol/sdk/client/stdio.js").catch(() => undefined),
         import("@modelcontextprotocol/sdk/client/streamableHttp.js").catch(() => undefined),
-      ]);
+      ]));
       const [clientModule, stdioModule, httpModule] = clientModules;
       if (!clientModule || !stdioModule || !httpModule) {
         log("plugin MCP servers disabled: MCP SDK client modules are unavailable");
@@ -807,6 +863,7 @@ async function runMcp(invocation: ParsedInvocation): Promise<number> {
             createHttpTransport: (params) =>
               new httpModule.StreamableHTTPClientTransport(new URL(params.url), {
                 requestInit: params.headers ? { headers: params.headers } : undefined,
+                fetch: params.fetch,
               }),
             createInputSchema: (schema) =>
               inputSchemaFactory(
@@ -814,7 +871,7 @@ async function runMcp(invocation: ParsedInvocation): Promise<number> {
               ),
           },
         });
-        const startedProxy = await pluginStartupPromise;
+        const startedProxy = await waitForHostQueue(pluginStartupPromise);
         pluginProxy = startedProxy;
         if (closingPromise !== null) await startedProxy.close();
       }

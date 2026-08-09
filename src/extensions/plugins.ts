@@ -1,13 +1,17 @@
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
   closeSync,
   fstatSync,
   lstatSync,
+  mkdirSync,
   openSync,
   readSync,
   readdirSync,
   realpathSync,
+  renameSync,
   statSync,
+  unlinkSync,
 } from "node:fs";
 import { validateHeaderName, validateHeaderValue } from "node:http";
 import { isIP } from "node:net";
@@ -41,6 +45,15 @@ const HTTP_SERVER_FIELDS = new Set(["type", "url", "headers"]);
 const MCP_TOP_LEVEL_FIELDS = new Set(["$schema", "mcpServers"]);
 const PLUGIN_ROOT_PLACEHOLDER = "${PLUGIN_ROOT}";
 const PLUGIN_DATA_PLACEHOLDER = "${PLUGIN_DATA}";
+const CLIENT_CONTROLLED_HTTP_HEADERS = new Set([
+  "accept",
+  "connection",
+  "content-length",
+  "content-type",
+  "host",
+  "last-event-id",
+  "transfer-encoding",
+]);
 
 export interface PluginManifest {
   readonly name: string;
@@ -219,6 +232,10 @@ function errorCode(error: unknown): string | undefined {
   return typeof error.code === "string" ? error.code : undefined;
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function isMissingPathError(error: unknown): boolean {
   const code = errorCode(error);
   return code === "ENOENT" || code === "ENOTDIR";
@@ -258,6 +275,172 @@ function canonicalPotentialPath(target: string): string | undefined {
     }
     return missing.length === 0 ? canonical : join(canonical, ...missing);
   }
+}
+
+type SafeDirectoryState =
+  | { readonly state: "directory" }
+  | { readonly state: "missing" }
+  | { readonly state: "invalid"; readonly message: string };
+
+function inspectDirectoryWithoutSymlinks(
+  root: string,
+  target: string,
+  label: string
+): SafeDirectoryState {
+  if (!isContained(root, target)) {
+    return { state: "invalid", message: `${label} escapes the canonical home directory` };
+  }
+  const pathFromRoot = relative(root, target);
+  const segments = pathFromRoot === "" ? [] : pathFromRoot.split(sep);
+  let current = root;
+  for (const segment of segments) {
+    current = join(current, segment);
+    let stats;
+    try {
+      stats = lstatSync(current);
+    } catch (error) {
+      if (isMissingPathError(error)) return { state: "missing" };
+      return { state: "invalid", message: `${label} is not readable` };
+    }
+    if (stats.isSymbolicLink()) {
+      return {
+        state: "invalid",
+        message: `${label} contains a symbolic link at ${JSON.stringify(current)}`,
+      };
+    }
+    if (!stats.isDirectory()) {
+      return {
+        state: "invalid",
+        message: `${label} contains a non-directory path at ${JSON.stringify(current)}`,
+      };
+    }
+  }
+  return { state: "directory" };
+}
+
+function migrateLegacyUserPluginData(params: {
+  readonly home: string;
+  readonly pluginName: string;
+  readonly pluginRoot: string;
+  readonly target: string;
+  readonly diagnostics: PluginDiagnostic[];
+}): string | undefined {
+  const fail = (reason: string): string => {
+    const message = `plugin data migration failed: ${reason}`;
+    params.diagnostics.push({
+      plugin: params.pluginName,
+      directory: params.pluginRoot,
+      message,
+    });
+    return message;
+  };
+  const canonicalHome = canonicalPotentialPath(resolve(params.home));
+  if (canonicalHome === undefined) {
+    return fail("home directory does not resolve safely");
+  }
+  const dataRoot = resolve(canonicalHome, ".tidesurf", "plugin-data");
+  const legacy = resolve(dataRoot, params.pluginName);
+  const userRoot = resolve(dataRoot, "user");
+
+  const targetState = inspectDirectoryWithoutSymlinks(
+    canonicalHome,
+    params.target,
+    "new plugin data path"
+  );
+  if (targetState.state === "invalid") return fail(targetState.message);
+  if (targetState.state === "directory") return undefined;
+
+  const legacyState = inspectDirectoryWithoutSymlinks(
+    canonicalHome,
+    legacy,
+    "legacy plugin data path"
+  );
+  if (legacyState.state === "invalid") return fail(legacyState.message);
+  if (legacyState.state === "missing") return undefined;
+
+  try {
+    mkdirSync(userRoot, { mode: 0o700 });
+  } catch (error) {
+    if (errorCode(error) !== "EEXIST") {
+      return fail(`cannot create the user data root: ${errorMessage(error)}`);
+    }
+  }
+  const userRootState = inspectDirectoryWithoutSymlinks(
+    canonicalHome,
+    userRoot,
+    "user plugin data root"
+  );
+  if (userRootState.state !== "directory") {
+    return fail(
+      userRootState.state === "invalid"
+        ? userRootState.message
+        : "user plugin data root disappeared during migration"
+    );
+  }
+  try {
+    chmodSync(userRoot, 0o700);
+    chmodSync(legacy, 0o700);
+  } catch (error) {
+    return fail(`cannot secure migration directories: ${errorMessage(error)}`);
+  }
+
+  const targetRecheck = inspectDirectoryWithoutSymlinks(
+    canonicalHome,
+    params.target,
+    "new plugin data path"
+  );
+  if (targetRecheck.state !== "missing") {
+    return fail(
+      targetRecheck.state === "invalid"
+        ? targetRecheck.message
+        : "new plugin data path appeared during migration"
+    );
+  }
+  try {
+    if (lstatSync(legacy).dev !== lstatSync(userRoot).dev) {
+      return fail("legacy and new plugin data paths are on different filesystems");
+    }
+  } catch (error) {
+    return fail(`cannot verify migration filesystem: ${errorMessage(error)}`);
+  }
+
+  const lockPath = join(userRoot, `.${params.pluginName}.migration.lock`);
+  let lock: number;
+  try {
+    lock = openSync(lockPath, "wx", 0o600);
+    closeSync(lock);
+  } catch (error) {
+    return fail(`cannot acquire migration lock: ${errorMessage(error)}`);
+  }
+
+  let lockRemovalError: unknown;
+  try {
+    const lockedTargetState = inspectDirectoryWithoutSymlinks(
+      canonicalHome,
+      params.target,
+      "new plugin data path"
+    );
+    if (lockedTargetState.state !== "missing") {
+      return fail(
+        lockedTargetState.state === "invalid"
+          ? lockedTargetState.message
+          : "new plugin data path appeared during migration"
+      );
+    }
+    renameSync(legacy, params.target);
+  } catch (error) {
+    return fail(`atomic rename failed: ${errorMessage(error)}`);
+  } finally {
+    try {
+      unlinkSync(lockPath);
+    } catch (error) {
+      lockRemovalError = error;
+    }
+  }
+  if (lockRemovalError !== undefined) {
+    return fail(`migration lock cleanup failed: ${errorMessage(lockRemovalError)}`);
+  }
+  return undefined;
 }
 
 function resolveContainedExistingPath(
@@ -597,6 +780,11 @@ function loadHttpServer(
         return fail(`header name ${JSON.stringify(key)} is not a valid HTTP field name`);
       }
       const folded = key.toLowerCase();
+      if (folded.startsWith("mcp-") || CLIENT_CONTROLLED_HTTP_HEADERS.has(folded)) {
+        return fail(
+          `header name ${JSON.stringify(key)} is controlled by the MCP HTTP client`
+        );
+      }
       if (names.has(folded)) {
         return fail(`header name ${JSON.stringify(key)} duplicates another header case-insensitively`);
       }
@@ -955,8 +1143,19 @@ export function loadPlugin(
         }
       : { name, source }
   );
+  const migrationFailure = source === "user"
+    ? migrateLegacyUserPluginData({
+        home,
+        pluginName: name,
+        pluginRoot,
+        target: dataDirectory,
+        diagnostics,
+      })
+    : undefined;
   const skills = loadPluginSkills(pluginRoot, source, name, diagnostics);
-  const mcp = loadMcpServers(pluginRoot, name, dataDirectory, diagnostics);
+  const mcp = migrationFailure === undefined
+    ? loadMcpServers(pluginRoot, name, dataDirectory, diagnostics)
+    : { servers: [], disabled: migrationFailure };
 
   const plugin: LoadedPlugin = {
     directory: pluginRoot,

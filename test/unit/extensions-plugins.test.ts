@@ -1,10 +1,14 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { createHash } from "node:crypto";
 import {
+  existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   realpathSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -113,6 +117,91 @@ describe("pluginDataDirectory", () => {
     );
     expect(pluginDataDirectory(home, "my-plugin")).toBe(expected);
     expect(isAbsolute(pluginDataDirectory(home, "my-plugin"))).toBe(true);
+  });
+
+  it("atomically migrates legacy user data when the new target is absent", () => {
+    const home = makeTemp();
+    const legacy = join(home, ".tidesurf", "plugin-data", "my-plugin");
+    mkdirSync(join(legacy, "nested"), { recursive: true });
+    writeFileSync(join(legacy, "nested", "state.json"), "legacy-state");
+    const directory = join(makeTemp(), "my-plugin");
+    writePlugin(directory);
+
+    const { plugin, diagnostics } = loadPlugin(directory, "user", home);
+    const target = pluginDataDirectory(home, "my-plugin");
+    expect(diagnostics).toEqual([]);
+    expect(existsSync(legacy)).toBe(false);
+    expect(lstatSync(target).isSymbolicLink()).toBe(false);
+    expect(readFileSync(join(target, "nested", "state.json"), "utf8")).toBe(
+      "legacy-state"
+    );
+    if (process.platform !== "win32") {
+      expect(statSync(target).mode & 0o777).toBe(0o700);
+    }
+    expect(plugin?.dataDirectory).toBe(target);
+  });
+
+  it("does not migrate or overwrite legacy data when the user target exists", () => {
+    const home = makeTemp();
+    const legacy = join(home, ".tidesurf", "plugin-data", "my-plugin");
+    const target = pluginDataDirectory(home, "my-plugin");
+    mkdirSync(legacy, { recursive: true });
+    mkdirSync(target, { recursive: true });
+    writeFileSync(join(legacy, "owner"), "legacy");
+    writeFileSync(join(target, "owner"), "new");
+    const directory = join(makeTemp(), "my-plugin");
+    writePlugin(directory);
+
+    const { diagnostics } = loadPlugin(directory, "user", home);
+    expect(diagnostics).toEqual([]);
+    expect(readFileSync(join(legacy, "owner"), "utf8")).toBe("legacy");
+    expect(readFileSync(join(target, "owner"), "utf8")).toBe("new");
+  });
+
+  it("rejects symlinked legacy or target data and disables MCP with a diagnostic", () => {
+    for (const linkedPath of ["legacy", "target"] as const) {
+      const home = makeTemp();
+      const dataRoot = join(home, ".tidesurf", "plugin-data");
+      const legacy = join(dataRoot, "my-plugin");
+      const target = pluginDataDirectory(home, "my-plugin");
+      const outside = makeTemp();
+      mkdirSync(dataRoot, { recursive: true });
+      if (linkedPath === "legacy") {
+        symlinkSync(outside, legacy, "dir");
+      } else {
+        mkdirSync(legacy, { recursive: true });
+        mkdirSync(join(dataRoot, "user"), { recursive: true });
+        symlinkSync(outside, target, "dir");
+      }
+      const directory = join(makeTemp(), "my-plugin");
+      writePlugin(
+        directory,
+        manifest(),
+        mcpDocument({ server: { type: "stdio", command: "node" } })
+      );
+
+      const { plugin, diagnostics } = loadPlugin(directory, "user", home);
+      expect(plugin?.mcpServers).toEqual([]);
+      expect(plugin?.mcpDisabled).toContain("plugin data migration failed");
+      expect(diagnostics.some((entry) => entry.message.includes("symbolic link"))).toBe(true);
+      expect(lstatSync(linkedPath === "legacy" ? legacy : target).isSymbolicLink()).toBe(true);
+    }
+  });
+
+  it("never assigns legacy user data to a project plugin", () => {
+    const home = makeTemp();
+    const legacy = join(home, ".tidesurf", "plugin-data", "my-plugin");
+    mkdirSync(legacy, { recursive: true });
+    writeFileSync(join(legacy, "owner"), "unknown-user-owner");
+    const project = makeTemp();
+    const directory = join(project, ".tidesurf", "plugins", "my-plugin");
+    writePlugin(directory);
+
+    const { plugin, diagnostics } = loadPlugin(directory, "project", home);
+    expect(diagnostics).toEqual([]);
+    expect(readFileSync(join(legacy, "owner"), "utf8")).toBe("unknown-user-owner");
+    expect(existsSync(plugin!.dataDirectory)).toBe(false);
+    expect(plugin!.dataDirectory).toContain(`${join("plugin-data", "project")}`);
   });
 
   it("scopes LoadedPlugin data by user or canonical project identity", () => {
@@ -827,6 +916,44 @@ describe("streamable HTTP semantics", () => {
       "X-Plugin": "${PLUGIN_ROOT}",
       "X-Tab": "one\ttwo",
     });
+  });
+
+  it("rejects MCP protocol and HTTP client-controlled header overrides", () => {
+    const reserved = [
+      "Accept",
+      "Content-Type",
+      "Content-Length",
+      "Host",
+      "Connection",
+      "Transfer-Encoding",
+      "Last-Event-ID",
+      "Mcp-Session-Id",
+      "MCP-Protocol-Version",
+      "Mcp-Future-Header",
+    ];
+    const servers: Record<string, unknown> = {
+      good: {
+        type: "streamable-http",
+        url: "https://example.com/mcp",
+        headers: { Authorization: "Bearer configured" },
+      },
+    };
+    reserved.forEach((header, index) => {
+      servers[`reserved-${index}`] = {
+        type: "streamable-http",
+        url: "https://example.com/mcp",
+        headers: { [header]: "override" },
+      };
+    });
+
+    const { plugin, diagnostics } = loadServers(servers);
+    expect(plugin?.mcpServers.map((server) => server.name)).toEqual(["good"]);
+    expect(diagnostics).toHaveLength(reserved.length);
+    expect(
+      diagnostics.every((diagnostic) =>
+        diagnostic.message.includes("controlled by the MCP HTTP client")
+      )
+    ).toBe(true);
   });
 
   it("rejects invalid names, values, types, and case-insensitive duplicate headers per server", () => {

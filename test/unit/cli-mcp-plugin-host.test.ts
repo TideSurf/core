@@ -230,6 +230,38 @@ function processExists(pid: number): boolean {
   }
 }
 
+async function expectStartupQueueOverflow(messages: readonly unknown[]): Promise<void> {
+  const fixture = writePluginFixture({ hang: true });
+  const child = spawn(process.execPath, [cliPath, "mcp", "--quiet"], {
+    cwd: root,
+    env: childEnvironment(fixture, false),
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  const stderr: Buffer[] = [];
+  child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
+  let pluginPid: number | undefined;
+  try {
+    await waitForFile(fixture.marker);
+    pluginPid = Number(readFileSync(fixture.marker, "utf8"));
+    for (const value of messages) {
+      child.stdin.write(`${JSON.stringify(value)}\n`);
+    }
+    const [code, signal] = await closeEvent(child);
+    expect(signal).toBeNull();
+    expect(code).not.toBe(0);
+    expect(Buffer.concat(stderr).toString("utf8")).toContain(
+      "MCP startup message queue exceeded"
+    );
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
+    expect(processExists(pluginPid)).toBe(false);
+  } finally {
+    if (child.exitCode === null) child.kill("SIGKILL");
+    if (pluginPid !== undefined && processExists(pluginPid)) {
+      process.kill(pluginPid, "SIGKILL");
+    }
+  }
+}
+
 describe("CLI MCP plugin-host guards", () => {
   it("declares only the packed local Node CLI in mcp.json", () => {
     const manifest = JSON.parse(readFileSync(join(root, "mcp.json"), "utf8"));
@@ -274,6 +306,23 @@ describe("CLI MCP plugin-host guards", () => {
     expect(existsSync(fixture.dataDirectory)).toBe(false);
     expect(tools).not.toContain("probe__probe_tool");
   }, 10_000);
+
+  it("aborts startup when the held host queue exceeds its count or serialized-byte cap", async () => {
+    await expectStartupQueueOverflow(
+      Array.from({ length: 129 }, (_, index) => ({
+        jsonrpc: "2.0",
+        method: "queue/probe",
+        params: { index },
+      }))
+    );
+    await expectStartupQueueOverflow([
+      {
+        jsonrpc: "2.0",
+        method: "queue/probe",
+        params: { payload: "x".repeat(1024 * 1024) },
+      },
+    ]);
+  }, 20_000);
 
   it("handles SIGINT, SIGTERM, and stdin EOF while plugin startup is pending", async () => {
     if (process.platform === "win32") return;

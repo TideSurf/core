@@ -47,6 +47,11 @@ export interface McpClientLike {
   close(): Promise<void>;
 }
 
+export type PluginHttpFetch = (
+  url: string | URL,
+  init?: RequestInit
+) => Promise<Response>;
+
 export interface PluginProxyFactories {
   readonly createClient: () => McpClientLike;
   readonly createStdioTransport: (params: {
@@ -59,6 +64,7 @@ export interface PluginProxyFactories {
   readonly createHttpTransport: (params: {
     url: string;
     headers?: Record<string, string>;
+    fetch: PluginHttpFetch;
   }) => unknown;
   readonly createInputSchema: (schema: unknown) => unknown;
 }
@@ -96,13 +102,17 @@ const STARTUP_TIMEOUT_MS = 10_000;
 const MAX_TOOLS_PER_SERVER = 128;
 const MAX_TOOLS_TOTAL = 256;
 const MAX_LIST_PAGES = 100;
+const MAX_CURSOR_BYTES = 4 * 1024;
+const MAX_REMOTE_TOOL_NAME_BYTES = 256;
+const MAX_TOOL_DESCRIPTION_BYTES = 16 * 1024;
+const MAX_LIST_RETAINED_BYTES = 4 * 1024 * 1024;
 const MAX_SCHEMA_BYTES = 256 * 1024;
 const MAX_SCHEMA_DEPTH = 64;
 const MAX_TOOL_CALL_MS = 30_000;
 const MAX_RESULT_BYTES = 16 * 1024 * 1024;
 const MAX_TOOL_NAME_BYTES = 64;
 const TOOL_NAME_HASH_BYTES = 12;
-const CLOSE_GRACE_MS = 2_000;
+const CLOSE_GRACE_MS = 5_000;
 
 const POSIX_INHERITED_ENV = [
   "HOME",
@@ -134,6 +144,39 @@ function boundedTimeout(value: number | undefined, maximum: number): number {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** Reject redirects and any SDK request that escapes the configured origin. */
+export function createControlledPluginHttpFetch(
+  endpoint: string | URL,
+  fetchImplementation: PluginHttpFetch = (url, init) => fetch(url, init)
+): PluginHttpFetch {
+  const expected = new URL(endpoint);
+  return async (url, init) => {
+    const target = new URL(typeof url === "string" ? url : url.href);
+    if (target.origin !== expected.origin) {
+      throw new Error(
+        `plugin MCP HTTP request origin ${target.origin} differs from configured origin ${expected.origin}`
+      );
+    }
+    const response = await fetchImplementation(target, {
+      ...init,
+      redirect: "manual",
+    });
+    if (
+      (response.status >= 300 && response.status < 400) ||
+      response.type === "opaqueredirect" ||
+      response.redirected
+    ) {
+      try {
+        await response.body?.cancel();
+      } catch {
+        // The redirect is rejected regardless of body cancellation support.
+      }
+      throw new Error(`plugin MCP HTTP redirect rejected for ${target.href}`);
+    }
+    return response;
+  };
 }
 
 function abortError(reason: unknown, fallback: string): Error {
@@ -258,64 +301,124 @@ function requestOptions(
   };
 }
 
-async function withAbsoluteDeadline<T>(
-  parentSignal: AbortSignal | undefined,
-  timeoutMs: number,
+async function withSharedDeadline<T>(
+  signal: AbortSignal,
+  deadline: number,
   operation: (signal: AbortSignal, deadline: number) => Promise<T>
 ): Promise<T> {
-  const controller = new AbortController();
-  const deadline = Date.now() + timeoutMs;
-  const timeoutError = new Error(`startup timed out after ${timeoutMs}ms`);
-  const timer = setTimeout(() => controller.abort(timeoutError), timeoutMs);
-  const onParentAbort = () => {
-    controller.abort(abortError(parentSignal?.reason, "plugin proxy startup cancelled"));
-  };
-  if (parentSignal?.aborted) onParentAbort();
-  else parentSignal?.addEventListener("abort", onParentAbort, { once: true });
-
-  const aborted = controller.signal.aborted
-    ? Promise.reject<T>(abortError(controller.signal.reason, "plugin proxy startup cancelled"))
-    : new Promise<T>((_resolve, reject) => {
-        controller.signal.addEventListener(
-          "abort",
-          () => reject(abortError(controller.signal.reason, "plugin proxy startup cancelled")),
-          { once: true }
-        );
-      });
-  const pending = Promise.resolve().then(() =>
-    operation(controller.signal, deadline)
-  );
+  if (signal.aborted) {
+    throw abortError(signal.reason, "plugin proxy startup cancelled");
+  }
+  let onAbort!: () => void;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    onAbort = () =>
+      reject(abortError(signal.reason, "plugin proxy startup cancelled"));
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+  const pending = Promise.resolve().then(() => operation(signal, deadline));
   try {
     return await Promise.race([pending, aborted]);
   } finally {
-    clearTimeout(timer);
-    parentSignal?.removeEventListener("abort", onParentAbort);
+    signal.removeEventListener("abort", onAbort);
   }
 }
 
-interface GraceResult {
-  readonly results?: readonly PromiseSettledResult<void>[];
-  readonly timedOut: boolean;
+interface CleanupOperation {
+  readonly label: string;
+  readonly run: () => void | Promise<void>;
+  readonly onSuccess?: () => void;
 }
 
-async function settleWithGrace(
-  operations: readonly (() => void | Promise<void>)[],
-  graceMs: number
-): Promise<GraceResult> {
-  if (operations.length === 0) return { results: [], timedOut: false };
-  const pending = operations.map((operation) =>
-    Promise.resolve().then(operation).then(() => undefined)
-  );
-  const settled = Promise.allSettled(pending);
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<undefined>((resolveTimeout) => {
-    timer = setTimeout(() => resolveTimeout(undefined), graceMs);
-  });
-  const results = await Promise.race([settled, timeout]);
-  if (timer !== undefined) clearTimeout(timer);
-  return results === undefined
-    ? { timedOut: true }
-    : { results, timedOut: false };
+class CleanupRegistry {
+  private readonly operations = new Set<CleanupOperation>();
+
+  constructor(private readonly log: (message: string) => void) {}
+
+  retain(
+    label: string,
+    run: () => void | Promise<void>,
+    onSuccess?: () => void
+  ): CleanupOperation {
+    const operation: CleanupOperation = { label, run, onSuccess };
+    this.operations.add(operation);
+    return operation;
+  }
+
+  async attempt(
+    requested: readonly CleanupOperation[],
+    graceMs: number,
+    context: string
+  ): Promise<void> {
+    const operations = [...new Set(requested)].filter((operation) =>
+      this.operations.has(operation)
+    );
+    if (operations.length === 0) return;
+    const settled = Promise.all(
+      operations.map(async (operation) => {
+        try {
+          await operation.run();
+          if (this.operations.delete(operation)) {
+            try {
+              operation.onSuccess?.();
+            } catch (error) {
+              this.log(
+                `${context} completion bookkeeping failed (${operation.label}): ${errorMessage(error)}`
+              );
+            }
+          }
+        } catch (error) {
+          if (this.operations.has(operation)) {
+            this.log(
+              `${context} operation failed (${operation.label}): ${errorMessage(error)}`
+            );
+          }
+        }
+      })
+    );
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = await Promise.race([
+      settled.then(() => false),
+      new Promise<boolean>((resolveTimeout) => {
+        timer = setTimeout(() => resolveTimeout(true), graceMs);
+      }),
+    ]);
+    if (timer !== undefined) clearTimeout(timer);
+    if (timedOut) this.log(`${context} exceeded ${graceMs}ms grace`);
+  }
+
+  attemptAll(graceMs: number, context: string): Promise<void> {
+    return this.attempt([...this.operations], graceMs, context);
+  }
+
+  has(operation: CleanupOperation): boolean {
+    return this.operations.has(operation);
+  }
+}
+
+function createPluginProxyResult(
+  servers: readonly ProxiedServerInfo[],
+  cleanup: CleanupRegistry,
+  closeGraceMs: number
+): PluginProxy {
+  let closeAttempt: Promise<void> | undefined;
+  return {
+    servers,
+    close: () => {
+      if (closeAttempt !== undefined) return closeAttempt;
+      let tracked!: Promise<void>;
+      tracked = cleanup.attemptAll(closeGraceMs, "plugin proxy close").then(
+        () => {
+          if (closeAttempt === tracked) closeAttempt = undefined;
+        },
+        (error) => {
+          if (closeAttempt === tracked) closeAttempt = undefined;
+          throw error;
+        }
+      );
+      closeAttempt = tracked;
+      return tracked;
+    },
+  };
 }
 
 function assertSchemaWithinLimits(schema: unknown): void {
@@ -452,17 +555,56 @@ interface ServerEntry {
 interface ConnectedServer {
   readonly entry: ServerEntry;
   readonly client: McpClientLike;
+  readonly clientCleanup: CleanupOperation;
   readonly tools: readonly RemoteTool[];
-  readonly toolsCapped: boolean;
+  readonly toolsCapReason?: string;
+}
+
+interface ListedTools {
+  readonly tools: RemoteTool[];
+  readonly capReason?: string;
+}
+
+function serializedToolBytes(tool: RemoteTool): number {
+  let encoded: string | undefined;
+  try {
+    encoded = JSON.stringify(tool);
+  } catch (error) {
+    throw new Error(`tools/list tool is not serializable: ${errorMessage(error)}`);
+  }
+  if (encoded === undefined) throw new Error("tools/list tool is not serializable");
+  return Buffer.byteLength(encoded);
+}
+
+function validateRemoteToolMetadata(tool: RemoteTool): void {
+  if (typeof tool?.name !== "string" || tool.name.length === 0) {
+    throw new Error("tools/list tool name must be a non-empty string");
+  }
+  if (Buffer.byteLength(tool.name) > MAX_REMOTE_TOOL_NAME_BYTES) {
+    throw new Error(
+      `tools/list tool name exceeds ${MAX_REMOTE_TOOL_NAME_BYTES}-byte limit`
+    );
+  }
+  if (tool.description !== undefined) {
+    if (typeof tool.description !== "string") {
+      throw new Error("tools/list tool description must be a string");
+    }
+    if (Buffer.byteLength(tool.description) > MAX_TOOL_DESCRIPTION_BYTES) {
+      throw new Error(
+        `tools/list tool description exceeds ${MAX_TOOL_DESCRIPTION_BYTES}-byte limit`
+      );
+    }
+  }
 }
 
 async function listRemoteTools(
   client: McpClientLike,
   signal: AbortSignal,
   deadline: number
-): Promise<{ tools: RemoteTool[]; capped: boolean }> {
+): Promise<ListedTools> {
   const tools: RemoteTool[] = [];
   const seenCursors = new Set<string>();
+  let retainedBytes = 0;
   let cursor: string | undefined;
 
   for (let page = 0; page < MAX_LIST_PAGES; page++) {
@@ -473,22 +615,56 @@ async function listRemoteTools(
     if (!Array.isArray(response.tools)) {
       throw new Error("tools/list returned an invalid tools array");
     }
-    const available = MAX_TOOLS_PER_SERVER - tools.length;
-    if (response.tools.length > available) {
-      tools.push(...response.tools.slice(0, available));
-      return { tools, capped: true };
+    for (let index = 0; index < response.tools.length; index++) {
+      if (tools.length === MAX_TOOLS_PER_SERVER) {
+        return {
+          tools,
+          capReason: `tool count limit ${MAX_TOOLS_PER_SERVER}`,
+        };
+      }
+      const tool = response.tools[index];
+      validateRemoteToolMetadata(tool);
+      const bytes = serializedToolBytes(tool);
+      if (bytes > MAX_LIST_RETAINED_BYTES - retainedBytes) {
+        return {
+          tools,
+          capReason: `aggregate retained data limit ${MAX_LIST_RETAINED_BYTES} bytes`,
+        };
+      }
+      tools.push(tool);
+      retainedBytes += bytes;
     }
-    tools.push(...response.tools);
     if (tools.length === MAX_TOOLS_PER_SERVER) {
-      return { tools, capped: response.nextCursor !== undefined };
+      return response.nextCursor === undefined
+        ? { tools }
+        : {
+            tools,
+            capReason: `tool count limit ${MAX_TOOLS_PER_SERVER}`,
+          };
     }
 
     const next = response.nextCursor;
-    if (next === undefined) return { tools, capped: false };
+    if (next === undefined) return { tools };
+    if (typeof next !== "string") {
+      throw new Error("tools/list cursor must be a string");
+    }
+    const cursorBytes = Buffer.byteLength(next);
+    if (cursorBytes > MAX_CURSOR_BYTES) {
+      throw new Error(
+        `tools/list cursor exceeds ${MAX_CURSOR_BYTES}-byte limit`
+      );
+    }
     if (seenCursors.has(next)) {
       throw new Error(`tools/list repeated cursor ${JSON.stringify(next)}`);
     }
+    if (cursorBytes > MAX_LIST_RETAINED_BYTES - retainedBytes) {
+      return {
+        tools,
+        capReason: `aggregate retained data limit ${MAX_LIST_RETAINED_BYTES} bytes`,
+      };
+    }
     seenCursors.add(next);
+    retainedBytes += cursorBytes;
     cursor = next;
   }
   throw new Error(`tools/list exceeded ${MAX_LIST_PAGES} pages`);
@@ -497,21 +673,29 @@ async function listRemoteTools(
 async function connectServer(
   entry: ServerEntry,
   factories: PluginProxyFactories,
-  parentSignal: AbortSignal | undefined,
-  startupMs: number,
+  cleanup: CleanupRegistry,
+  startupSignal: AbortSignal,
+  startupDeadline: number,
   closeGraceMs: number,
   log: (message: string) => void
 ): Promise<ConnectedServer | undefined> {
+  const label = `plugin "${entry.plugin.name}" server "${entry.spec.name}"`;
   let client: McpClientLike | undefined;
+  let clientCleanup: CleanupOperation | undefined;
   try {
-    return await withAbsoluteDeadline(
-      parentSignal,
-      startupMs,
+    return await withSharedDeadline(
+      startupSignal,
+      startupDeadline,
       async (signal, deadline) => {
         if (signal.aborted) {
           throw abortError(signal.reason, "plugin proxy startup cancelled");
         }
         client = factories.createClient();
+        const createdClient = client;
+        clientCleanup = cleanup.retain(
+          `${label} client close`,
+          () => createdClient.close()
+        );
         const { plugin, spec } = entry;
         let transport: unknown;
         if (spec.type === "stdio") {
@@ -531,6 +715,7 @@ async function connectServer(
           transport = factories.createHttpTransport({
             url: spec.url!,
             ...(spec.headers ? { headers: { ...spec.headers } } : {}),
+            fetch: createControlledPluginHttpFetch(spec.url!),
           });
         }
         await client.connect(transport, requestOptions(signal, deadline));
@@ -538,65 +723,30 @@ async function connectServer(
         return {
           entry,
           client,
+          clientCleanup: clientCleanup!,
           tools: listed.tools,
-          toolsCapped: listed.capped,
+          ...(listed.capReason === undefined
+            ? {}
+            : { toolsCapReason: listed.capReason }),
         };
       }
     );
   } catch (error) {
-    if (client !== undefined) {
-      await settleWithGrace([() => client!.close()], closeGraceMs);
+    if (clientCleanup !== undefined) {
+      await cleanup.attempt(
+        [clientCleanup],
+        closeGraceMs,
+        `${label}: startup cleanup`
+      );
     }
-    log(
-      `plugin "${entry.plugin.name}" server "${entry.spec.name}" failed to start: ${errorMessage(error)}`
-    );
+    log(`${label} failed to start: ${errorMessage(error)}`);
     return undefined;
   }
 }
 
 interface ActiveRegistration {
   readonly name: string;
-  readonly handle: McpToolRegistration;
-}
-
-interface ActiveClient {
-  readonly client: McpClientLike;
-  readonly registrations: readonly ActiveRegistration[];
-}
-
-async function rollbackClient(
-  registrations: readonly ActiveRegistration[],
-  client: McpClientLike,
-  takenNames: Set<string>,
-  closeGraceMs: number,
-  log: (message: string) => void,
-  label: string
-): Promise<number> {
-  const operations: Array<() => void | Promise<void>> = [
-    ...registrations.map((registration) => () => registration.handle.remove()),
-    () => client.close(),
-  ];
-  const cleanup = await settleWithGrace(operations, closeGraceMs);
-  if (cleanup.timedOut || cleanup.results === undefined) {
-    log(`${label}: rollback exceeded ${closeGraceMs}ms grace`);
-    return 0;
-  }
-
-  let removed = 0;
-  for (let index = 0; index < registrations.length; index++) {
-    const result = cleanup.results[index];
-    if (result?.status === "fulfilled") {
-      takenNames.delete(registrations[index].name);
-      removed++;
-    } else if (result?.status === "rejected") {
-      log(`${label}: tool removal failed: ${errorMessage(result.reason)}`);
-    }
-  }
-  const clientResult = cleanup.results[registrations.length];
-  if (clientResult?.status === "rejected") {
-    log(`${label}: client close failed: ${errorMessage(clientResult.reason)}`);
-  }
-  return removed;
+  readonly cleanup: CleanupOperation;
 }
 
 /**
@@ -614,6 +764,7 @@ export async function proxyPluginMcpServers(
     options.timeouts?.closeGraceMs,
     CLOSE_GRACE_MS
   );
+  const cleanup = new CleanupRegistry(log);
   const declarations: ServerEntry[] = [];
   for (const plugin of options.plugins) {
     for (const spec of plugin.mcpServers) declarations.push({ plugin, spec });
@@ -625,46 +776,68 @@ export async function proxyPluginMcpServers(
   }
   const selected = declarations.slice(0, MAX_SERVERS);
   const connected: Array<ConnectedServer | undefined> = new Array(selected.length);
+  const startupController = new AbortController();
+  const startupDeadline = Date.now() + startupMs;
+  const startupTimeoutError = new Error(`startup timed out after ${startupMs}ms`);
+  const expireStartup = (): void => {
+    if (!startupController.signal.aborted) {
+      startupController.abort(startupTimeoutError);
+    }
+  };
+  const onParentAbort = (): void => {
+    startupController.abort(
+      abortError(options.signal?.reason, "plugin proxy startup cancelled")
+    );
+  };
+  if (options.signal?.aborted) onParentAbort();
+  else options.signal?.addEventListener("abort", onParentAbort, { once: true });
+  const startupTimer = setTimeout(expireStartup, startupMs);
   let nextIndex = 0;
   const worker = async (): Promise<void> => {
     for (;;) {
-      if (options.signal?.aborted) return;
+      if (startupController.signal.aborted) return;
+      if (Date.now() >= startupDeadline) {
+        expireStartup();
+        return;
+      }
       const index = nextIndex++;
       if (index >= selected.length) return;
       connected[index] = await connectServer(
         selected[index],
         options.factories,
-        options.signal,
-        startupMs,
+        cleanup,
+        startupController.signal,
+        startupDeadline,
         closeGraceMs,
         log
       );
     }
   };
-  await Promise.allSettled(
-    Array.from(
-      { length: Math.min(STARTUP_CONCURRENCY, selected.length) },
-      () => worker()
-    )
-  );
+  try {
+    await Promise.allSettled(
+      Array.from(
+        { length: Math.min(STARTUP_CONCURRENCY, selected.length) },
+        () => worker()
+      )
+    );
+  } finally {
+    clearTimeout(startupTimer);
+    options.signal?.removeEventListener("abort", onParentAbort);
+  }
 
   if (options.signal?.aborted) {
-    const clients = connected.flatMap((entry) =>
-      entry === undefined ? [] : [entry.client]
+    const cleanups = connected.flatMap((entry) =>
+      entry === undefined ? [] : [entry.clientCleanup]
     );
-    await settleWithGrace(
-      clients.map((client) => () => client.close()),
-      closeGraceMs
+    await cleanup.attempt(
+      cleanups,
+      closeGraceMs,
+      "plugin proxy startup abort"
     );
-    let closed: Promise<void> | undefined;
-    return {
-      servers: [],
-      close: () => closed ??= Promise.resolve(),
-    };
+    return createPluginProxyResult([], cleanup, closeGraceMs);
   }
 
   const servers: ProxiedServerInfo[] = [];
-  const activeClients: ActiveClient[] = [];
   const takenNames = new Set<string>();
   let totalRegistered = 0;
 
@@ -672,8 +845,8 @@ export async function proxyPluginMcpServers(
     if (connection === undefined) continue;
     const { plugin, spec } = connection.entry;
     const label = `plugin "${plugin.name}" server "${spec.name}"`;
-    if (connection.toolsCapped) {
-      log(`${label}: tool list capped at ${MAX_TOOLS_PER_SERVER}`);
+    if (connection.toolsCapReason !== undefined) {
+      log(`${label}: tool list capped: ${connection.toolsCapReason}`);
     }
 
     const registrations: ActiveRegistration[] = [];
@@ -748,41 +921,40 @@ export async function proxyPluginMcpServers(
         }
       } catch (error) {
         log(`${label}: tool registration failed: ${errorMessage(error)}`);
-        const removed = await rollbackClient(
-          registrations,
-          connection.client,
-          takenNames,
+        await cleanup.attempt(
+          [
+            ...registrations.map((registration) => registration.cleanup),
+            connection.clientCleanup,
+          ],
           closeGraceMs,
-          log,
-          label
+          `${label}: registration rollback`
         );
-        totalRegistered -= removed;
         registrationFailed = true;
         break;
       }
 
       takenNames.add(exposedName);
-      registrations.push({ name: exposedName, handle });
+      registrations.push({
+        name: exposedName,
+        cleanup: cleanup.retain(
+          `${label} tool "${exposedName}"`,
+          () => handle.remove(),
+          () => {
+            takenNames.delete(exposedName);
+            totalRegistered--;
+          }
+        ),
+      });
       totalRegistered++;
     }
 
     if (registrationFailed) continue;
-    if (registrations.length > 0) {
-      activeClients.push({
-        client: connection.client,
-        registrations,
-      });
-    } else {
-      const cleanup = await settleWithGrace(
-        [() => connection.client.close()],
-        closeGraceMs
+    if (registrations.length === 0) {
+      await cleanup.attempt(
+        [connection.clientCleanup],
+        closeGraceMs,
+        `${label}: unused client close`
       );
-      if (cleanup.timedOut) log(`${label}: client close exceeded ${closeGraceMs}ms grace`);
-      else if (cleanup.results?.[0]?.status === "rejected") {
-        log(
-          `${label}: client close failed: ${errorMessage(cleanup.results[0].reason)}`
-        );
-      }
     }
     servers.push({
       plugin: plugin.name,
@@ -792,30 +964,5 @@ export async function proxyPluginMcpServers(
     log(`${label}: ${registrations.length} tool(s) available`);
   }
 
-  let closePromise: Promise<void> | undefined;
-  return {
-    servers,
-    close: () => {
-      closePromise ??= (async () => {
-        const operations: Array<() => void | Promise<void>> = [];
-        for (const active of activeClients) {
-          for (const registration of active.registrations) {
-            operations.push(() => registration.handle.remove());
-          }
-          operations.push(() => active.client.close());
-        }
-        const cleanup = await settleWithGrace(operations, closeGraceMs);
-        if (cleanup.timedOut) {
-          log(`plugin proxy close exceeded ${closeGraceMs}ms grace`);
-          return;
-        }
-        for (const result of cleanup.results ?? []) {
-          if (result.status === "rejected") {
-            log(`plugin proxy close operation failed: ${errorMessage(result.reason)}`);
-          }
-        }
-      })();
-      return closePromise;
-    },
-  };
+  return createPluginProxyResult(servers, cleanup, closeGraceMs);
 }
