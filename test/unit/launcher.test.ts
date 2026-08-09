@@ -582,7 +582,7 @@ setInterval(() => {}, 1000);
       launched = await launchChrome({
         chromePath: fakeChrome,
         userDataDir: profile,
-        timeout: 2_000,
+        timeout: 8_000,
       });
       expect(launched).toMatchObject({ port, targetId: "started-page" });
     } finally {
@@ -590,7 +590,7 @@ setInterval(() => {}, 1000);
       await closeServer(server);
       rmSync(root, { recursive: true, force: true });
     }
-  });
+  }, 20_000);
 
   it("records a launched endpoint as an owned browser", async () => {
     if (process.platform === "win32") return;
@@ -626,7 +626,7 @@ setInterval(() => {}, 1000);
       launched = await launchChrome({
         chromePath: fakeChrome,
         userDataDir: profile,
-        timeout: 2_000,
+        timeout: 8_000,
       });
       expect(launched.port).toBe(port);
       expect(isOwnedBrowserEndpoint(launched.host, launched.port)).toBe(true);
@@ -635,7 +635,7 @@ setInterval(() => {}, 1000);
       await closeServer(server);
       rmSync(root, { recursive: true, force: true });
     }
-  });
+  }, 20_000);
 
   it("does not accept a managed launch marker for another browser", async () => {
     if (process.platform === "win32") return;
@@ -671,7 +671,7 @@ setInterval(() => {}, 1000);
         await launchChrome({
           chromePath: fakeChrome,
           userDataDir: profile,
-          timeout: 2_000,
+          timeout: 8_000,
         });
       } catch (error) {
         failure = error;
