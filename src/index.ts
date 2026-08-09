@@ -38,11 +38,13 @@ export {
   skillCatalog,
   loadPlugin,
   loadSkillDirectory,
+  loadSkillDocument,
   validatePluginName,
   validateSkillName,
   parseFrontmatter,
   pluginDataDirectory,
   MAX_SKILL_BODY_BYTES,
+  MAX_SKILL_DOCUMENT_BYTES,
 } from "./extensions/index.js";
 
 export type {
@@ -55,6 +57,7 @@ export type {
   PluginManifest,
   PluginMcpServer,
   SkillDiagnostic,
+  SkillDocument,
   SkillInfo,
 } from "./extensions/index.js";
 

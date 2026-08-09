@@ -657,7 +657,7 @@ export const TOOL_REGISTRY: readonly ToolSpec[] = deepFreeze([
     outputKind: "json",
     cli: cli([positional("name", "Skill name")]),
     handler: async (_instance, input) => {
-      const { findSkill, loadExtensions } = await import(
+      const { findSkill, loadExtensions, loadSkillDocument } = await import(
         "../extensions/index.js"
       );
       const name = stringInput(input, "name");
@@ -671,14 +671,24 @@ export const TOOL_REGISTRY: readonly ToolSpec[] = deepFreeze([
             : `Unknown skill: ${name}. No skills are installed. Add skill directories under .agents/skills or ~/.agents/skills, or install an agent plugin under .tidesurf/plugins.`
         );
       }
+      const document = loadSkillDocument(skill);
       return {
         name: skill.name,
         description: skill.description,
         ...(skill.plugin ? { plugin: skill.plugin } : {}),
         source: skill.source,
         directory: skill.directory,
-        files: skill.files,
-        content: skill.body,
+        ...(skill.license === undefined ? {} : { license: skill.license }),
+        ...(skill.compatibility === undefined
+          ? {}
+          : { compatibility: skill.compatibility }),
+        ...(skill.metadata === undefined ? {} : { metadata: skill.metadata }),
+        ...(skill.allowedTools === undefined
+          ? {}
+          : { allowedTools: skill.allowedTools }),
+        files: document.files,
+        content: document.raw,
+        body: document.body,
       };
     },
   },

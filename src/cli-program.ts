@@ -21,6 +21,7 @@ import {
   getToolDefinitions,
   getToolSpec,
   getToolSpecs,
+  executeValidatedToolSpec,
   readOnlyToolMessage,
   unknownToolMessage,
   validateToolInput,
@@ -241,18 +242,29 @@ async function executeToolCommand(
   if (tool.outputKind === "image" && screenshotOutput === "-" && invocation.json) {
     throw new CliUsageError("--output - cannot be combined with --json");
   }
-  const policy = await sessionPolicy(invocation);
+  const browserFree = tool.requiresBrowser === false;
+  const policy = browserFree
+    ? invocation.sessionConfig
+    : await sessionPolicy(invocation);
   const denied = readOnlyFailure(policy, tool);
   if (denied) return printToolResult(denied, invocation.json);
   const input = await readInput();
   preflightToolInput(tool, input, policy);
-  const { ensureSessionRequest, toToolResult } = await loadSessionModule();
-  const { data: response } = await ensureSessionRequest<ToolResult>(
-    sessionOptions(invocation),
-    { method: "tool", name: tool.name, input },
-    requestTimeout(policy, input)
-  );
-  let result = toToolResult(response);
+  let result: ToolResult;
+  if (browserFree) {
+    // Extension discovery belongs to the invoking process's cwd/environment;
+    // routing it through a persistent daemon leaks stale project policy and
+    // needlessly pins browser startup options before a browser is requested.
+    result = await executeValidatedToolSpec(null, tool, input);
+  } else {
+    const { ensureSessionRequest, toToolResult } = await loadSessionModule();
+    const { data: response } = await ensureSessionRequest<ToolResult>(
+      sessionOptions(invocation),
+      { method: "tool", name: tool.name, input },
+      requestTimeout(policy, input)
+    );
+    result = toToolResult(response);
+  }
   if (tool.outputKind === "image") {
     result = await outputScreenshot(
       result,
@@ -390,7 +402,7 @@ async function listSkills(invocation: ParsedInvocation): Promise<number> {
   if (invocation.positionals.length > 1) {
     throw new CliUsageError(`Unexpected argument: ${invocation.positionals[1]}`);
   }
-  const { findSkill, loadExtensions, skillCatalog } =
+  const { findSkill, loadExtensions, loadSkillDocument, skillCatalog } =
     await loadExtensionsModule();
   const snapshot = loadExtensions();
   const name = invocation.positionals[0];
@@ -404,7 +416,7 @@ async function listSkills(invocation: ParsedInvocation): Promise<number> {
       }, "");
     } else if (entries.length === 0) {
       writeLine(
-        "No skills installed. Add skill directories under .agents/skills or ~/.agents/skills, or install agent plugins under .tidesurf/plugins."
+        "No skills installed. Add skills under ~/.agents/skills, or set TIDESURF_EXTENSIONS=all to trust project skills."
       );
     } else {
       writeLine(
@@ -414,6 +426,8 @@ async function listSkills(invocation: ParsedInvocation): Promise<number> {
           )
           .join("\n")
       );
+    }
+    if (!invocation.json) {
       for (const diagnostic of snapshot.diagnostics) {
         writeLine(`warning: ${diagnostic}`, process.stderr);
       }
@@ -430,6 +444,7 @@ async function listSkills(invocation: ParsedInvocation): Promise<number> {
         : `Unknown skill: ${name}. No skills are installed.`
     );
   }
+  const document = loadSkillDocument(skill);
   if (invocation.json) {
     printSuccess(true, {
       name: skill.name,
@@ -437,13 +452,22 @@ async function listSkills(invocation: ParsedInvocation): Promise<number> {
       ...(skill.plugin ? { plugin: skill.plugin } : {}),
       source: skill.source,
       directory: skill.directory,
-      files: skill.files,
-      content: skill.body,
+      ...(skill.license === undefined ? {} : { license: skill.license }),
+      ...(skill.compatibility === undefined
+        ? {}
+        : { compatibility: skill.compatibility }),
+      ...(skill.metadata === undefined ? {} : { metadata: skill.metadata }),
+      ...(skill.allowedTools === undefined
+        ? {}
+        : { allowedTools: skill.allowedTools }),
+      files: document.files,
+      content: document.raw,
+      body: document.body,
     }, "");
   } else {
-    writeLine(skill.body.trimEnd());
-    if (skill.files.length > 0) {
-      writeLine(`\nBundled files:\n${skill.files.map((file) => `  ${file}`).join("\n")}`);
+    writeLine(document.raw.trimEnd());
+    if (document.files.length > 0) {
+      writeLine(`\nBundled files:\n${document.files.map((file) => `  ${file}`).join("\n")}`);
     }
   }
   return 0;
@@ -480,8 +504,11 @@ async function listPlugins(invocation: ParsedInvocation): Promise<number> {
   }
   if (summaries.length === 0) {
     writeLine(
-      "No plugins installed. Add agent plugin directories under .tidesurf/plugins or ~/.tidesurf/plugins."
+      "No plugins installed. Add plugins under ~/.tidesurf/plugins, or set TIDESURF_EXTENSIONS=all to trust project plugins."
     );
+    for (const diagnostic of snapshot.diagnostics) {
+      writeLine(`warning: ${diagnostic}`, process.stderr);
+    }
     return 0;
   }
   const lines: string[] = [];
@@ -502,6 +529,11 @@ async function listPlugins(invocation: ParsedInvocation): Promise<number> {
     );
     for (const entry of pluginDiagnostics) {
       lines.push(`  warning: ${entry.message}`);
+    }
+  }
+  for (const diagnostic of snapshot.diagnostics) {
+    if (!diagnostic.includes(": duplicate plugin in ")) {
+      lines.push(`warning: ${diagnostic}`);
     }
   }
   writeLine(lines.join("\n"));

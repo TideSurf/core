@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import {
@@ -45,9 +45,23 @@ function writePlugin(dir: string, name: string): void {
 }
 
 describe("resolveExtensionRoots", () => {
-  it("returns the default project and user roots", () => {
+  it("defaults to user roots only", () => {
     const { cwd, home } = makeTree();
     const roots = resolveExtensionRoots({ cwd, home, env: {} });
+    expect(roots.pluginsDirs).toEqual([join(home, ".tidesurf", "plugins")]);
+    expect(roots.skillsDirs).toEqual([
+      join(home, ".agents", "skills"),
+      join(home, ".tidesurf", "skills"),
+    ]);
+  });
+
+  it("includes project roots only after explicit all policy opt-in", () => {
+    const { cwd, home } = makeTree();
+    const roots = resolveExtensionRoots({
+      cwd,
+      home,
+      env: { TIDESURF_EXTENSIONS: "all" },
+    });
     expect(roots.pluginsDirs).toEqual([
       join(cwd, ".tidesurf", "plugins"),
       join(home, ".tidesurf", "plugins"),
@@ -101,12 +115,13 @@ describe("resolveExtensionRoots", () => {
 });
 
 describe("extensionsPolicyFromEnv", () => {
-  it("maps the env var, defaulting and falling back to all", () => {
-    expect(extensionsPolicyFromEnv({})).toBe("all");
+  it("defaults to user and fails closed on invalid values", () => {
+    expect(extensionsPolicyFromEnv({})).toBe("user");
     expect(extensionsPolicyFromEnv({ TIDESURF_EXTENSIONS: "all" })).toBe("all");
     expect(extensionsPolicyFromEnv({ TIDESURF_EXTENSIONS: "user" })).toBe("user");
     expect(extensionsPolicyFromEnv({ TIDESURF_EXTENSIONS: "off" })).toBe("off");
-    expect(extensionsPolicyFromEnv({ TIDESURF_EXTENSIONS: "bogus" })).toBe("all");
+    expect(extensionsPolicyFromEnv({ TIDESURF_EXTENSIONS: "" })).toBe("off");
+    expect(extensionsPolicyFromEnv({ TIDESURF_EXTENSIONS: "bogus" })).toBe("off");
   });
 });
 
@@ -115,7 +130,11 @@ describe("loadExtensions", () => {
     const { cwd, home } = makeTree();
     writeSkill(join(cwd, ".agents", "skills", "alpha"), "alpha");
     writeSkill(join(home, ".tidesurf", "skills", "beta"), "beta");
-    const snapshot = loadExtensions({ cwd, home, env: {} });
+    const snapshot = loadExtensions({
+      cwd,
+      home,
+      env: { TIDESURF_EXTENSIONS: "all" },
+    });
     expect(snapshot.skills.map((skill) => skill.name)).toEqual(["alpha", "beta"]);
     expect(snapshot.skills[0].source).toBe("project");
     expect(snapshot.skills[1].source).toBe("user");
@@ -140,6 +159,21 @@ describe("loadExtensions", () => {
     expect(offSnapshot.diagnostics).toEqual([]);
   });
 
+  it("disables extensions and reports an invalid policy", () => {
+    const { cwd, home } = makeTree();
+    writeSkill(join(home, ".agents", "skills", "beta"), "beta");
+    const snapshot = loadExtensions({
+      cwd,
+      home,
+      env: { TIDESURF_EXTENSIONS: "of" },
+    });
+    expect(snapshot.skills).toEqual([]);
+    expect(snapshot.plugins).toEqual([]);
+    expect(snapshot.diagnostics).toEqual([
+      'TIDESURF_EXTENSIONS must be "all", "user", or "off"; received "of", so extensions are disabled',
+    ]);
+  });
+
   it("honors env overrides during loading", () => {
     const { cwd, home } = makeTree();
     const custom = join(makeTemp(), "custom-skills");
@@ -154,7 +188,11 @@ describe("loadExtensions", () => {
     const { cwd, home } = makeTree();
     writeSkill(join(cwd, ".agents", "skills", "dup"), "dup", "project copy");
     writeSkill(join(home, ".agents", "skills", "dup"), "dup", "user copy");
-    const snapshot = loadExtensions({ cwd, home, env: {} });
+    const snapshot = loadExtensions({
+      cwd,
+      home,
+      env: { TIDESURF_EXTENSIONS: "all" },
+    });
     expect(snapshot.skills).toHaveLength(1);
     expect(snapshot.skills[0].description).toBe("project copy");
     expect(snapshot.skills[0].source).toBe("project");
@@ -167,7 +205,11 @@ describe("loadExtensions", () => {
     const pluginDir = join(cwd, ".tidesurf", "plugins", "plug");
     writePlugin(pluginDir, "plug");
     writeSkill(join(pluginDir, "skills", "plug-skill"), "plug-skill");
-    const snapshot = loadExtensions({ cwd, home, env: {} });
+    const snapshot = loadExtensions({
+      cwd,
+      home,
+      env: { TIDESURF_EXTENSIONS: "all" },
+    });
     expect(snapshot.plugins).toHaveLength(1);
     expect(snapshot.plugins[0].name).toBe("plug");
     expect(snapshot.skills.map((skill) => skill.name)).toEqual(["standalone", "plug-skill"]);
@@ -184,11 +226,32 @@ describe("loadExtensions", () => {
     writePlugin(userPlugin, "plug");
     writeSkill(join(projectPlugin, "skills", "proj-skill"), "proj-skill");
     writeSkill(join(userPlugin, "skills", "user-skill"), "user-skill");
-    const snapshot = loadExtensions({ cwd, home, env: {} });
+    const snapshot = loadExtensions({
+      cwd,
+      home,
+      env: { TIDESURF_EXTENSIONS: "all" },
+    });
     expect(snapshot.plugins).toHaveLength(1);
-    expect(snapshot.plugins[0].directory).toBe(projectPlugin);
+    expect(snapshot.plugins[0].directory).toBe(realpathSync(projectPlugin));
     expect(snapshot.skills.map((skill) => skill.name)).toEqual(["proj-skill"]);
     expect(snapshot.diagnostics.some((d) => d.includes('plugin "plug": duplicate'))).toBe(true);
+  });
+
+  it("lets a project plugin skill beat a user standalone skill", () => {
+    const { cwd, home } = makeTree();
+    writeSkill(join(home, ".agents", "skills", "shared"), "shared", "user copy");
+    const pluginDir = join(cwd, ".tidesurf", "plugins", "plug");
+    writePlugin(pluginDir, "plug");
+    writeSkill(join(pluginDir, "skills", "shared"), "shared", "project plugin copy");
+    const snapshot = loadExtensions({
+      cwd,
+      home,
+      env: { TIDESURF_EXTENSIONS: "all" },
+    });
+    expect(snapshot.skills).toHaveLength(1);
+    expect(snapshot.skills[0].description).toBe("project plugin copy");
+    expect(snapshot.skills[0].plugin).toBe("plug");
+    expect(snapshot.diagnostics.some((d) => d.includes('skill "shared": duplicate'))).toBe(true);
   });
 
   it("lets a standalone skill win over a plugin skill with the same name", () => {
@@ -196,8 +259,12 @@ describe("loadExtensions", () => {
     writeSkill(join(cwd, ".agents", "skills", "shared"), "shared", "standalone copy");
     const pluginDir = join(cwd, ".tidesurf", "plugins", "plug");
     writePlugin(pluginDir, "plug");
-    writeSkill(join(pluginDir, "skills", "shared-dir"), "shared", "plugin copy");
-    const snapshot = loadExtensions({ cwd, home, env: {} });
+    writeSkill(join(pluginDir, "skills", "shared"), "shared", "plugin copy");
+    const snapshot = loadExtensions({
+      cwd,
+      home,
+      env: { TIDESURF_EXTENSIONS: "all" },
+    });
     expect(snapshot.skills).toHaveLength(1);
     expect(snapshot.skills[0].description).toBe("standalone copy");
     expect(snapshot.diagnostics.some((d) => d.includes('skill "shared": duplicate'))).toBe(true);
@@ -208,7 +275,11 @@ describe("loadExtensions", () => {
     const root = join(cwd, ".agents", "skills");
     mkdirSync(root, { recursive: true });
     writeFileSync(join(root, "SKILL.md"), "---\nname: root-skill\ndescription: Root\n---\n# root\n");
-    const snapshot = loadExtensions({ cwd, home, env: {} });
+    const snapshot = loadExtensions({
+      cwd,
+      home,
+      env: { TIDESURF_EXTENSIONS: "all" },
+    });
     expect(snapshot.skills).toEqual([]);
   });
 
@@ -216,7 +287,11 @@ describe("loadExtensions", () => {
     const { cwd, home } = makeTree();
     mkdirSync(join(cwd, ".agents"), { recursive: true });
     writeFileSync(join(cwd, ".agents", "skills"), "not a directory");
-    const snapshot = loadExtensions({ cwd, home, env: {} });
+    const snapshot = loadExtensions({
+      cwd,
+      home,
+      env: { TIDESURF_EXTENSIONS: "all" },
+    });
     expect(snapshot.skills).toEqual([]);
     expect(snapshot.plugins).toEqual([]);
     expect(snapshot.diagnostics).toEqual([]);
@@ -232,7 +307,11 @@ describe("loadExtensions", () => {
       join(home, ".tidesurf", "plugins", "noschema", "plugin.json"),
       JSON.stringify({ name: "noschema" })
     );
-    const snapshot = loadExtensions({ cwd, home, env: {} });
+    const snapshot = loadExtensions({
+      cwd,
+      home,
+      env: { TIDESURF_EXTENSIONS: "all" },
+    });
     expect(
       snapshot.diagnostics.some(
         (d) => d.startsWith('skill "baddesc":') && d.includes("description")
@@ -251,7 +330,11 @@ describe("findSkill and skillCatalog", () => {
     const pluginDir = join(cwd, ".tidesurf", "plugins", "plug");
     writePlugin(pluginDir, "plug");
     writeSkill(join(pluginDir, "skills", "plug-skill"), "plug-skill");
-    const snapshot = loadExtensions({ cwd, home, env: {} });
+    const snapshot = loadExtensions({
+      cwd,
+      home,
+      env: { TIDESURF_EXTENSIONS: "all" },
+    });
 
     expect(findSkill(snapshot, "alpha")?.name).toBe("alpha");
     expect(findSkill(snapshot, "missing")).toBeUndefined();
@@ -272,7 +355,11 @@ describe("findSkill and skillCatalog", () => {
       join(cwd, ".agents", "skills", "linked-skill"),
       "dir"
     );
-    const snapshot = loadExtensions({ cwd, home, env: {} });
+    const snapshot = loadExtensions({
+      cwd,
+      home,
+      env: { TIDESURF_EXTENSIONS: "all" },
+    });
     expect(snapshot.skills.map((skill) => skill.name)).toContain("linked-skill");
   });
 });

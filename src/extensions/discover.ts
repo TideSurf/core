@@ -34,7 +34,19 @@ export function extensionsPolicyFromEnv(
   env: Record<string, string | undefined> = process.env
 ): ExtensionsPolicy {
   const raw = env.TIDESURF_EXTENSIONS;
-  return raw === "user" || raw === "off" ? raw : "all";
+  if (raw === undefined || raw === "user") return "user";
+  if (raw === "all" || raw === "off") return raw;
+  return "off";
+}
+
+function extensionPolicyDiagnostic(
+  env: Record<string, string | undefined>
+): string | undefined {
+  const raw = env.TIDESURF_EXTENSIONS;
+  if (raw === undefined || raw === "all" || raw === "user" || raw === "off") {
+    return undefined;
+  }
+  return `TIDESURF_EXTENSIONS must be "all", "user", or "off"; received ${JSON.stringify(raw)}, so extensions are disabled`;
 }
 
 function splitOverride(value: string | undefined, cwd: string): string[] | undefined {
@@ -129,9 +141,13 @@ export function loadExtensions(options?: {
   home?: string;
   env?: Record<string, string | undefined>;
 }): ExtensionsSnapshot {
-  const roots = computeRoots(options ?? {});
-  const home = options?.home ?? homedir();
+  const rootOptions = options ?? {};
+  const env = rootOptions.env ?? process.env;
+  const roots = computeRoots(rootOptions);
+  const home = rootOptions.home ?? homedir();
   const diagnostics: string[] = [];
+  const policyDiagnostic = extensionPolicyDiagnostic(env);
+  if (policyDiagnostic !== undefined) diagnostics.push(policyDiagnostic);
   const skills: SkillInfo[] = [];
   const skillOrigins = new Map<string, string>();
   const plugins: LoadedPlugin[] = [];
@@ -149,43 +165,49 @@ export function loadExtensions(options?: {
     skills.push(skill);
   };
 
-  for (const root of roots.skills) {
-    for (const directory of immediateSubdirectories(root.directory)) {
-      if (!isRegularFile(join(directory, "SKILL.md"))) continue;
-      const result = loadSkillDirectory(directory, root.source);
-      for (const diagnostic of result.diagnostics) {
-        diagnostics.push(
-          `skill "${diagnostic.skill ?? basename(diagnostic.directory)}": ${diagnostic.message}`
-        );
+  const loadStandaloneSkills = (source: "project" | "user"): void => {
+    for (const root of roots.skills.filter((entry) => entry.source === source)) {
+      for (const directory of immediateSubdirectories(root.directory)) {
+        if (!isRegularFile(join(directory, "SKILL.md"))) continue;
+        const result = loadSkillDirectory(directory, source);
+        for (const diagnostic of result.diagnostics) {
+          diagnostics.push(
+            `skill "${diagnostic.skill ?? basename(diagnostic.directory)}": ${diagnostic.message}`
+          );
+        }
+        if (result.skill !== undefined) addSkill(result.skill);
       }
-      if (result.skill !== undefined) addSkill(result.skill);
     }
-  }
+  };
 
-  for (const root of roots.plugins) {
-    for (const directory of immediateSubdirectories(root.directory)) {
-      if (!isRegularFile(join(directory, "plugin.json"))) continue;
-      const result = loadPlugin(directory, root.source, home);
-      for (const diagnostic of result.diagnostics) {
-        diagnostics.push(`plugin "${diagnostic.plugin}": ${diagnostic.message}`);
+  const loadPlugins = (source: "project" | "user"): void => {
+    for (const root of roots.plugins.filter((entry) => entry.source === source)) {
+      for (const directory of immediateSubdirectories(root.directory)) {
+        if (!isRegularFile(join(directory, "plugin.json"))) continue;
+        const result = loadPlugin(directory, source, home);
+        for (const diagnostic of result.diagnostics) {
+          diagnostics.push(`plugin "${diagnostic.plugin}": ${diagnostic.message}`);
+        }
+        if (result.plugin === undefined) continue;
+        const existing = pluginOrigins.get(result.plugin.name);
+        if (existing !== undefined) {
+          diagnostics.push(
+            `plugin "${result.plugin.name}": duplicate plugin in ${result.plugin.directory} skipped (already loaded from ${existing})`
+          );
+          continue;
+        }
+        pluginOrigins.set(result.plugin.name, result.plugin.directory);
+        plugins.push(result.plugin);
+        for (const skill of result.plugin.skills) addSkill(skill);
       }
-      if (result.plugin === undefined) continue;
-      const existing = pluginOrigins.get(result.plugin.name);
-      if (existing !== undefined) {
-        diagnostics.push(
-          `plugin "${result.plugin.name}": duplicate plugin in ${result.plugin.directory} skipped (already loaded from ${existing})`
-        );
-        continue;
-      }
-      pluginOrigins.set(result.plugin.name, result.plugin.directory);
-      plugins.push(result.plugin);
     }
-  }
+  };
 
-  for (const plugin of plugins) {
-    for (const skill of plugin.skills) {
-      addSkill(skill);
-    }
+  // Apply precedence globally rather than by component kind: project scope
+  // always wins user scope; within one scope, standalone skills win plugin skills.
+  for (const source of ["project", "user"] as const) {
+    loadStandaloneSkills(source);
+    loadPlugins(source);
   }
 
   return { plugins, skills, diagnostics };

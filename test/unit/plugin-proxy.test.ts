@@ -2,7 +2,10 @@ import { describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { LoadedPlugin } from "../../src/extensions/plugins.js";
+import {
+  pluginDataDirectory,
+  type LoadedPlugin,
+} from "../../src/extensions/plugins.js";
 import {
   proxyPluginMcpServers,
   type McpClientLike,
@@ -155,9 +158,7 @@ describe("proxyPluginMcpServers", () => {
       const env = capturedEnv["env"];
       expect(env["MODE"]).toBe("test");
       expect(env["PLUGIN_ROOT"]).toBe("/plugins/acme");
-      expect(env["PLUGIN_DATA"]).toBe(
-        join(home, ".tidesurf", "plugin-data", "acme.tools")
-      );
+      expect(env["PLUGIN_DATA"]).toBe(pluginDataDirectory(home, "acme.tools"));
     } finally {
       rmSync(home, { recursive: true, force: true });
     }
