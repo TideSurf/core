@@ -545,7 +545,10 @@ export function isProcessRunning(pid: number): boolean {
   }
 }
 
-const PROCESS_IDENTITY_QUERY_MS = 5_000;
+// Contended Windows hosts can stall a single PowerShell CIM query well past
+// five seconds; ten seconds with one retry keeps verification available there
+// while staying bounded and fail-closed.
+const PROCESS_IDENTITY_QUERY_MS = 10_000;
 
 function parsePosixCommandLine(commandLine: string): string[] | undefined {
   const argv: string[] = [];

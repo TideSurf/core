@@ -435,7 +435,7 @@ describe("orphaned daemon recovery", () => {
       fake.kill("SIGKILL");
       removeSessionFiles(paths, true);
     }
-  }, 20_000);
+  }, 45_000);
 
   it("verifies daemon identity when the runtime path contains whitespace", async () => {
     if (process.platform === "win32") return;
@@ -460,7 +460,7 @@ describe("orphaned daemon recovery", () => {
       if (previousRuntime === undefined) delete process.env["XDG_RUNTIME_DIR"];
       else process.env["XDG_RUNTIME_DIR"] = previousRuntime;
     }
-  }, 20_000);
+  }, 45_000);
 
   it("never terminates a foreign process holding a recycled daemon pid", async () => {
     // A daemon that died without cleanup leaves its state file behind; when
@@ -481,7 +481,7 @@ describe("orphaned daemon recovery", () => {
       foreign.kill("SIGKILL");
       removeSessionFiles(paths, true);
     }
-  }, 20_000);
+  }, 45_000);
 
   it("does not signal a daemon-argv decoy with the wrong startup token", async () => {
     const session = `orphan-decoy-${crypto.randomUUID()}`;
@@ -500,7 +500,7 @@ describe("orphaned daemon recovery", () => {
       await awaitExit(decoy);
       removeSessionFiles(paths, true);
     }
-  }, 20_000);
+  }, 45_000);
 
   it("terminates a live orphan before starting a replacement daemon", async () => {
     const session = `orphan-recover-${crypto.randomUUID()}`;
