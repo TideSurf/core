@@ -39,6 +39,8 @@ Every tool call in a session runs serially. The daemon preserves the exact eleme
 | `tidesurf call <tool> --input <json\|-> [global options]` | Call a tool with JSON input |
 | `tidesurf inspect <url>` | Print a one-shot compressed page |
 | `tidesurf mcp [startup options]` | Run the MCP stdio adapter |
+| `tidesurf skills [name] [--json]` | List or read Agent Skills |
+| `tidesurf plugins [--json]` | List Agent Plugins |
 | `tidesurf help [command]` | Show command help |
 
 No arguments and `--help` show global help. `--version` prints the package version. Direct commands also accept `--help`.
@@ -67,6 +69,8 @@ Direct commands use the exact registry and MCP tool identifiers.
 | `clipboard_read` | Read clipboard text |
 | `clipboard_write <text>` | Write clipboard text |
 | `download <id>` | `--download-dir DIR`, `--timeout MS` |
+| `list_skills` | List installed Agent Skills |
+| `read_skill <name>` | Print one Agent Skill document |
 
 Shell quoting still applies. Quote selectors, JavaScript, search text, and typed text that contain spaces or shell characters.
 
@@ -176,4 +180,4 @@ Element and full-page captures cannot exceed 16,384 px on either side or 12,000,
 
 ## MCP mode
 
-`tidesurf mcp` registers the same 18 tools and schemas plus the `launch_browser` lifecycle tool. A `tools/call` request may omit its `arguments` object; the adapter treats the omission as an empty input. Screenshots become MCP image blocks, and failures set `isError`.
+`tidesurf mcp` registers the same 20 tools and schemas plus the `launch_browser` lifecycle tool. A `tools/call` request may omit its `arguments` object; the adapter treats the omission as an empty input. Screenshots become MCP image blocks, and failures set `isError`.

@@ -16,7 +16,7 @@ function toolRows(filter: (tool: ToolSpec) => boolean): string {
   );
 }
 
-function lifecycleRows(group: "session" | "compatibility"): string {
+function lifecycleRows(group: "session" | "extensions" | "compatibility"): string {
   return rows(
     LIFECYCLE_COMMANDS
       .filter((command) => command.group === group)
@@ -44,6 +44,9 @@ Usage:
 
 Session commands:
 ${lifecycleRows("session")}
+
+Extension commands:
+${lifecycleRows("extensions")}
 
 Read commands:
 ${toolRows((tool) => tool.readOnlyAllowed)}

@@ -30,6 +30,34 @@ export { withTimeout } from "./cdp/timeout.js";
 export { withRetry } from "./cdp/retry.js";
 export { estimateTokens, pruneToFit } from "./parser/token-budget.js";
 
+export {
+  loadExtensions,
+  resolveExtensionRoots,
+  extensionsPolicyFromEnv,
+  findSkill,
+  skillCatalog,
+  loadPlugin,
+  loadSkillDirectory,
+  validatePluginName,
+  validateSkillName,
+  parseFrontmatter,
+  pluginDataDirectory,
+  MAX_SKILL_BODY_BYTES,
+} from "./extensions/index.js";
+
+export type {
+  ExtensionRoots,
+  ExtensionsPolicy,
+  ExtensionsSnapshot,
+  FrontmatterParse,
+  LoadedPlugin,
+  PluginDiagnostic,
+  PluginManifest,
+  PluginMcpServer,
+  SkillDiagnostic,
+  SkillInfo,
+} from "./extensions/index.js";
+
 export type {
   OSNode,
   PageState,

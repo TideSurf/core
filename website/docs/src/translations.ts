@@ -18,6 +18,7 @@ export const translations: Record<string, TranslationSet> = {
   "sidebar.troubleshoot": { en: "Troubleshooting", ja: "トラブルシューティング", ko: "문제 해결" },
   "sidebar.security": { en: "Security", ja: "セキュリティ", ko: "보안" },
   "sidebar.agentpatterns": { en: "Agent patterns", ja: "エージェントパターン", ko: "에이전트 패턴" },
+  "sidebar.plugins": { en: "Plugins and skills", ja: "プラグインとスキル", ko: "플러그인과 스킬" },
   "sidebar.reference": { en: "Reference", ja: "リファレンス", ko: "참조" },
   "sidebar.api": { en: "API reference", ja: "APIリファレンス", ko: "API 참조" },
   "sidebar.bench": { en: "Benchmarks", ja: "ベンチマーク", ko: "벤치마크" },

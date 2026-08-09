@@ -56,7 +56,7 @@ function markdownLinks(source: string): string[] {
   return [...prose.matchAll(/!?\[[^\]]*\]\(([^)]+)\)/g)].map((match) => match[1]);
 }
 
-const toolCount = 18;
+const toolCount = 20;
 check(TOOL_REGISTRY.length === toolCount, `expected ${toolCount} canonical tools`);
 const canonicalToolNames = TOOL_REGISTRY.map((tool) => tool.name);
 const nonCanonicalToolNames = canonicalToolNames

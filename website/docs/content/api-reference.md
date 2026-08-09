@@ -358,8 +358,10 @@ One registry supplies SDK definitions, executor dispatch, CLI parsing/help, MCP 
 | `clipboard_read` | none | no |
 | `clipboard_write` | `text` | no |
 | `download` | `id`, `downloadDir?`, `timeout?` | no |
+| `list_skills` | none | yes |
+| `read_skill` | `name` | yes |
 
-The CLI, SDK executor, and MCP use these exact identifiers. MCP registers `launch_browser` as a lifecycle tool outside the 18 registry tools.
+The CLI, SDK executor, and MCP use these exact identifiers. MCP registers `launch_browser` as a lifecycle tool outside the 20 registry tools.
 
 The executor returns page text for state actions, raw objects or arrays for structured tools, and a base64 PNG for `screenshot`. The CLI and MCP adapters format those values for their transports.
 

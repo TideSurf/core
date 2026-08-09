@@ -174,7 +174,33 @@ FORM F1
                     </div>
                     <div>
                         <dt><span style="--row-color: var(--c-gold)">connect</span></dt>
-                        <dd>Run 18 CLI tools in named sessions, launch Chromium, attach to an endpoint, or use MCP.</dd>
+                        <dd>Run 20 CLI tools in named sessions, launch Chromium, attach to an endpoint, or use MCP.</dd>
+                    </div>
+                </dl>
+            </section>
+
+            <section class="install" id="install" aria-labelledby="install-title">
+                <header class="section-intro compact-intro">
+                    <h2 id="install-title">Install it as your agent tool.</h2>
+                    <p>One package speaks both open packaging standards: TideSurf is an Agent Plugin with a bundled Agent Skill, and a host that loads yours.</p>
+                </header>
+
+                <dl class="capability-list">
+                    <div>
+                        <dt><span style="--row-color: var(--c-teal)">plugin</span></dt>
+                        <dd>The package root is an Agent Plugins directory: <code>plugin.json</code>, <code>mcp.json</code>, and <code>skills/</code>. Point VS Code, Cursor, Copilot, Codex, or Kiro at it.</dd>
+                    </div>
+                    <div>
+                        <dt><span style="--row-color: var(--c-rust)">skill</span></dt>
+                        <dd><code>npx skills add TideSurf/core</code> installs the bundled Agent Skill, or copy <code>skills/tidesurf-browser</code> into <code>.agents/skills/</code>.</dd>
+                    </div>
+                    <div>
+                        <dt><span style="--row-color: var(--c-green)">mcp</span></dt>
+                        <dd>Any MCP client runs <code>tidesurf mcp</code> over stdio. The adapter publishes installed skills in its server instructions.</dd>
+                    </div>
+                    <div>
+                        <dt><span style="--row-color: var(--c-gold)">host</span></dt>
+                        <dd>TideSurf loads your plugins from <code>.tidesurf/plugins</code> and skills from <code>.agents/skills</code>. Agents reach them through <code>list_skills</code> and <code>read_skill</code>, and plugin MCP servers are proxied into the adapter.</dd>
                     </div>
                 </dl>
             </section>

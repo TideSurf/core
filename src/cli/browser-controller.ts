@@ -303,6 +303,12 @@ export class BrowserController {
     input: Record<string, unknown>,
     context?: ToolExecutionContext
   ): Promise<ToolResult> {
+    // Browser-free tools (skills/plugins discovery) bypass both acquisition
+    // and the serialized queue: they only read the filesystem and must not
+    // wedge behind a stuck browser operation.
+    if (tool.requiresBrowser === false) {
+      return executeValidatedToolSpec(null, tool, input, context);
+    }
     return this.runSerialized(async () =>
       executeValidatedToolSpec(await this.getBrowser(), tool, input, context)
     );

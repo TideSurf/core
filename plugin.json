@@ -1,0 +1,13 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "tidesurf",
+  "version": "0.7.0",
+  "description": "TideSurf launches or attaches to Chromium over CDP and compresses the live DOM into token-efficient text for browser agents, exposed via CLI and MCP.",
+  "author": {
+    "name": "TideSurf Contributors"
+  },
+  "homepage": "https://tidesurf.org",
+  "repository": "https://github.com/TideSurf/core",
+  "license": "Apache-2.0",
+  "keywords": ["browser", "automation", "agent", "cdp", "chrome", "mcp", "dom"]
+}

@@ -1,6 +1,6 @@
 # Getting started
 
-TideSurf gives agents a stateful Chromium CLI and a compact view of the live DOM. It also exposes the same 18 tools through the SDK executor and MCP.
+TideSurf gives agents a stateful Chromium CLI and a compact view of the live DOM. It also exposes the same 20 tools through the SDK executor and MCP.
 
 ## Requirements
 
@@ -153,6 +153,10 @@ Add the packaged adapter to an MCP client:
 ```
 
 The adapter uses the shared registry and executor. It adds the `launch_browser` lifecycle tool, converts screenshots to image blocks, and marks failed calls with `isError`.
+
+## Install as your agent tool
+
+Beyond raw MCP, TideSurf installs into agents through two open packaging standards: the package root is an [Agent Plugins](https://agent-plugins.org) directory (`plugin.json`, `mcp.json`, `skills/`) for compatible clients, and its bundled Agent Skill installs with `npx skills add TideSurf/core` or by copying `skills/tidesurf-browser` into `.agents/skills/`. TideSurf also hosts your own plugins and skills; [Plugins and skills](#plugins) covers discovery, the `list_skills`/`read_skill` tools, and plugin MCP proxying.
 
 ## Next
 

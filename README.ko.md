@@ -23,7 +23,8 @@
   TideSurf는 <a href="https://chromedevtools.github.io/devtools-protocol">Chrome DevTools Protocol</a>을 통해
   Chromium을 에이전트에 연결하는 TypeScript 라이브러리입니다.
   각 페이지를 50~200토큰의 효율적인 구조화 표현으로 압축하고,
-  에이전트 CLI, SDK, MCP가 공유하는 하나의 레지스트리로 18개 도구를 제공합니다.
+  에이전트 CLI, SDK, MCP가 공유하는 하나의 레지스트리로 20개 도구를 제공합니다.<br>
+  MCP 서버, <a href="https://agentskills.io">Agent Skill</a>, <a href="https://agent-plugins.org">Agent Plugin</a>으로 어떤 에이전트에도 설치되며, 사용자의 플러그인과 스킬을 호스팅합니다.
 </p>
 
 ```sh

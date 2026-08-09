@@ -14,9 +14,9 @@ MCP client ── stdio ── MCP adapter ────────────�
                     canonical tool registry
 ```
 
-All 18 tools have one `ToolSpec`. Each spec holds its JSON schema, read-only eligibility, CLI argument metadata, output kind, validation, and handler. The registry generates SDK definitions, executor dispatch, CLI help, MCP registration, and unknown-tool messages.
+All 20 tools have one `ToolSpec`. Each spec holds its JSON schema, read-only eligibility, CLI argument metadata, output kind, validation, and handler. The registry generates SDK definitions, executor dispatch, CLI help, MCP registration, and unknown-tool messages. Specs flagged browser-free (`list_skills`, `read_skill`) dispatch without browser acquisition and skip the serialized queue.
 
-MCP adds only transport behavior: stdio registration, schema conversion, tolerance for omitted call arguments, PNG image blocks, `isError`, and the `launch_browser` lifecycle tool.
+MCP adds only transport behavior: stdio registration, schema conversion, tolerance for omitted call arguments, PNG image blocks, `isError`, and the `launch_browser` lifecycle tool. In MCP mode the extensions module also loads Agent Plugins and Agent Skills: the skill catalog goes into server instructions, and plugin-declared MCP servers are spawned or connected and proxied into the same server under `<plugin>__<tool>` names with per-server failure isolation.
 
 ## Stateful CLI sessions
 

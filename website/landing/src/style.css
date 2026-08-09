@@ -379,7 +379,8 @@ pre {
 
 .proof,
 .live-loop,
-.capabilities {
+.capabilities,
+.install {
   display: flex;
   flex-direction: column;
   gap: clamp(2rem, 5vw, 3.2rem);
@@ -566,6 +567,13 @@ pre {
   max-width: 42rem;
   color: var(--ink-2);
   line-height: 1.6;
+}
+
+.capability-list code {
+  padding: 0.08rem 0.25rem;
+  color: var(--accent-ink);
+  background: var(--paper-2);
+  font-size: 0.88em;
 }
 
 .closing {

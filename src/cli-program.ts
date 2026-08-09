@@ -382,6 +382,132 @@ function listTools(invocation: ParsedInvocation): number {
   return 0;
 }
 
+async function loadExtensionsModule() {
+  return import("./extensions/index.js");
+}
+
+async function listSkills(invocation: ParsedInvocation): Promise<number> {
+  if (invocation.positionals.length > 1) {
+    throw new CliUsageError(`Unexpected argument: ${invocation.positionals[1]}`);
+  }
+  const { findSkill, loadExtensions, skillCatalog } =
+    await loadExtensionsModule();
+  const snapshot = loadExtensions();
+  const name = invocation.positionals[0];
+
+  if (name === undefined) {
+    const entries = skillCatalog(snapshot.skills);
+    if (invocation.json) {
+      printSuccess(invocation.json, {
+        skills: entries,
+        diagnostics: snapshot.diagnostics,
+      }, "");
+    } else if (entries.length === 0) {
+      writeLine(
+        "No skills installed. Add skill directories under .agents/skills or ~/.agents/skills, or install agent plugins under .tidesurf/plugins."
+      );
+    } else {
+      writeLine(
+        entries
+          .map((entry) =>
+            `${entry.name}\t${entry.source}${entry.plugin ? ` (${entry.plugin})` : ""}\t${entry.description}`
+          )
+          .join("\n")
+      );
+      for (const diagnostic of snapshot.diagnostics) {
+        writeLine(`warning: ${diagnostic}`, process.stderr);
+      }
+    }
+    return 0;
+  }
+
+  const skill = findSkill(snapshot, name);
+  if (!skill) {
+    const available = snapshot.skills.map((entry) => entry.name);
+    throw new CliUsageError(
+      available.length > 0
+        ? `Unknown skill: ${name}. Available skills: ${available.join(", ")}.`
+        : `Unknown skill: ${name}. No skills are installed.`
+    );
+  }
+  if (invocation.json) {
+    printSuccess(true, {
+      name: skill.name,
+      description: skill.description,
+      ...(skill.plugin ? { plugin: skill.plugin } : {}),
+      source: skill.source,
+      directory: skill.directory,
+      files: skill.files,
+      content: skill.body,
+    }, "");
+  } else {
+    writeLine(skill.body.trimEnd());
+    if (skill.files.length > 0) {
+      writeLine(`\nBundled files:\n${skill.files.map((file) => `  ${file}`).join("\n")}`);
+    }
+  }
+  return 0;
+}
+
+async function listPlugins(invocation: ParsedInvocation): Promise<number> {
+  if (invocation.positionals.length) {
+    throw new CliUsageError("plugins takes no arguments");
+  }
+  const { loadExtensions } = await loadExtensionsModule();
+  const snapshot = loadExtensions();
+  const summaries = snapshot.plugins.map((plugin) => ({
+    name: plugin.name,
+    ...(plugin.manifest.version ? { version: plugin.manifest.version } : {}),
+    ...(plugin.manifest.description
+      ? { description: plugin.manifest.description }
+      : {}),
+    source: plugin.source,
+    directory: plugin.directory,
+    skills: plugin.skills.map((skill) => skill.name),
+    mcpServers: plugin.mcpServers.map((server) => ({
+      name: server.name,
+      type: server.type,
+    })),
+    ...(plugin.mcpDisabled ? { mcpDisabled: plugin.mcpDisabled } : {}),
+    diagnostics: plugin.diagnostics.map((entry) => entry.message),
+  }));
+  if (invocation.json) {
+    printSuccess(true, {
+      plugins: summaries,
+      diagnostics: snapshot.diagnostics,
+    }, "");
+    return 0;
+  }
+  if (summaries.length === 0) {
+    writeLine(
+      "No plugins installed. Add agent plugin directories under .tidesurf/plugins or ~/.tidesurf/plugins."
+    );
+    return 0;
+  }
+  const lines: string[] = [];
+  for (const [index, plugin] of summaries.entries()) {
+    const pluginDiagnostics = snapshot.plugins[index].diagnostics;
+    lines.push(
+      `${plugin.name}${plugin.version ? `@${plugin.version}` : ""}\t${plugin.source}\t${plugin.directory}`
+    );
+    lines.push(
+      `  skills: ${plugin.skills.length > 0 ? plugin.skills.join(", ") : "none"}`
+    );
+    lines.push(
+      `  mcp servers: ${
+        plugin.mcpServers.length > 0
+          ? plugin.mcpServers.map((server) => `${server.name} (${server.type})`).join(", ")
+          : "none"
+      }${plugin.mcpDisabled ? ` [disabled: ${plugin.mcpDisabled}]` : ""}`
+    );
+    for (const entry of pluginDiagnostics) {
+      lines.push(`  warning: ${entry.message}`);
+    }
+  }
+  writeLine(lines.join("\n"));
+  return 0;
+}
+
 async function inspect(invocation: ParsedInvocation): Promise<number> {
   const url = invocation.positionals[0];
   if (!url) throw new CliUsageError("inspect requires a URL");
@@ -412,6 +538,33 @@ async function inspect(invocation: ParsedInvocation): Promise<number> {
   }
 }
 
+const MCP_INSTRUCTIONS_MAX_SKILLS = 30;
+const MCP_INSTRUCTIONS_MAX_LINE = 200;
+const MCP_INSTRUCTIONS_MAX_TOTAL = 4_000;
+
+function buildMcpInstructions(
+  entries: readonly { name: string; description: string }[]
+): string | undefined {
+  if (entries.length === 0) return undefined;
+  const lines: string[] = [];
+  let total = 0;
+  for (const entry of entries.slice(0, MCP_INSTRUCTIONS_MAX_SKILLS)) {
+    const description = entry.description.length > MCP_INSTRUCTIONS_MAX_LINE
+      ? `${entry.description.slice(0, MCP_INSTRUCTIONS_MAX_LINE - 1)}…`
+      : entry.description;
+    const line = `- ${entry.name}: ${description}`;
+    if (total + line.length > MCP_INSTRUCTIONS_MAX_TOTAL) break;
+    lines.push(line);
+    total += line.length;
+  }
+  if (lines.length === 0) return undefined;
+  return [
+    "Agent Skills are installed for this session. Call list_skills to enumerate them with sources, then read_skill to load a skill document before following it.",
+    "",
+    ...lines,
+  ].join("\n");
+}
+
 async function runMcp(invocation: ParsedInvocation): Promise<number> {
   if (invocation.positionals.length) throw new CliUsageError("mcp takes no arguments");
   const mcpPath = "@modelcontextprotocol/sdk/server/mcp.js";
@@ -422,7 +575,7 @@ async function runMcp(invocation: ParsedInvocation): Promise<number> {
     close(): Promise<void>;
   };
   let externalModules: [
-    { McpServer: new (info: { name: string; version: string }) => McpRuntimeServer },
+    { McpServer: new (info: { name: string; version: string }, options?: { instructions?: string }) => McpRuntimeServer },
     { StdioServerTransport: new () => unknown },
     { z: { fromJSONSchema(schema: unknown): unknown } },
   ];
@@ -443,24 +596,77 @@ async function runMcp(invocation: ParsedInvocation): Promise<number> {
   const [
     { createZodInputSchemaFactory, registerMcpTools },
     { BrowserController },
+    { loadExtensions, skillCatalog },
   ] = await Promise.all([
     import("./mcp/adapter.js"),
     import("./cli/browser-controller.js"),
+    import("./extensions/index.js"),
   ]);
-  const server = new McpServer({ name: "tidesurf", version: VERSION });
+  const extensions = loadExtensions();
+  const instructions = buildMcpInstructions(skillCatalog(extensions.skills));
+  const server = new McpServer(
+    { name: "tidesurf", version: VERSION },
+    instructions ? { instructions } : undefined
+  );
   const controller = new BrowserController(invocation.sessionConfig);
+  const inputSchemaFactory = createZodInputSchemaFactory(z);
   registerMcpTools({
     server,
     coordinator: controller,
-    createInputSchema: createZodInputSchemaFactory(z),
+    createInputSchema: inputSchemaFactory,
     readOnly: invocation.sessionConfig.readOnly,
   });
+
+  const log = invocation.quiet
+    ? () => undefined
+    : (message: string) => writeLine(`[tidesurf] ${message}`, process.stderr);
+  for (const diagnostic of extensions.diagnostics) {
+    log(`extensions: ${diagnostic}`);
+  }
+
+  let pluginProxy: { close(): Promise<void> } | undefined;
+  if (extensions.plugins.some((plugin) => plugin.mcpServers.length > 0)) {
+    const clientModules = await Promise.all([
+      import("@modelcontextprotocol/sdk/client/index.js").catch(() => undefined),
+      import("@modelcontextprotocol/sdk/client/stdio.js").catch(() => undefined),
+      import("@modelcontextprotocol/sdk/client/streamableHttp.js").catch(() => undefined),
+    ]);
+    const [clientModule, stdioModule, httpModule] = clientModules;
+    if (!clientModule || !stdioModule || !httpModule) {
+      log("plugin MCP servers disabled: MCP SDK client modules are unavailable");
+    } else {
+      const { proxyPluginMcpServers } = await import("./mcp/plugin-proxy.js");
+      pluginProxy = await proxyPluginMcpServers({
+        server,
+        plugins: extensions.plugins,
+        log,
+        factories: {
+          createClient: () =>
+            new clientModule.Client({ name: "tidesurf", version: VERSION }),
+          createStdioTransport: (params) =>
+            new stdioModule.StdioClientTransport({
+              ...params,
+              args: [...params.args],
+            }),
+          createHttpTransport: (params) =>
+            new httpModule.StreamableHTTPClientTransport(new URL(params.url), {
+              requestInit: params.headers ? { headers: params.headers } : undefined,
+            }),
+          createInputSchema: (schema) =>
+            inputSchemaFactory(
+              schema as Parameters<typeof inputSchemaFactory>[0]
+            ),
+        },
+      });
+    }
+  }
 
   let closingPromise: Promise<void> | null = null;
   const close = () => {
     closingPromise ??= Promise.all([
       controller.close(),
       server.close(),
+      pluginProxy?.close() ?? Promise.resolve(),
     ]).then(() => undefined);
     return closingPromise;
   };
@@ -539,6 +745,8 @@ const LIFECYCLE_HANDLERS = {
   call: callTool,
   inspect,
   mcp: runMcp,
+  skills: listSkills,
+  plugins: listPlugins,
   help: showHelp,
 } satisfies Record<LifecycleCommandName, LifecycleHandler>;
 

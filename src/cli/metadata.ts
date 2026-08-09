@@ -159,7 +159,7 @@ interface LifecycleCommandSpec {
   readonly usage?: string;
   readonly summary: string;
   readonly help: string;
-  readonly group: "session" | "compatibility";
+  readonly group: "session" | "extensions" | "compatibility";
 }
 
 export const LIFECYCLE_COMMANDS = [
@@ -212,6 +212,20 @@ export const LIFECYCLE_COMMANDS = [
     summary: "Run the MCP stdio adapter",
     help: "Run the optional MCP adapter over stdio.",
     group: "compatibility",
+  },
+  {
+    name: "skills",
+    synopsis: "skills [name] [--json]",
+    summary: "List or read Agent Skills",
+    help: "List discovered Agent Skills from .agents/skills, .tidesurf/skills, and installed agent plugins. Pass a skill name to print its full document.",
+    group: "extensions",
+  },
+  {
+    name: "plugins",
+    synopsis: "plugins [--json]",
+    summary: "List Agent Plugins",
+    help: "List discovered Agent Plugins with their skills, MCP servers, and validation diagnostics.",
+    group: "extensions",
   },
   {
     name: "help",

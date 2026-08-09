@@ -16,7 +16,7 @@ tidesurf get_state
 tidesurf click L1
 ```
 
-Direct CLI commands use the exact registry and MCP identifiers, including underscores in `get_state`, `list_tabs`, `new_tab`, `switch_tab`, `close_tab`, `clipboard_read`, and `clipboard_write`. The CLI, SDK executor, and packaged MCP adapter share one registry, schema, and handler for each of the 18 tools.
+Direct CLI commands use the exact registry and MCP identifiers, including underscores in `get_state`, `list_tabs`, `new_tab`, `switch_tab`, `close_tab`, `clipboard_read`, and `clipboard_write`. The CLI, SDK executor, and packaged MCP adapter share one registry, schema, and handler for each of the 20 tools.
 
 The first tool command starts a named local session and managed browser. Later commands reuse its active tab and exact element ID map. Startup and security policy remain fixed until `tidesurf stop`; choose another `--session` name for a different policy.
 

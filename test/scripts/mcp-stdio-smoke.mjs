@@ -7,6 +7,9 @@ if (!cli) throw new Error("Usage: mcp-stdio-smoke.mjs <cli.js>");
 
 const child = spawn(process.execPath, [cli, "mcp", "--quiet"], {
   stdio: ["pipe", "pipe", "inherit"],
+  // The canonical tool count assumes no user- or project-installed
+  // extensions; disable them so the check is environment-independent.
+  env: { ...process.env, TIDESURF_EXTENSIONS: "off" },
 });
 const lines = createInterface({ input: child.stdout });
 const iterator = lines[Symbol.asyncIterator]();
@@ -40,8 +43,8 @@ try {
   send({ jsonrpc: "2.0", method: "notifications/initialized" });
   send({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} });
   const listed = await response(2);
-  if (listed.result?.tools?.length !== 19) {
-    throw new Error(`Expected 19 MCP tools, received ${listed.result?.tools?.length}`);
+  if (listed.result?.tools?.length !== 21) {
+    throw new Error(`Expected 21 MCP tools, received ${listed.result?.tools?.length}`);
   }
 
   child.stdin.end();

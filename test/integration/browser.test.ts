@@ -519,7 +519,7 @@ describeBrowser("Browser integration", () => {
 
   it("returns tool definitions", () => {
     const defs = surfing.getToolDefinitions();
-    expect(defs).toHaveLength(18);
+    expect(defs).toHaveLength(20);
     expect(defs.map((d) => d.name)).toEqual(
       expect.arrayContaining([
         "get_state",

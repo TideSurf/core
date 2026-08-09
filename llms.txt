@@ -16,6 +16,16 @@ brew install TideSurf/tap/tidesurf
 npm install --global @tidesurf/core
 ```
 
+## Use as your agent tool
+
+TideSurf installs into an agent in three ways, from lightest to deepest:
+
+1. MCP server: add `tidesurf mcp` to any MCP client config (see the MCP section).
+2. Agent Skills: the npm package ships `skills/tidesurf-browser`, an Agent Skills document that teaches the agent the TideSurf workflow. Install it with `npx skills add TideSurf/core`, or copy `skills/tidesurf-browser` into your project's `.agents/skills/` directory.
+3. Agent Plugin: the package root is a valid Agent Plugins v1.0.0 directory (`plugin.json`, `mcp.json`, `skills/`). Point any compatible client (VS Code, Cursor, Copilot, Codex, Kiro) at a checkout or the unpacked npm package to register both the MCP server and the skill.
+
+TideSurf is also a host: it loads Agent Plugins from `.tidesurf/plugins/` (project) and `~/.tidesurf/plugins/` (user), and Agent Skills from `.agents/skills/`, `.tidesurf/skills/`, and the same paths under `~`. Plugin skills and MCP servers become available to the agent through the `list_skills`/`read_skill` tools, the `skills`/`plugins` CLI commands, and the MCP adapter (plugin MCP servers are proxied into `tidesurf mcp` under `<plugin>__<tool>` names). Set `TIDESURF_PLUGINS_DIR`/`TIDESURF_SKILLS_DIR` to replace the default roots, and `TIDESURF_EXTENSIONS=user|off` to skip project-scoped extensions or all extensions.
+
 ## Agent CLI
 
 The first tool command starts a private local daemon and a managed headless browser. Separate CLI invocations reuse the same browser, active tab, open tabs, and element ID maps. The default session name is `default`.
@@ -44,6 +54,8 @@ Session commands:
 - `call <tool> --input <json|->`: call an exact tool identifier with JSON; `-` reads stdin
 - `inspect <url>`: one-shot compatibility command
 - `mcp`: run the MCP stdio adapter
+- `skills [name]`: list discovered Agent Skills, or print one skill's document
+- `plugins`: list discovered Agent Plugins with diagnostics
 
 Direct tool commands, in registry order:
 
@@ -65,6 +77,8 @@ Direct tool commands, in registry order:
 16. `clipboard_read`
 17. `clipboard_write`
 18. `download`
+19. `list_skills`
+20. `read_skill`
 
 Use `tidesurf help <command>` for exact positionals and flags. Page-state flags:
 
@@ -147,11 +161,11 @@ await browser.close();
 
 `TideSurfOptions.channel` accepts `stable`, `beta`, `dev`, `canary`, or `chromium`.
 
-The package-level `getToolDefinitions()` and a normal instance return all 18 schemas used by the CLI and MCP. A read-only instance or `getToolDefinitions({ readOnly: true })` returns the six observation schemas. `getToolExecutor()` accepts `{ name, input }` and returns ToolResult.
+The package-level `getToolDefinitions()` and a normal instance return all 20 schemas used by the CLI and MCP. A read-only instance or `getToolDefinitions({ readOnly: true })` returns the eight observation schemas. `getToolExecutor()` accepts `{ name, input }` and returns ToolResult.
 
 ## Read-only mode
 
-Allowed tools: `get_state`, `extract`, `list_tabs`, `switch_tab`, `search`, `screenshot`.
+Allowed tools: `get_state`, `extract`, `list_tabs`, `switch_tab`, `search`, `screenshot`, `list_skills`, `read_skill`.
 
 Blocked operations: navigation, interaction, evaluation, clipboard, upload/download, tab creation, tab closure. Enforcement applies in the registry, executor, MCP adapter, TideSurf methods, and SurfingPage returned by `getPage()`.
 
@@ -180,4 +194,4 @@ Localhost, loopback, private, and link-local navigation is blocked by default. U
 }
 ```
 
-The MCP adapter registers the shared 18 tools and the `launch_browser` lifecycle tool. Tool calls may omit the `arguments` object. Screenshot results become image blocks. Failed tool calls set `isError`. `@modelcontextprotocol/sdk` and `zod` are optional package dependencies.
+The MCP adapter registers the shared 20 tools and the `launch_browser` lifecycle tool. Tool calls may omit the `arguments` object. Screenshot results become image blocks. Failed tool calls set `isError`. `@modelcontextprotocol/sdk` and `zod` are optional package dependencies. When Agent Plugins with MCP servers are installed, the adapter connects to them and proxies their tools as `<plugin>__<tool>`; plugin failures are isolated per server and logged to stderr.

@@ -20,6 +20,8 @@ TideSurf never downloads a browser. It automatically selects only Chrome stable,
 - `switch_tab`
 - `search`
 - `screenshot`
+- `list_skills`
+- `read_skill`
 
 It rejects:
 

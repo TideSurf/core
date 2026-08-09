@@ -5,6 +5,7 @@ import {
   CDPConnectionError,
   CDPTimeoutError,
   ChromeLaunchError,
+  ValidationError,
 } from "../errors.js";
 import {
   validateElementId,
@@ -50,6 +51,8 @@ export interface ToolSpec {
   readonly description: string;
   readonly inputSchema: ToolDefinition["input_schema"];
   readonly readOnlyAllowed: boolean;
+  /** When false, dispatch skips browser acquisition and passes null as the instance. */
+  readonly requiresBrowser?: boolean;
   readonly outputKind: ToolOutputKind;
   readonly cli: ToolCliSpec;
   readonly validate?: (
@@ -619,6 +622,66 @@ export const TOOL_REGISTRY: readonly ToolSpec[] = deepFreeze([
         timeout: optionalNumber(input, "timeout"),
       }),
   },
+  {
+    name: "list_skills",
+    description:
+      "List the Agent Skills available to this session: name, description, and source.",
+    inputSchema: schema({}),
+    readOnlyAllowed: true,
+    requiresBrowser: false,
+    outputKind: "json",
+    cli: cli(),
+    handler: async () => {
+      const { loadExtensions, skillCatalog } = await import(
+        "../extensions/index.js"
+      );
+      const snapshot = loadExtensions();
+      return {
+        skills: skillCatalog(snapshot.skills),
+        ...(snapshot.diagnostics.length > 0
+          ? { diagnostics: snapshot.diagnostics }
+          : {}),
+      };
+    },
+  },
+  {
+    name: "read_skill",
+    description:
+      "Read one Agent Skill document by name, with its bundled file list. Call list_skills first for names.",
+    inputSchema: schema(
+      { name: property("string", "Skill name from list_skills") },
+      ["name"]
+    ),
+    readOnlyAllowed: true,
+    requiresBrowser: false,
+    outputKind: "json",
+    cli: cli([positional("name", "Skill name")]),
+    handler: async (_instance, input) => {
+      const { findSkill, loadExtensions } = await import(
+        "../extensions/index.js"
+      );
+      const name = stringInput(input, "name");
+      const snapshot = loadExtensions();
+      const skill = findSkill(snapshot, name);
+      if (!skill) {
+        const available = snapshot.skills.map((entry) => entry.name);
+        throw new ValidationError(
+          available.length > 0
+            ? `Unknown skill: ${name}. Available skills: ${available.join(", ")}.`
+            : `Unknown skill: ${name}. No skills are installed. Add skill directories under .agents/skills or ~/.agents/skills, or install an agent plugin under .tidesurf/plugins.`
+        );
+      }
+      return {
+        name: skill.name,
+        description: skill.description,
+        ...(skill.plugin ? { plugin: skill.plugin } : {}),
+        source: skill.source,
+        directory: skill.directory,
+        files: skill.files,
+        content: skill.body,
+      };
+    },
+  },
 ] satisfies ToolSpec[]);
 
 const TOOL_BY_NAME = new Map(TOOL_REGISTRY.map((tool) => [tool.name, tool]));
@@ -790,13 +853,15 @@ export function dispatchTool(
 }
 
 export async function executeValidatedToolSpec(
-  instance: TideSurf,
+  instance: TideSurf | null,
   tool: ToolSpec,
   input: Record<string, unknown>,
   context?: ToolExecutionContext
 ): Promise<ToolResult> {
   try {
-    return { success: true, data: await tool.handler(instance, input, context) };
+    // Specs with requiresBrowser: false never dereference the instance, so a
+    // null instance is safe; the cast keeps handler signatures simple.
+    return { success: true, data: await tool.handler(instance as TideSurf, input, context) };
   } catch (error) {
     if (error instanceof ActionCommittedError) {
       return { success: true, data: error.message };

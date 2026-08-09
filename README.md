@@ -23,7 +23,8 @@
   TideSurf connects Chromium to agents over the
   <a href="https://chromedevtools.github.io/devtools-protocol">Chrome DevTools Protocol</a>.
   It compresses each page into a token-efficient structured read of 50-200 tokens
-  and exposes 18 tools through one registry shared by the agent CLI, the SDK, and MCP.
+  and exposes 20 tools through one registry shared by the agent CLI, the SDK, and MCP.<br>
+  Installs into any agent as an MCP server, an <a href="https://agentskills.io">Agent Skill</a>, or an <a href="https://agent-plugins.org">Agent Plugin</a>, and hosts your own plugins and skills.
 </p>
 
 ```sh

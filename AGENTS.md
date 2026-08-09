@@ -21,11 +21,14 @@ src/
   cdp/                     Chrome launch, connection, page, tabs, retries, timeouts
   parser/                  DOM walk, classify, assign IDs, serialize, budget tokens
   tools/                   canonical tool registry and executor
-  mcp/                     thin optional-dependency adapter
+  extensions/              Agent Plugins and Agent Skills loading, discovery, validation
+  mcp/                     thin optional-dependency adapter and plugin MCP proxy
 website/
   landing/                 TideSurf landing page
   docs/                    TideSurf documentation app
 ```
+
+The package root is also a shipped Agent Plugins directory: `plugin.json`, `mcp.json`, and `skills/` are published so compatible clients can install TideSurf directly.
 
 ## Commands
 
@@ -73,6 +76,7 @@ The website follows the design philosophy of `../mercuriusdream.github.io`.
 - CDP is the browser transport. Playwright is not a runtime dependency for the package.
 - Read-only mode removes write and sensitive tools from agent-facing definitions.
 - MCP dependencies are optional and dynamically imported.
+- Extension support follows two open specs: Agent Plugins v1.0.0 (agent-plugins.org) and Agent Skills (agentskills.io). `list_skills` and `read_skill` are read-only, browser-free tools; plugin MCP servers are proxied only in `tidesurf mcp` mode with per-server failure isolation. Plugin and skill code runs with user privileges, so project-scoped extensions can be disabled with `TIDESURF_EXTENSIONS=user` or `off`.
 
 ## Coding Rules
 

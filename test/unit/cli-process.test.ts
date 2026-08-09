@@ -92,7 +92,7 @@ describe("CLI process behavior", () => {
     expect(json.code).toBe(0);
     const output = JSON.parse(json.stdout) as { success: boolean; data: unknown[] };
     expect(output.success).toBe(true);
-    expect(output.data).toHaveLength(18);
+    expect(output.data).toHaveLength(20);
   });
 
   it("uses exit 2 for an unknown command", () => {
@@ -111,6 +111,8 @@ describe("CLI process behavior", () => {
         "call",
         "inspect",
         "mcp",
+        "skills",
+        "plugins",
         "help",
         ...TOOL_REGISTRY.map((tool) => tool.name),
       ]);

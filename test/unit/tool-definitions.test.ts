@@ -9,9 +9,9 @@ import { ActionCommittedError } from "../../src/errors.js";
 import type { TideSurf } from "../../src/tidesurf.js";
 
 describe("getToolDefinitions", () => {
-  it("returns 18 tools by default", () => {
+  it("returns 20 tools by default", () => {
     const tools = getToolDefinitions();
-    expect(tools).toHaveLength(18);
+    expect(tools).toHaveLength(20);
   });
 
   it("every tool has name, description, and input_schema", () => {
@@ -24,9 +24,9 @@ describe("getToolDefinitions", () => {
     }
   });
 
-  it("returns 6 tools in read-only mode", () => {
+  it("returns 8 tools in read-only mode", () => {
     const tools = getToolDefinitions({ readOnly: true });
-    expect(tools).toHaveLength(6);
+    expect(tools).toHaveLength(8);
   });
 
   it("read-only mode excludes all write tools", () => {
@@ -58,6 +58,8 @@ describe("getToolDefinitions", () => {
       "switch_tab",
       "search",
       "screenshot",
+      "list_skills",
+      "read_skill",
     ];
     const tools = getToolDefinitions({ readOnly: true });
     const names = tools.map((t) => t.name);
