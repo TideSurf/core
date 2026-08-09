@@ -27,13 +27,16 @@ const fs = require("fs");
 const path = require("path");
 const dirArg = process.argv.find((arg) => arg.startsWith("--user-data-dir="));
 const userDataDir = dirArg ? dirArg.slice("--user-data-dir=".length) : undefined;
+const browserPath = () => process.env.FAKE_CHROME_BROWSER_PATH_FILE
+  ? fs.readFileSync(process.env.FAKE_CHROME_BROWSER_PATH_FILE, "utf8").trim()
+  : "/devtools/browser/fake";
 const server = http.createServer((req, res) => {
   const port = server.address().port;
   if (req.url === "/json/version") {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({
       Browser: "FakeChrome/1.0",
-      webSocketDebuggerUrl: "ws://127.0.0.1:" + port + "/devtools/browser/fake",
+      webSocketDebuggerUrl: "ws://127.0.0.1:" + port + browserPath(),
     }));
     return;
   }
@@ -57,7 +60,7 @@ server.listen(0, "127.0.0.1", () => {
   if (userDataDir) {
     fs.writeFileSync(
       path.join(userDataDir, "DevToolsActivePort"),
-      port + "\\n/devtools/browser/fake"
+      port + "\\n" + browserPath()
     );
   }
   if (process.env.FAKE_CHROME_PORT_FILE) {
@@ -71,12 +74,26 @@ process.on("SIGTERM", () => process.exit(0));
 setInterval(() => {}, 1000);
 `;
 
-const ENV_KEYS = ["FAKE_CHROME_PORT_FILE", "FAKE_CHROME_PID_FILE"] as const;
+const ENV_KEYS = [
+  "FAKE_CHROME_PORT_FILE",
+  "FAKE_CHROME_PID_FILE",
+  "FAKE_CHROME_BROWSER_PATH_FILE",
+] as const;
 
 let fixtureDir: string;
 let portFile: string;
 let pidFile: string;
+let browserPathFile: string;
 let savedEnv: Record<string, string | undefined>;
+
+function pidIsAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
 
 function readNumberFile(path: string): number {
   for (let attempt = 0; attempt < 100; attempt++) {
@@ -96,9 +113,11 @@ beforeAll(() => {
   chmodSync(script, 0o755);
   portFile = join(fixtureDir, "fake-port");
   pidFile = join(fixtureDir, "fake-pid");
+  browserPathFile = join(fixtureDir, "fake-browser-path");
   savedEnv = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
   process.env["FAKE_CHROME_PORT_FILE"] = portFile;
   process.env["FAKE_CHROME_PID_FILE"] = pidFile;
+  process.env["FAKE_CHROME_BROWSER_PATH_FILE"] = browserPathFile;
 });
 
 afterAll(() => {
@@ -113,6 +132,7 @@ describe("launch rollback", () => {
   it("releases the owned-endpoint claim and orphan record when connect fails", async () => {
     rmSync(portFile, { force: true });
     rmSync(pidFile, { force: true });
+    writeFileSync(browserPathFile, "/devtools/browser/fake");
     await expect(
       TideSurf.launch({
         chromePath: join(fixtureDir, "fake-chrome"),
@@ -133,9 +153,10 @@ describe("launch rollback", () => {
     expect(existsSync(orphanRecord)).toBe(false);
   }, 30_000);
 
-  it("retains ownership and orphan bookkeeping when launch rollback cannot terminate", async () => {
+  it("invalidates failed rollback ownership and automatically retries cleanup", async () => {
     rmSync(portFile, { force: true });
     rmSync(pidFile, { force: true });
+    writeFileSync(browserPathFile, "/devtools/browser/fake");
     const killSpy = spyOn(ChildProcess.prototype, "kill").mockImplementation(() => {
       throw new Error("signal rejected");
     });
@@ -161,29 +182,45 @@ describe("launch rollback", () => {
     );
     const record = JSON.parse(readFileSync(orphanRecord, "utf8")) as {
       userDataDir: string;
+      recordToken: string;
+      ownershipToken: string;
     };
 
     try {
       expect(isOwnedBrowserEndpoint("127.0.0.1", port)).toBe(true);
-      expect(await verifyOwnedBrowserEndpoint("127.0.0.1", port)).toBe(true);
       expect(existsSync(orphanRecord)).toBe(true);
-    } finally {
-      try {
-        process.kill(chromePid, "SIGKILL");
-      } catch {
-        // already stopped
+      // Rollback failure invalidated the launch-time cache. If the endpoint's
+      // identity changes before retry cleanup, it must never remain verified.
+      writeFileSync(browserPathFile, "/devtools/browser/foreign");
+      expect(await verifyOwnedBrowserEndpoint("127.0.0.1", port)).toBe(false);
+
+      const deadline = Date.now() + 8_000;
+      while (
+        Date.now() < deadline &&
+        (pidIsAlive(chromePid) ||
+          existsSync(orphanRecord) ||
+          existsSync(record.userDataDir))
+      ) {
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
       }
-      const deadline = Date.now() + 2_000;
-      while (Date.now() < deadline) {
+      expect(pidIsAlive(chromePid)).toBe(false);
+      expect(existsSync(record.userDataDir)).toBe(false);
+      expect(existsSync(orphanRecord)).toBe(false);
+      expect(isOwnedBrowserEndpoint("127.0.0.1", port)).toBe(false);
+    } finally {
+      if (pidIsAlive(chromePid)) {
         try {
-          process.kill(chromePid, 0);
-          await new Promise((resolveDelay) => setTimeout(resolveDelay, 20));
+          process.kill(chromePid, "SIGKILL");
         } catch {
-          break;
+          // already stopped
         }
       }
-      unregisterOrphanedBrowser(process.pid, chromePid);
-      releaseOwnedBrowserEndpoint("127.0.0.1", port);
+      unregisterOrphanedBrowser(process.pid, chromePid, record.recordToken);
+      releaseOwnedBrowserEndpoint(
+        "127.0.0.1",
+        port,
+        record.ownershipToken
+      );
       rmSync(record.userDataDir, { recursive: true, force: true });
     }
   }, 30_000);

@@ -648,7 +648,7 @@ describe("TideSurf.close", () => {
     expect(connectToTab).not.toHaveBeenCalled();
   });
 
-  it("reports a TideSurf-owned Chrome process that survives termination", async () => {
+  it("retries a TideSurf-owned Chrome process that survives termination", async () => {
     const profile = mkdtempSync(join(tmpdir(), "tidesurf-close-survivor-"));
     const closeClient = mock(async () => {});
     const kill = mock(() => {
@@ -681,8 +681,10 @@ describe("TideSurf.close", () => {
       expect(kill).toHaveBeenCalledTimes(1);
       expect(existsSync(profile)).toBe(true);
 
+      expect(Reflect.get(surf, "exitHandler")).not.toBeNull();
       await expect(surf.close()).rejects.toBeInstanceOf(ChromeLaunchError);
-      expect(kill).toHaveBeenCalledTimes(1);
+      expect(kill).toHaveBeenCalledTimes(2);
+      expect(Reflect.get(surf, "exitHandler")).not.toBeNull();
     } finally {
       rmSync(profile, { recursive: true, force: true });
     }

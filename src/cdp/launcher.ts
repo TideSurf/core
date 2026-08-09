@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
 import {
   accessSync,
   constants,
   mkdirSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -74,6 +75,8 @@ export interface LaunchResult {
   targetId: string;
   userDataDir: string;
   ownsTempDir: boolean;
+  ownershipToken: string;
+  orphanToken: string;
 }
 
 export interface DiscoverOptions {
@@ -116,35 +119,55 @@ function endpointKey(host: string, port: number): string {
   return `${normalizeEndpointHost(host)}:${port}`;
 }
 
-const ownedBrowserEndpoints = new Set<string>();
-/** Browser websocket path recorded at launch, used to re-verify ownership. */
-const ownedBrowserWsPaths = new Map<string, string>();
-/** Endpoints whose ownership was already re-verified in this process. */
-const verifiedOwnedEndpoints = new Set<string>();
+interface OwnedBrowserEndpointClaim {
+  token: string;
+  browserWsPath: string;
+  verified: boolean;
+}
+
+const ownedBrowserEndpoints = new Map<string, OwnedBrowserEndpointClaim>();
 
 function registerOwnedBrowserEndpoint(
   host: string,
   port: number,
-  browserWsPath: string | undefined
-): void {
-  const key = endpointKey(host, port);
-  ownedBrowserEndpoints.add(key);
-  if (browserWsPath) ownedBrowserWsPaths.set(key, browserWsPath);
-  // The launch flow itself verified the browser's identity.
-  verifiedOwnedEndpoints.add(key);
+  browserWsPath: string
+): string {
+  const token = randomUUID();
+  ownedBrowserEndpoints.set(endpointKey(host, port), {
+    token,
+    browserWsPath,
+    // The launch flow itself verified the browser's identity.
+    verified: true,
+  });
+  return token;
 }
 
-/** Forget an owned endpoint once its browser is stopped through normal paths. */
-export function releaseOwnedBrowserEndpoint(host: string, port: number): void {
+/**
+ * Forget only the exact endpoint generation represented by `ownershipToken`.
+ * A late close from an older browser cannot release a replacement claim.
+ */
+export function releaseOwnedBrowserEndpoint(
+  host: string,
+  port: number,
+  ownershipToken: string
+): boolean {
   const key = endpointKey(host, port);
+  if (ownedBrowserEndpoints.get(key)?.token !== ownershipToken) return false;
   ownedBrowserEndpoints.delete(key);
-  ownedBrowserWsPaths.delete(key);
-  verifiedOwnedEndpoints.delete(key);
+  return true;
 }
 
-/** Force ownership re-verification after the connection to a browser drops. */
-export function noteOwnedBrowserDisconnected(host: string, port: number): void {
-  verifiedOwnedEndpoints.delete(endpointKey(host, port));
+/** Force ownership re-verification after a connection or rollback drops. */
+export function noteOwnedBrowserDisconnected(
+  host: string,
+  port: number,
+  ownershipToken?: string
+): void {
+  const claim = ownedBrowserEndpoints.get(endpointKey(host, port));
+  if (!claim || (ownershipToken !== undefined && claim.token !== ownershipToken)) {
+    return;
+  }
+  claim.verified = false;
 }
 
 /** True when TideSurf launched (and therefore owns) the browser at host:port. */
@@ -164,13 +187,10 @@ export async function verifyOwnedBrowserEndpoint(
   timeoutMs = 1_000
 ): Promise<boolean> {
   const key = endpointKey(host, port);
-  if (!ownedBrowserEndpoints.has(key)) return false;
-  if (verifiedOwnedEndpoints.has(key)) return true;
-  const expectedPath = ownedBrowserWsPaths.get(key);
-  if (!expectedPath) {
-    // No identity was recorded at launch; fall back to registry membership.
-    return true;
-  }
+  const claim = ownedBrowserEndpoints.get(key);
+  if (!claim) return false;
+  if (claim.verified) return true;
+  const { token, browserWsPath: expectedPath } = claim;
   try {
     const version = await withTimeout(
       CDP.Version({ port, host: normalizeEndpointHost(host), useHostName: true }),
@@ -183,12 +203,16 @@ export async function verifyOwnedBrowserEndpoint(
     } catch {
       actualPath = undefined;
     }
+    const latest = ownedBrowserEndpoints.get(key);
+    // Publication may have replaced this claim while CDP.Version was in
+    // flight. Never apply the old generation's result to the replacement.
+    if (latest?.token !== token) return false;
     if (actualPath !== undefined && actualPath === expectedPath) {
-      verifiedOwnedEndpoints.add(key);
+      latest.verified = true;
       return true;
     }
-    // A foreign browser occupies the endpoint: drop the stale ownership claim.
-    releaseOwnedBrowserEndpoint(host, port);
+    // A foreign browser occupies the endpoint: drop only this stale claim.
+    releaseOwnedBrowserEndpoint(host, port, token);
     return false;
   } catch {
     // The browser cannot be identified; do not claim ownership of it.
@@ -498,6 +522,11 @@ interface OrphanRecord {
   userDataDir: string;
   ownsTempDir: boolean;
   createdAt: number;
+  recordToken?: string;
+  host?: string;
+  port?: number;
+  ownershipToken?: string;
+  browserWsPath?: string;
 }
 
 const ORPHAN_REGISTRY_DIR = join(tmpdir(), "tidesurf-orphans");
@@ -506,28 +535,74 @@ function orphanRecordPath(parentPid: number, chromePid: number): string {
   return join(ORPHAN_REGISTRY_DIR, `${parentPid}-${chromePid}.json`);
 }
 
-function registerOrphanedBrowser(record: OrphanRecord): void {
+function writeOrphanRecord(record: OrphanRecord): void {
+  mkdirSync(ORPHAN_REGISTRY_DIR, { recursive: true, mode: 0o700 });
+  const path = orphanRecordPath(record.parentPid, record.chromePid);
+  const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
   try {
-    mkdirSync(ORPHAN_REGISTRY_DIR, { recursive: true, mode: 0o700 });
-    writeFileSync(
-      orphanRecordPath(record.parentPid, record.chromePid),
-      JSON.stringify(record),
-      { mode: 0o600 }
-    );
-  } catch {
-    // Bookkeeping is best-effort; never fail a launch over it.
+    writeFileSync(temporary, `${JSON.stringify(record)}\n`, { mode: 0o600 });
+    renameSync(temporary, path);
+  } finally {
+    rmSync(temporary, { force: true });
   }
 }
 
-/** Remove the orphan record once the browser is stopped through normal paths. */
+function registerOrphanedBrowser(
+  record: Omit<OrphanRecord, "recordToken">
+): string {
+  const recordToken = randomUUID();
+  try {
+    writeOrphanRecord({ ...record, recordToken });
+  } catch {
+    // Bookkeeping is best-effort; never fail a launch over it.
+  }
+  return recordToken;
+}
+
+function updateOrphanedBrowserEndpoint(
+  parentPid: number,
+  chromePid: number,
+  recordToken: string,
+  endpoint: Pick<
+    Required<OrphanRecord>,
+    "host" | "port" | "ownershipToken" | "browserWsPath"
+  >
+): void {
+  const path = orphanRecordPath(parentPid, chromePid);
+  try {
+    const current = JSON.parse(readFileSync(path, "utf8")) as OrphanRecord;
+    if (current.recordToken !== recordToken) return;
+    writeOrphanRecord({ ...current, ...endpoint });
+  } catch {
+    // Best-effort metadata enrichment; the base orphan record remains useful.
+  }
+}
+
+/**
+ * Remove the exact orphan generation after both process and profile cleanup.
+ * Omitting `recordToken` is retained for explicit administrative/test cleanup.
+ */
 export function unregisterOrphanedBrowser(
   parentPid: number,
-  chromePid: number
-): void {
+  chromePid: number,
+  recordToken?: string
+): boolean {
+  const path = orphanRecordPath(parentPid, chromePid);
   try {
-    rmSync(orphanRecordPath(parentPid, chromePid), { force: true });
+    if (recordToken !== undefined) {
+      let current: OrphanRecord;
+      try {
+        current = JSON.parse(readFileSync(path, "utf8")) as OrphanRecord;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") return true;
+        return false;
+      }
+      if (current.recordToken !== recordToken) return true;
+    }
+    rmSync(path, { force: true });
+    return true;
   } catch {
-    // best-effort
+    return false;
   }
 }
 
@@ -578,9 +653,70 @@ function parsePosixArguments(commandLine: string): string[] | undefined {
   return args;
 }
 
-function processArguments(pid: number): string[] | undefined {
-  if (process.platform === "win32") return undefined;
-  if (process.platform === "linux") {
+function parseWindowsArguments(commandLine: string): string[] | undefined {
+  const args: string[] = [];
+  let index = 0;
+  while (index < commandLine.length) {
+    while (/\s/.test(commandLine[index] ?? "")) index++;
+    if (index >= commandLine.length) break;
+    let value = "";
+    let quoted = false;
+    while (index < commandLine.length) {
+      let backslashes = 0;
+      while (commandLine[index] === "\\") {
+        backslashes++;
+        index++;
+      }
+      if (commandLine[index] === '"') {
+        value += "\\".repeat(Math.floor(backslashes / 2));
+        if (backslashes % 2 === 1) value += '"';
+        else quoted = !quoted;
+        index++;
+        continue;
+      }
+      value += "\\".repeat(backslashes);
+      const character = commandLine[index];
+      if (character === undefined || (!quoted && /\s/.test(character))) break;
+      value += character;
+      index++;
+    }
+    if (quoted) return undefined;
+    args.push(value);
+    while (/\s/.test(commandLine[index] ?? "")) index++;
+  }
+  return args;
+}
+
+function execFileText(
+  executable: string,
+  args: string[],
+  deadline: number
+): Promise<string | undefined> {
+  const timeout = deadline - Date.now();
+  if (timeout <= 0) return Promise.resolve(undefined);
+  return new Promise((resolveOutput) => {
+    execFile(
+      executable,
+      args,
+      {
+        encoding: "utf8",
+        windowsHide: true,
+        timeout,
+        maxBuffer: 1024 * 1024,
+      },
+      (error, stdout) => resolveOutput(error ? undefined : stdout)
+    );
+  });
+}
+
+const PROCESS_IDENTITY_TIMEOUT_MS = 2_000;
+
+export async function processArgumentsForCleanup(
+  pid: number,
+  platform: NodeJS.Platform = process.platform,
+  deadline = Date.now() + PROCESS_IDENTITY_TIMEOUT_MS
+): Promise<string[] | undefined> {
+  if (platform === "linux") {
     try {
       const args = readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0");
       if (args.at(-1) === "") args.pop();
@@ -589,19 +725,28 @@ function processArguments(pid: number): string[] | undefined {
       return undefined;
     }
   }
-  try {
-    const commandLine = execFileSync(
-      "ps",
-      ["-ww", "-p", String(pid), "-o", "command="],
-      {
-        encoding: "utf8",
-        stdio: ["ignore", "pipe", "ignore"],
-      }
+  if (platform === "win32") {
+    const commandLine = await execFileText(
+      "powershell",
+      [
+        "-NoProfile",
+        "-Command",
+        `(Get-CimInstance Win32_Process -Filter 'ProcessId=${pid}' | Select-Object -ExpandProperty CommandLine)`,
+      ],
+      deadline
     );
-    return parsePosixArguments(commandLine);
-  } catch {
-    return undefined;
+    return commandLine === undefined
+      ? undefined
+      : parseWindowsArguments(commandLine.trim());
   }
+  const commandLine = await execFileText(
+    "ps",
+    ["-ww", "-p", String(pid), "-o", "command="],
+    deadline
+  );
+  return commandLine === undefined
+    ? undefined
+    : parsePosixArguments(commandLine);
 }
 
 function hasOwnedProfileArgument(args: readonly string[], userDataDir: string): boolean {
@@ -654,7 +799,7 @@ export async function reapOrphanedBrowsers(): Promise<void> {
     // The owner is dead. Decide whether the recorded Chrome still runs.
     let chromeAlive = pidIsAlive(chromePid);
     if (chromeAlive) {
-      const args = processArguments(chromePid);
+      const args = await processArgumentsForCleanup(chromePid);
       if (args === undefined) {
         // Cannot verify the process identity (e.g. Windows): leave it alone.
         continue;
@@ -679,7 +824,7 @@ export async function reapOrphanedBrowsers(): Promise<void> {
       if (pidIsAlive(chromePid)) {
         // SIGTERM may have exited the browser and allowed its pid to be
         // recycled. Re-prove the exact profile argv before SIGKILL.
-        const args = processArguments(chromePid);
+        const args = await processArgumentsForCleanup(chromePid);
         if (args === undefined) continue;
         if (!hasOwnedProfileArgument(args, userDataDir)) {
           chromeAlive = false;
@@ -705,12 +850,139 @@ export async function reapOrphanedBrowsers(): Promise<void> {
         continue; // keep the record so a later sweep can retry
       }
     }
-    try {
-      rmSync(filePath, { force: true });
-    } catch {
-      // best-effort
+    unregisterOrphanedBrowser(parentPid, chromePid, record.recordToken);
+  }
+}
+
+export interface OwnedBrowserCleanup {
+  process: ChildProcess;
+  userDataDir: string;
+  ownsTempDir: boolean;
+  orphanToken: string;
+  host?: string;
+  port?: number;
+  ownershipToken?: string;
+}
+
+interface ScheduledOwnedBrowserCleanup extends OwnedBrowserCleanup {
+  attempts: number;
+  running: boolean;
+  timer?: ReturnType<typeof setTimeout>;
+}
+
+const scheduledOwnedBrowserCleanups = new Map<
+  string,
+  ScheduledOwnedBrowserCleanup
+>();
+
+function scheduledCleanupKey(cleanup: OwnedBrowserCleanup): string {
+  return `${cleanup.process.pid ?? "spawn-failed"}:${cleanup.orphanToken}`;
+}
+
+function armOwnedBrowserCleanup(task: ScheduledOwnedBrowserCleanup): void {
+  if (task.timer || task.running) return;
+  const delayMs = Math.min(5_000, 500 * 2 ** Math.min(task.attempts, 3));
+  task.timer = setTimeout(() => {
+    task.timer = undefined;
+    void runOwnedBrowserCleanup(task);
+  }, delayMs);
+  task.timer.unref?.();
+}
+
+async function runOwnedBrowserCleanup(
+  task: ScheduledOwnedBrowserCleanup
+): Promise<void> {
+  if (task.running) return;
+  task.running = true;
+  const key = scheduledCleanupKey(task);
+  try {
+    const exited = processExited(task.process) ||
+      await terminateChromeProcess(task.process, 3_000);
+    if (!exited) {
+      if (
+        task.host !== undefined &&
+        task.port !== undefined &&
+        task.ownershipToken !== undefined
+      ) {
+        noteOwnedBrowserDisconnected(
+          task.host,
+          task.port,
+          task.ownershipToken
+        );
+      }
+      task.attempts++;
+      return;
+    }
+
+    if (
+      task.host !== undefined &&
+      task.port !== undefined &&
+      task.ownershipToken !== undefined
+    ) {
+      releaseOwnedBrowserEndpoint(
+        task.host,
+        task.port,
+        task.ownershipToken
+      );
+    }
+    if (task.ownsTempDir) {
+      try {
+        await rm(task.userDataDir, { recursive: true, force: true });
+      } catch {
+        task.attempts++;
+        return;
+      }
+    }
+    if (typeof task.process.pid === "number") {
+      if (!unregisterOrphanedBrowser(
+        process.pid,
+        task.process.pid,
+        task.orphanToken
+      )) {
+        task.attempts++;
+        return;
+      }
+    }
+    scheduledOwnedBrowserCleanups.delete(key);
+  } finally {
+    task.running = false;
+    if (scheduledOwnedBrowserCleanups.get(key) === task) {
+      armOwnedBrowserCleanup(task);
     }
   }
+}
+
+/**
+ * Retry cleanup retained by a failed launch rollback in the current process.
+ * The unref'ed retry coexists with the durable orphan record: if this process
+ * dies first, a later process reaps the same browser safely by argv identity.
+ */
+export function scheduleOwnedBrowserCleanup(
+  cleanup: OwnedBrowserCleanup
+): void {
+  const key = scheduledCleanupKey(cleanup);
+  const existing = scheduledOwnedBrowserCleanups.get(key);
+  if (existing) {
+    Object.assign(existing, cleanup);
+    armOwnedBrowserCleanup(existing);
+    return;
+  }
+  const task: ScheduledOwnedBrowserCleanup = {
+    ...cleanup,
+    attempts: 0,
+    running: false,
+  };
+  scheduledOwnedBrowserCleanups.set(key, task);
+  if (
+    task.host !== undefined &&
+    task.port !== undefined &&
+    task.ownershipToken !== undefined
+  ) {
+    // Failed rollback invalidates the launch-time verification immediately;
+    // a recycled foreign endpoint can never inherit a cached true result.
+    noteOwnedBrowserDisconnected(task.host, task.port, task.ownershipToken);
+  }
+  armOwnedBrowserCleanup(task);
 }
 
 function captureStartupStderr(stream: Readable | null): {
@@ -841,24 +1113,40 @@ function waitForProcessExit(proc: ChildProcess, timeout: number): Promise<boolea
   });
 }
 
-/** Stop an owned Chrome process and wait before its profile is removed. */
+/** Stop an owned Chrome process within one total deadline. */
 export async function terminateChromeProcess(
   proc: ChildProcess,
-  gracefulTimeout = 5_000
+  timeoutMs = 4_000
 ): Promise<boolean> {
   if (processExited(proc)) return true;
+  const totalTimeout = Number.isFinite(timeoutMs) && timeoutMs > 0
+    ? timeoutMs
+    : 1;
+  const deadline = Date.now() + totalTimeout;
   try {
     proc.kill("SIGTERM");
   } catch {
     return processExited(proc);
   }
-  if (await waitForProcessExit(proc, gracefulTimeout)) return true;
+  const termBudget = Math.min(
+    2_000,
+    Math.max(1, Math.floor(totalTimeout * 2 / 3))
+  );
+  if (
+    await waitForProcessExit(
+      proc,
+      Math.max(1, Math.min(termBudget, deadline - Date.now()))
+    )
+  ) {
+    return true;
+  }
+  if (Date.now() >= deadline) return processExited(proc);
   try {
     proc.kill("SIGKILL");
   } catch {
     return processExited(proc);
   }
-  return waitForProcessExit(proc, gracefulTimeout);
+  return waitForProcessExit(proc, Math.max(1, deadline - Date.now()));
 }
 
 async function waitForLaunchedBrowser(
@@ -1008,6 +1296,7 @@ export async function launchChrome(options: LaunchOptions = {}): Promise<LaunchR
   const ownsTempDir = options.userDataDir === undefined;
   const userDataDir = options.userDataDir ?? join(tmpdir(), `tidesurf-${randomUUID()}`);
   let proc: ChildProcess | undefined;
+  let orphanToken: string = randomUUID();
   try {
     mkdirSync(userDataDir, { recursive: true, mode: 0o700 });
 
@@ -1060,7 +1349,7 @@ export async function launchChrome(options: LaunchOptions = {}): Promise<LaunchR
     // terminate the child, a later process still has enough bookkeeping to
     // reap it and preserve its profile.
     if (typeof launchedProcess.pid === "number") {
-      registerOrphanedBrowser({
+      orphanToken = registerOrphanedBrowser({
         chromePid: launchedProcess.pid,
         parentPid: process.pid,
         userDataDir,
@@ -1097,18 +1386,61 @@ export async function launchChrome(options: LaunchOptions = {}): Promise<LaunchR
         "Could not prove that the DevTools endpoint belongs to the launched Chrome"
       );
     }
-    registerOwnedBrowserEndpoint(endpoint.host, endpoint.port, browserPath);
+    const ownershipToken = registerOwnedBrowserEndpoint(
+      endpoint.host,
+      endpoint.port,
+      browserPath
+    );
+    if (typeof launchedProcess.pid === "number") {
+      updateOrphanedBrowserEndpoint(
+        process.pid,
+        launchedProcess.pid,
+        orphanToken,
+        {
+          host: endpoint.host,
+          port: endpoint.port,
+          ownershipToken,
+          browserWsPath: browserPath,
+        }
+      );
+    }
     return {
       process: launchedProcess,
       ...endpoint,
       userDataDir,
       ownsTempDir,
+      ownershipToken,
+      orphanToken,
     };
   } catch (error) {
     const exited = proc ? await terminateChromeProcess(proc) : true;
-    if (exited && proc && typeof proc.pid === "number") {
-      unregisterOrphanedBrowser(process.pid, proc.pid);
+    let profileCleanupError: unknown;
+    let profileRemoved = !ownsTempDir;
+    if (exited && ownsTempDir) {
+      try {
+        await rm(userDataDir, { recursive: true, force: true });
+        profileRemoved = true;
+      } catch (cleanupError) {
+        profileCleanupError = cleanupError;
+      }
     }
+    let orphanRemoved = false;
+    if (exited && profileRemoved && proc && typeof proc.pid === "number") {
+      orphanRemoved = unregisterOrphanedBrowser(
+        process.pid,
+        proc.pid,
+        orphanToken
+      );
+    }
+    if (proc && (!exited || !profileRemoved || !orphanRemoved)) {
+      scheduleOwnedBrowserCleanup({
+        process: proc,
+        userDataDir,
+        ownsTempDir,
+        orphanToken,
+      });
+    }
+
     const launchError = error instanceof ChromeLaunchError
       ? error
       : new ChromeLaunchError(
@@ -1121,20 +1453,16 @@ export async function launchChrome(options: LaunchOptions = {}): Promise<LaunchR
         { cause: launchError }
       );
     }
-    if (ownsTempDir) {
-      try {
-        await rm(userDataDir, { recursive: true, force: true });
-      } catch (cleanupError) {
-        throw new ChromeLaunchError(
-          `${launchError.message}; failed to remove temporary profile ${userDataDir}`,
-          {
-            cause: new AggregateError(
-              [launchError, cleanupError],
-              "Chrome launch and profile cleanup failed"
-            ),
-          }
-        );
-      }
+    if (profileCleanupError !== undefined) {
+      throw new ChromeLaunchError(
+        `${launchError.message}; failed to remove temporary profile ${userDataDir}`,
+        {
+          cause: new AggregateError(
+            [launchError, profileCleanupError],
+            "Chrome launch and profile cleanup failed"
+          ),
+        }
+      );
     }
     throw launchError;
   }

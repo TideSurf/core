@@ -11,7 +11,9 @@ import {
 import {
   discoverBrowser,
   launchChrome,
+  noteOwnedBrowserDisconnected,
   releaseOwnedBrowserEndpoint,
+  scheduleOwnedBrowserCleanup,
   terminateChromeProcess,
   unregisterOrphanedBrowser,
 } from "./cdp/launcher.js";
@@ -46,6 +48,38 @@ interface DiscoveredEndpoint {
 
 const DISCOVERED_ENDPOINT = Symbol("TideSurf.discoveredEndpoint");
 const CONNECTION_INFO = new WeakMap<TideSurf, { host: string; port: number }>();
+const DEFAULT_CLOSE_TIMEOUT_MS = 4_000;
+
+function remainingCloseTime(deadline: number): number {
+  return Math.max(1, deadline - Date.now());
+}
+
+async function settleCloseByDeadline<T>(
+  promise: Promise<T>,
+  deadline: number,
+  label: string
+): Promise<T> {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) {
+    throw new ChromeLaunchError(`${label} exceeded the browser close deadline`);
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new ChromeLaunchError(
+            `${label} exceeded the browser close deadline`
+          )),
+          remaining
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 function validateRuntimeOptionsObject(value: unknown): void {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
@@ -208,7 +242,16 @@ export class TideSurf {
   private exitHandler: (() => void) | null = null;
   private activeTabId: string | null;
   private closePromise: Promise<void> | null = null;
+  private closeRequested = false;
+  private closeComplete = false;
   private readonly timeout?: number;
+  private readonly ownershipToken?: string;
+  private readonly orphanToken?: string;
+  private readonly ownedChromePid: number | null;
+  private profileCleanupComplete: boolean;
+  private orphanCleanupComplete: boolean;
+  private pagesCapturedForClose = false;
+  private readonly pagesToClose = new Set<SurfingPage>();
   private readonly pendingPageWork = new Set<Promise<unknown>>();
   private readonly pendingTabConnections = new Map<string, Promise<SurfingPage>>();
   private tabMutationTail: Promise<void> = Promise.resolve();
@@ -226,7 +269,9 @@ export class TideSurf {
     urlValidationOptions: UrlValidationOptions,
     timeout: number | undefined,
     connectionHost: string,
-    connectionPort: number
+    connectionPort: number,
+    ownershipToken?: string,
+    orphanToken?: string
   ) {
     this.chromeProcess = chromeProcess;
     this.activePage = page;
@@ -239,6 +284,13 @@ export class TideSurf {
     this.fileAccessRoots = [...fileAccessRoots];
     this.urlValidationOptions = { ...urlValidationOptions };
     this.timeout = timeout;
+    this.ownershipToken = ownershipToken;
+    this.orphanToken = orphanToken;
+    this.ownedChromePid = typeof chromeProcess?.pid === "number"
+      ? chromeProcess.pid
+      : null;
+    this.profileCleanupComplete = !ownsTempDir;
+    this.orphanCleanupComplete = this.ownedChromePid === null;
     CONNECTION_INFO.set(this, { host: connectionHost, port: connectionPort });
     this.executor = createToolExecutor(this);
 
@@ -282,6 +334,8 @@ export class TideSurf {
       targetId,
       userDataDir,
       ownsTempDir,
+      ownershipToken,
+      orphanToken,
     } = await launchChrome({
       headless: config.headless ?? true,
       chromePath: config.chromePath,
@@ -315,7 +369,9 @@ export class TideSurf {
         urlValidationOptions,
         config.timeout,
         host,
-        port
+        port,
+        ownershipToken,
+        orphanToken
       );
     } catch (err) {
       const cleanupErrors: unknown[] = [];
@@ -332,21 +388,41 @@ export class TideSurf {
           new ChromeLaunchError("Owned Chrome did not stop during setup rollback")
         );
       }
-      // Drop ownership only after termination is confirmed. If rollback could
-      // not stop Chrome, retain both the endpoint claim and orphan record so
-      // the live owned process is not forgotten and can be reaped later.
+      // Drop endpoint ownership only after process death. A failed rollback
+      // keeps its token-bound claim but invalidates the cached verification.
       if (exited) {
-        if (typeof proc.pid === "number") {
-          unregisterOrphanedBrowser(process.pid, proc.pid);
-        }
-        releaseOwnedBrowserEndpoint(host, port);
+        releaseOwnedBrowserEndpoint(host, port, ownershipToken);
+      } else {
+        noteOwnedBrowserDisconnected(host, port, ownershipToken);
       }
+
+      let profileRemoved = !ownsTempDir;
       if (ownsTempDir && exited) {
         try {
           await rm(userDataDir, { recursive: true, force: true });
+          profileRemoved = true;
         } catch (error) {
           cleanupErrors.push(error);
         }
+      }
+      let orphanRemoved = false;
+      if (exited && profileRemoved && typeof proc.pid === "number") {
+        orphanRemoved = unregisterOrphanedBrowser(
+          process.pid,
+          proc.pid,
+          orphanToken
+        );
+      }
+      if (!exited || !profileRemoved || !orphanRemoved) {
+        scheduleOwnedBrowserCleanup({
+          process: proc,
+          userDataDir,
+          ownsTempDir,
+          orphanToken,
+          host,
+          port,
+          ownershipToken,
+        });
       }
       if (cleanupErrors.length > 0) {
         throw new ChromeLaunchError(
@@ -712,89 +788,126 @@ export class TideSurf {
   }
 
   /** Disconnect pages, stop owned Chrome, and remove its temporary profile. */
-  async close(): Promise<void> {
-    this.closePromise ??= this.closeResources();
-    return this.closePromise;
+  async close(
+    deadline = Date.now() + DEFAULT_CLOSE_TIMEOUT_MS
+  ): Promise<void> {
+    if (this.closeComplete) return;
+    if (this.closePromise) return this.closePromise;
+    this.closeRequested = true;
+    const attempt = this.closeResources(deadline);
+    this.closePromise = attempt;
+    try {
+      await attempt;
+      this.closeComplete = true;
+    } finally {
+      // A rejected close retains every unfinished resource and can be retried.
+      if (this.closePromise === attempt) this.closePromise = null;
+    }
   }
 
-  private async closeResources(): Promise<void> {
-    if (this.exitHandler) {
-      process.removeListener("exit", this.exitHandler);
-      this.exitHandler = null;
-    }
-
-    if (this.pendingPageWork.size > 0) {
-      // Bound the drain: page.disconnect below tears down the CDP socket,
-      // which is also what unblocks wedged in-flight page work.
-      let drainTimer!: ReturnType<typeof setTimeout>;
-      await Promise.race([
-        Promise.allSettled([...this.pendingPageWork]),
-        new Promise<void>((resolve) => {
-          drainTimer = setTimeout(resolve, 10_000);
-        }),
-      ]);
-      clearTimeout(drainTimer);
-    }
-
-    const pages = new Set(this.pages.values());
-    pages.add(this.activePage);
+  private capturePagesForClose(): void {
+    if (this.pagesCapturedForClose) return;
+    this.pagesCapturedForClose = true;
+    for (const page of this.pages.values()) this.pagesToClose.add(page);
+    this.pagesToClose.add(this.activePage);
     this.pages.clear();
     this.activeTabId = null;
-    const pageResults = await Promise.allSettled(
-      [...pages].map((page) => page.close())
-    );
-    const disconnectFailure = pageResults.find(
-      (result): result is PromiseRejectedResult => result.status === "rejected"
-    );
+  }
 
+  private closePages(): Promise<PromiseSettledResult<void>[]> {
+    const attempts = [...this.pagesToClose].map(async (page) => {
+      await page.close();
+      this.pagesToClose.delete(page);
+    });
+    return Promise.allSettled(attempts);
+  }
+
+  private async closeOwnedResources(deadline: number): Promise<void> {
     const proc = this.chromeProcess;
-    const exited = proc ? await terminateChromeProcess(proc) : true;
-
-    if (proc && exited) {
-      this.chromeProcess = null;
-      // The browser is confirmed gone: now drop endpoint ownership and the
-      // orphan record. Failed termination deliberately retains both.
-      if (typeof proc.pid === "number") {
-        unregisterOrphanedBrowser(process.pid, proc.pid);
+    if (proc) {
+      const exited = await terminateChromeProcess(
+        proc,
+        remainingCloseTime(deadline)
+      );
+      if (!exited) {
+        throw new ChromeLaunchError(
+          "Failed to stop the TideSurf-owned Chrome process before the close deadline"
+        );
+      }
+      if (this.chromeProcess === proc) this.chromeProcess = null;
+      // Keep the process-exit fallback installed until death is confirmed.
+      if (this.exitHandler) {
+        process.removeListener("exit", this.exitHandler);
+        this.exitHandler = null;
       }
       const info = CONNECTION_INFO.get(this);
-      if (info) releaseOwnedBrowserEndpoint(info.host, info.port);
-    }
-
-    let profileCleanup: { error: unknown } | undefined;
-    if (this.ownsTempDir && exited) {
-      try {
-        await rm(this.userDataDir, { recursive: true, force: true });
-      } catch (error) {
-        profileCleanup = { error };
+      if (info && this.ownershipToken) {
+        releaseOwnedBrowserEndpoint(info.host, info.port, this.ownershipToken);
       }
     }
 
-    if (proc && !exited) {
-      throw new ChromeLaunchError(
-        "Failed to stop the TideSurf-owned Chrome process after SIGTERM and SIGKILL"
-      );
+    if (this.ownsTempDir && !this.profileCleanupComplete) {
+      try {
+        await settleCloseByDeadline(
+          rm(this.userDataDir, { recursive: true, force: true }),
+          deadline,
+          "Temporary Chrome profile cleanup"
+        );
+        this.profileCleanupComplete = true;
+      } catch (error) {
+        throw new ChromeLaunchError(
+          `Failed to remove temporary Chrome profile ${this.userDataDir}`,
+          { cause: error instanceof Error ? error : undefined }
+        );
+      }
     }
 
+    // The durable record is the retry mechanism for profile deletion and is
+    // removed only after process death and successful profile cleanup.
+    if (
+      !this.orphanCleanupComplete &&
+      this.ownedChromePid !== null &&
+      this.profileCleanupComplete
+    ) {
+      if (!unregisterOrphanedBrowser(
+        process.pid,
+        this.ownedChromePid,
+        this.orphanToken
+      )) {
+        throw new ChromeLaunchError("Failed to remove owned Chrome cleanup record");
+      }
+      this.orphanCleanupComplete = true;
+    }
+  }
+
+  private async closeResources(deadline: number): Promise<void> {
+    this.capturePagesForClose();
+
+    // Start CDP teardown and process termination together. They are the
+    // cancellation mechanisms for pending page work, not tasks to defer until
+    // after an independent drain timeout.
+    const pageResults = this.closePages();
+    const ownedResources = this.closeOwnedResources(deadline);
+    const pendingWork = Promise.allSettled([...this.pendingPageWork]);
+    const [results] = await settleCloseByDeadline(
+      Promise.all([pageResults, ownedResources, pendingWork]),
+      deadline,
+      "TideSurf close"
+    );
+    const disconnectFailure = results.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected"
+    );
     if (disconnectFailure) {
       throw new CDPConnectionError("Failed to disconnect a TideSurf page", {
-        cause:
-          disconnectFailure.reason instanceof Error
-            ? disconnectFailure.reason
-            : undefined,
+        cause: disconnectFailure.reason instanceof Error
+          ? disconnectFailure.reason
+          : undefined,
       });
-    }
-
-    if (profileCleanup) {
-      throw new ChromeLaunchError(
-        `Failed to remove temporary Chrome profile ${this.userDataDir}`,
-        { cause: profileCleanup.error }
-      );
     }
   }
 
   private assertOpen(): void {
-    if (this.closePromise) {
+    if (this.closeRequested) {
       throw new CDPConnectionError("TideSurf is closed");
     }
   }

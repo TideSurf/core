@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  processArgumentsForCleanup,
   reapOrphanedBrowsers,
   unregisterOrphanedBrowser,
 } from "../../src/cdp/launcher.js";
@@ -96,6 +97,14 @@ function cleanupFixture(fixture: OrphanFixture): void {
 }
 
 describe("orphaned browser reaper", () => {
+  it("fails closed immediately when the Windows CIM deadline is exhausted", async () => {
+    const started = Date.now();
+    await expect(
+      processArgumentsForCleanup(123_456_789, "win32", Date.now() - 1)
+    ).resolves.toBeUndefined();
+    expect(Date.now() - started).toBeLessThan(100);
+  });
+
   it("kills a browser whose parent died and removes its temp profile", async () => {
     if (process.platform === "win32") return;
     const fixture = await createOrphanFixture(12_345, { withProfileFlag: true });

@@ -11,6 +11,7 @@ import {
   resolveChromeExecutable,
   terminateChromeProcess,
   unregisterOrphanedBrowser,
+  verifyOwnedBrowserEndpoint,
 } from "../../src/cdp/launcher.js";
 import type { ChildProcess } from "node:child_process";
 import {
@@ -629,6 +630,7 @@ setInterval(() => {}, 1000);
 
     expect(isOwnedBrowserEndpoint("127.0.0.1", port)).toBe(false);
     let launched: Awaited<ReturnType<typeof launchChrome>> | undefined;
+    let surf: TideSurf | undefined;
     let originalKill: ChildProcess["kill"] | undefined;
     try {
       launched = await launchChrome({
@@ -651,7 +653,7 @@ setInterval(() => {}, 1000);
       const conn = {
         client: { close: async () => {} },
       } as unknown as CDPConnection;
-      const surf = Reflect.construct(TideSurf, [
+      surf = Reflect.construct(TideSurf, [
         launched.process,
         new SurfingPage(conn),
         {} as TabManager,
@@ -665,6 +667,8 @@ setInterval(() => {}, 1000);
         undefined,
         launched.host,
         launched.port,
+        launched.ownershipToken,
+        launched.orphanToken,
       ]) as TideSurf;
       originalKill = launched.process.kill;
       Reflect.set(launched.process, "kill", () => {
@@ -674,14 +678,199 @@ setInterval(() => {}, 1000);
       await expect(surf.close()).rejects.toBeInstanceOf(ChromeLaunchError);
       expect(isOwnedBrowserEndpoint(launched.host, launched.port)).toBe(true);
       expect(existsSync(orphanRecord)).toBe(true);
+      expect(Reflect.get(surf, "exitHandler")).not.toBeNull();
+
+      Reflect.set(launched.process, "kill", originalKill);
+      originalKill = undefined;
+      await expect(surf.close(Date.now() + 2_000)).resolves.toBeUndefined();
+      expect(Reflect.get(surf, "exitHandler")).toBeNull();
+      expect(isOwnedBrowserEndpoint(launched.host, launched.port)).toBe(false);
+      expect(existsSync(orphanRecord)).toBe(false);
     } finally {
       if (launched) {
         if (originalKill) Reflect.set(launched.process, "kill", originalKill);
         await terminateChromeProcess(launched.process, 500);
         if (typeof launched.process.pid === "number") {
-          unregisterOrphanedBrowser(process.pid, launched.process.pid);
+          unregisterOrphanedBrowser(
+            process.pid,
+            launched.process.pid,
+            launched.orphanToken
+          );
         }
-        releaseOwnedBrowserEndpoint(launched.host, launched.port);
+        releaseOwnedBrowserEndpoint(
+          launched.host,
+          launched.port,
+          launched.ownershipToken
+        );
+      }
+      await closeServer(server);
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 20_000);
+
+  it("retains the profile cleanup record until rm succeeds and retries", async () => {
+    if (process.platform === "win32") return;
+    const server = createDevToolsServer("/devtools/browser/profile-retry", [
+      { id: "profile-retry-page", type: "page" },
+    ]);
+    const port = await listen(server, "127.0.0.1");
+    const root = mkdtempSync(join(tmpdir(), "tidesurf-profile-retry-"));
+    const fakeChrome = join(root, "fake-chrome");
+    writeFileSync(
+      fakeChrome,
+      `#!/usr/bin/env node
+const { mkdirSync, writeFileSync } = require("node:fs");
+const { join } = require("node:path");
+const prefix = "--user-data-dir=";
+const argument = process.argv.find((value) => value.startsWith(prefix));
+if (!argument) process.exit(2);
+const profile = argument.slice(prefix.length);
+mkdirSync(profile, { recursive: true });
+writeFileSync(join(profile, "DevToolsActivePort"), ${JSON.stringify(
+        `${port}\n/devtools/browser/profile-retry\n`
+      )});
+setInterval(() => {}, 1000);
+`,
+      { mode: 0o755 }
+    );
+    chmodSync(fakeChrome, 0o755);
+
+    let launched: Awaited<ReturnType<typeof launchChrome>> | undefined;
+    try {
+      launched = await launchChrome({ chromePath: fakeChrome, timeout: 8_000 });
+      if (typeof launched.process.pid !== "number") {
+        throw new Error("fake Chrome has no pid");
+      }
+      const orphanRecord = join(
+        tmpdir(),
+        "tidesurf-orphans",
+        `${process.pid}-${launched.process.pid}.json`
+      );
+      const originalProfile = launched.userDataDir;
+      const conn = {
+        client: { close: async () => {} },
+      } as unknown as CDPConnection;
+      const surf = Reflect.construct(TideSurf, [
+        launched.process,
+        new SurfingPage(conn),
+        {} as TabManager,
+        originalProfile,
+        true,
+        false,
+        "profile-retry-page",
+        undefined,
+        [],
+        {},
+        undefined,
+        launched.host,
+        launched.port,
+        launched.ownershipToken,
+        launched.orphanToken,
+      ]) as TideSurf;
+
+      // Deterministic ENOTDIR failure without mocking the fs module.
+      Reflect.set(surf, "userDataDir", "/dev/null/tidesurf-profile");
+      await expect(surf.close(Date.now() + 2_000)).rejects.toThrow(
+        "Failed to remove temporary Chrome profile"
+      );
+      expect(Reflect.get(surf, "exitHandler")).toBeNull();
+      expect(existsSync(orphanRecord)).toBe(true);
+      expect(existsSync(originalProfile)).toBe(true);
+
+      Reflect.set(surf, "userDataDir", originalProfile);
+      await expect(surf.close(Date.now() + 2_000)).resolves.toBeUndefined();
+      expect(existsSync(originalProfile)).toBe(false);
+      expect(existsSync(orphanRecord)).toBe(false);
+    } finally {
+      if (launched) {
+        await terminateChromeProcess(launched.process, 500);
+        if (typeof launched.process.pid === "number") {
+          unregisterOrphanedBrowser(
+            process.pid,
+            launched.process.pid,
+            launched.orphanToken
+          );
+        }
+        releaseOwnedBrowserEndpoint(
+          launched.host,
+          launched.port,
+          launched.ownershipToken
+        );
+        rmSync(launched.userDataDir, { recursive: true, force: true });
+      }
+      await closeServer(server);
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 20_000);
+
+  it("does not let a late endpoint release clear a replacement claim", async () => {
+    if (process.platform === "win32") return;
+    const server = createDevToolsServer("/devtools/browser/generation", [
+      { id: "generation-page", type: "page" },
+    ]);
+    const port = await listen(server, "127.0.0.1");
+    const root = mkdtempSync(join(tmpdir(), "tidesurf-endpoint-generation-"));
+    const fakeChrome = join(root, "fake-chrome");
+    writeFileSync(
+      fakeChrome,
+      `#!/usr/bin/env node
+const { mkdirSync, writeFileSync } = require("node:fs");
+const { join } = require("node:path");
+const prefix = "--user-data-dir=";
+const argument = process.argv.find((value) => value.startsWith(prefix));
+if (!argument) process.exit(2);
+const profile = argument.slice(prefix.length);
+mkdirSync(profile, { recursive: true });
+writeFileSync(join(profile, "DevToolsActivePort"), ${JSON.stringify(
+        `${port}\n/devtools/browser/generation\n`
+      )});
+setInterval(() => {}, 1000);
+`,
+      { mode: 0o755 }
+    );
+    chmodSync(fakeChrome, 0o755);
+
+    let first: Awaited<ReturnType<typeof launchChrome>> | undefined;
+    let replacement: Awaited<ReturnType<typeof launchChrome>> | undefined;
+    try {
+      first = await launchChrome({
+        chromePath: fakeChrome,
+        userDataDir: join(root, "first-profile"),
+        timeout: 8_000,
+      });
+      replacement = await launchChrome({
+        chromePath: fakeChrome,
+        userDataDir: join(root, "replacement-profile"),
+        timeout: 8_000,
+      });
+      expect(replacement.ownershipToken).not.toBe(first.ownershipToken);
+      expect(
+        releaseOwnedBrowserEndpoint(
+          first.host,
+          first.port,
+          first.ownershipToken
+        )
+      ).toBe(false);
+      expect(isOwnedBrowserEndpoint(first.host, first.port)).toBe(true);
+      expect(await verifyOwnedBrowserEndpoint(first.host, first.port)).toBe(true);
+    } finally {
+      for (const launched of [first, replacement]) {
+        if (!launched) continue;
+        await terminateChromeProcess(launched.process, 500);
+        if (typeof launched.process.pid === "number") {
+          unregisterOrphanedBrowser(
+            process.pid,
+            launched.process.pid,
+            launched.orphanToken
+          );
+        }
+      }
+      if (replacement) {
+        releaseOwnedBrowserEndpoint(
+          replacement.host,
+          replacement.port,
+          replacement.ownershipToken
+        );
       }
       await closeServer(server);
       rmSync(root, { recursive: true, force: true });
