@@ -104,6 +104,14 @@ Clipboard permission changes run serially for each browser endpoint within one T
 
 A `SurfingPage` connection handles one TideSurf download operation at a time. Separate clients attached to the same target do not share this process-local lock. TideSurf waits for filename metadata before reporting a completed file. A disconnect stops the wait, and late setup replies cannot leave downloads enabled for the next call.
 
+## Plugins and skills
+
+Project-scoped plugins and skills (`.tidesurf/`, `.agents/` inside a repository) are untrusted repository content. TideSurf loads only user-scoped extensions by default; a repository's extensions load only with an explicit `TIDESURF_EXTENSIONS=all` opt-in. Review a repository's extensions before opting in — a plugin's `mcp.json` is a command launcher.
+
+Plugin MCP servers run with your user privileges but not your environment: TideSurf spawns them with a minimal allowlisted environment plus their declared `env` entries. They never start in read-only sessions, and never start when TideSurf is itself running as a plugin MCP child, so hosting cannot recurse. Each plugin's `PLUGIN_DATA` is owner-only and scope-isolated, so a project plugin cannot read a same-named user plugin's state.
+
+Enforcement is containment, not sandboxing: plugin paths must stay inside the plugin directory, remote plugin servers may not redirect the client, and proxied tools are bounded by count, size, and timeout limits. The Agent Plugins spec defines no signing or permissions, so trust decisions stay with you.
+
 ## Chromium sandbox
 
 TideSurf keeps the Chromium sandbox enabled under normal user accounts. When run as root, TideSurf automatically disables Chromium sandboxing and prints a warning. `TIDESURF_NO_SANDBOX=1` does the same explicitly. Avoid both modes for untrusted pages.

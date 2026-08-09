@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+## 0.7.2 (2026-08-10)
+
+Security and lifecycle hardening for Agent Plugins, Agent Skills, and daemon/browser ownership, driven by a full adversarial audit of the 0.7.x extension surface.
+
+### Security
+
+- Project-scoped extensions are no longer loaded by default. `TIDESURF_EXTENSIONS` now defaults to `user`, so plugins and skills shipped inside a cloned repository (`.tidesurf/plugins/`, `.agents/skills/`, `.tidesurf/skills/`) load only after an explicit `TIDESURF_EXTENSIONS=all` opt-in. An invalid value disables extensions with a diagnostic instead of loading everything. This closes a clone-and-run code-execution vector: a malicious repository could previously auto-start stdio MCP servers from `.tidesurf/plugins/` the moment any TideSurf command ran in it.
+- Plugin MCP servers no longer inherit the parent process environment. Stdio plugin servers receive an allowlisted minimal environment plus their declared `env` entries, so credentials and session tokens in the TideSurf process are no longer exposed to plugin-declared commands.
+- Plugin MCP servers are never started in `--read-only` mode or when TideSurf itself is running as a plugin MCP child (`TIDESURF_PLUGIN_MCP_CHILD=1`), closing a read-only policy bypass and the unbounded recursion where TideSurf's own shipped plugin re-spawned TideSurf MCP servers.
+- Plugin data directories are scope-isolated and private. User plugins resolve to `~/.tidesurf/plugin-data/user/<name>` and project plugins to `~/.tidesurf/plugin-data/project/<project-id>/<name>` (both created `0700`), so a project plugin can no longer read a same-named user plugin's state. Legacy `~/.tidesurf/plugin-data/<name>` directories migrate atomically into the user scope with symlink rejection and fail-closed diagnostics.
+- Remote `streamable-http` plugin servers can no longer redirect the MCP client: redirects are rejected, and configured headers cannot override MCP protocol or transport-controlled header names.
+- Page-controlled URLs can no longer forge element action markers through backslash parity, CR/LF/control characters, malformed or fragment-only URLs, or the page header: `escapeUrlMarkers` now handles existing backslashes and control characters, and `pageHeader` escapes URLs the same way as element links.
+- Skill activation is race- and escape-safe: `read_skill` re-reads and re-validates `SKILL.md` against discovery metadata and enforces plugin-root realpath containment at load time, so a swapped file or symlinked directory cannot combine stale metadata or escape the plugin.
+
+### Changed
+
+- `plugin.json` and `mcp.json` validation now enforces the closed Agent Plugins v1.0.0 schemas exactly (unknown fields rejected, realpath containment, single-token or `./`-relative commands), and `SKILL.md` frontmatter accepts the full supported YAML subset — flow mappings like `metadata: { author: org }`, block scalars with indentation indicators, and wider mapping indentation — while rejecting invalid skills instead of partially loading them.
+- Plugin MCP hosting is strictly bounded: one aggregate 10-second startup deadline across all servers (concurrency-limited), a capped pre-ready client message queue (128 messages / 1 MiB), paginated `tools/list` with per-cursor, per-tool, and aggregate byte limits, tool-schema depth/size limits, and retryable cleanup that retains failed removals instead of dropping them.
+- `tidesurf skills <name>` preserves the raw skill document byte-for-byte before appending the bundled-file listing.
+
+### Fixed
+
+- Daemon session state publication and cleanup are serialized under a generation-owned mutation lock, so a stale daemon can no longer overwrite or delete a replacement daemon's state in the check-then-rename window.
+- Stale-daemon recovery is fail-closed end to end: termination reports an explicit outcome, state/socket files are never removed while a recorded PID is live but unverifiable (including whitespace-containing runtime paths and Windows CIM timeouts), and shutdown uses a single deadline shorter than the SIGKILL escalation so browser cleanup cannot be killed mid-drain.
+- Browser ownership is generation-bound: endpoint claims carry an ownership token so a late `close()` cannot release a replacement browser on the same port, a failed launch rollback no longer leaves the port pre-verified for a foreign occupant, and failed closes are retryable with orphan records retained until Chrome actually exits and its temp profile is actually deleted. The Windows orphan reaper now verifies process identity with a bounded query instead of skipping all reaping.
+- Token-budget estimation matches the serializer for escaped URLs and weighted CJK content, closing adversarial overflow between estimated and emitted output.
+
 ## 0.7.1 (2026-08-09)
 
 ### Fixed

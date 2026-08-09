@@ -19,7 +19,7 @@ Each immediate subdirectory of a plugins root with a `plugin.json` is one plugin
 Environment overrides:
 
 - `TIDESURF_PLUGINS_DIR` and `TIDESURF_SKILLS_DIR` replace the default root lists (multiple paths separated by the OS path delimiter).
-- `TIDESURF_EXTENSIONS=user` skips project-scoped roots; `TIDESURF_EXTENSIONS=off` disables extension loading entirely. The default, `all`, loads both scopes. Project scope wins on name collisions; later duplicates are reported as diagnostics and skipped.
+- `TIDESURF_EXTENSIONS=all` loads both project and user scopes; `user` loads only user-scoped roots; `off` disables extension loading entirely. The default is `user`: project-scoped extensions are untrusted repository content and require the explicit `all` opt-in. An unrecognized value disables extensions with a diagnostic. Project scope wins on name collisions when loaded; later duplicates are reported as diagnostics and skipped.
 
 Discovery re-runs on every call, so installing a skill takes effect without restarting the session.
 
@@ -49,10 +49,12 @@ tidesurf read_skill <name> # same document through the session transport
 
 `tidesurf mcp` publishes the skill catalog in its server instructions, so an MCP client knows what is installed before calling any tool. When an installed plugin declares MCP servers in `mcp.json`, the adapter connects to each one and re-registers its tools as `<plugin>__<tool>`:
 
-- `stdio` servers are spawned with `PLUGIN_ROOT` and `PLUGIN_DATA` environment variables. `PLUGIN_DATA` points at `~/.tidesurf/plugin-data/<plugin>`, a persistent writable directory TideSurf creates per plugin.
+- `stdio` servers are spawned with `PLUGIN_ROOT` and `PLUGIN_DATA` environment variables over a minimal allowlisted environment — plugin servers do not inherit TideSurf's process environment. `PLUGIN_DATA` is a persistent writable directory TideSurf creates per plugin with owner-only permissions: `~/.tidesurf/plugin-data/user/<plugin>` for user plugins and `~/.tidesurf/plugin-data/project/<project-id>/<plugin>` for project plugins, so a project plugin can never share a same-named user plugin's state. Data from the legacy `~/.tidesurf/plugin-data/<plugin>` layout migrates into the user scope automatically.
 - `streamable-http` servers are connected remotely. Legacy `sse` entries are skipped with a diagnostic, per the spec's deprecation.
 - Placeholders `${PLUGIN_ROOT}` and `${PLUGIN_DATA}` in `args`, `env` values, and `cwd` are expanded once, and every plugin-supplied path must stay inside the plugin directory.
 - A server that fails to start or a tool that fails to convert is skipped with a stderr diagnostic; TideSurf's own tools are never affected.
+- Plugin servers never start in `--read-only` mode (their tools would bypass the read-only policy), and never start when TideSurf itself is running as a plugin's MCP child, which prevents recursive self-hosting. Startup is bounded by one aggregate 10-second deadline across all servers, and remote tools are proxied with count, byte, and timeout limits.
+- `streamable-http` redirects are rejected, and configured headers cannot override MCP protocol header names.
 
 ## Install TideSurf as your agent tool
 
@@ -101,4 +103,4 @@ my-plugin/
 
 ## Security model
 
-The Agent Plugins v1.0.0 spec defines no signing, permissions, or sandboxing, and TideSurf adds none: plugin MCP servers run with your user privileges, like any MCP server you configure yourself. Treat project-scoped plugins and skills as untrusted repository content: review them, or run with `TIDESURF_EXTENSIONS=user` to load only your own extensions. TideSurf enforces the spec's path-containment rules (plugin paths may not escape the plugin directory) and never writes outside `PLUGIN_DATA` on a plugin's behalf.
+The Agent Plugins v1.0.0 spec defines no signing, permissions, or sandboxing: plugin MCP servers run with your user privileges, like any MCP server you configure yourself. Project-scoped plugins and skills are untrusted repository content, which is why TideSurf loads only your user-scoped extensions by default — opt a repository in with `TIDESURF_EXTENSIONS=all` only after reviewing what it ships. TideSurf enforces the spec's path-containment rules (plugin paths may not escape the plugin directory), spawns plugin servers with a minimal environment instead of your full one, isolates `PLUGIN_DATA` per scope, and never writes outside it on a plugin's behalf.
