@@ -2,42 +2,116 @@ import { describe, expect, it } from "bun:test";
 import { parseFrontmatter } from "../../src/extensions/frontmatter.js";
 
 describe("parseFrontmatter", () => {
-  it("parses plain and quoted scalars, keeping booleans and numbers as strings", () => {
+  it("parses quoted strings and YAML 1.2 plain scalar types", () => {
     const parsed = parseFrontmatter(
       [
         "---",
         "name: my-skill",
         "single: 'single quoted'",
         'double: "double quoted"',
-        "flag: true",
-        "count: 42",
-        "nil: null",
+        'quoted-flag: "true"',
+        "enabled: true",
+        "disabled: FALSE",
+        "nothing: null",
+        "tilde: ~",
+        "integer: -42",
+        "float: 3.5",
+        "exponent: 2e3",
+        "hex: 0x10",
+        "word: yes",
         "---",
         "# Body",
         "",
       ].join("\n")
     );
+
     expect(parsed).not.toBeNull();
     expect(parsed?.data).toEqual({
       name: "my-skill",
       single: "single quoted",
       double: "double quoted",
-      flag: "true",
-      count: "42",
-      nil: "null",
+      "quoted-flag": "true",
+      enabled: true,
+      disabled: false,
+      nothing: null,
+      tilde: null,
+      integer: -42,
+      float: 3.5,
+      exponent: 2000,
+      hex: 16,
+      word: "yes",
     });
     expect(parsed?.body).toBe("# Body\n");
   });
 
-  it("parses a nested map with exactly 2-space indentation", () => {
+  it("parses one nested string map with null-prototype objects", () => {
     const parsed = parseFrontmatter(
       "---\nname: x\ndescription: d\nmetadata:\n  author: team\n  version: \"1.0\"\n---\nbody"
     );
+
+    expect(Object.getPrototypeOf(parsed?.data)).toBeNull();
+    expect(Object.getPrototypeOf(parsed?.data.metadata)).toBeNull();
     expect(parsed?.data.metadata).toEqual({ author: "team", version: "1.0" });
     expect(parsed?.body).toBe("body");
   });
 
-  it("ignores comment lines and blank lines, and strips inline comments on plain scalars", () => {
+  it("keeps prototype-like keys as own properties", () => {
+    const parsed = parseFrontmatter(
+      "---\n__proto__: top\nconstructor: own\nmetadata:\n  __proto__: nested\n---\n"
+    );
+    const data = parsed?.data as Record<string, unknown>;
+    const metadata = data.metadata as Record<string, unknown>;
+
+    expect(Object.hasOwn(data, "__proto__")).toBe(true);
+    expect(data.__proto__).toBe("top");
+    expect(Object.hasOwn(data, "constructor")).toBe(true);
+    expect(data.constructor).toBe("own");
+    expect(Object.hasOwn(metadata, "__proto__")).toBe(true);
+    expect(metadata.__proto__).toBe("nested");
+  });
+
+  it("parses literal and folded blocks with chomping indicators", () => {
+    const parsed = parseFrontmatter(
+      [
+        "---",
+        "empty: |",
+        "blank: |",
+        "",
+        "literal: |",
+        "  first",
+        "  second",
+        "strip: |-",
+        "  first",
+        "  second",
+        "folded: >-",
+        "  first",
+        "  second",
+        "",
+        "  next paragraph",
+        "keep: |+",
+        "  final",
+        "",
+        "---",
+        "",
+      ].join("\n")
+    );
+
+    expect(parsed?.data.empty).toBe("");
+    expect(parsed?.data.blank).toBe("");
+    expect(parsed?.data.literal).toBe("first\nsecond\n");
+    expect(parsed?.data.strip).toBe("first\nsecond");
+    expect(parsed?.data.folded).toBe("first second\nnext paragraph");
+    expect(parsed?.data.keep).toBe("final\n\n");
+  });
+
+  it("allows block strings as nested map values", () => {
+    const parsed = parseFrontmatter(
+      "---\nmetadata:\n  note: >-\n    line one\n    line two\n---\n"
+    );
+    expect(parsed?.data.metadata).toEqual({ note: "line one line two" });
+  });
+
+  it("ignores comments and blank lines and only strips separated inline comments", () => {
     const parsed = parseFrontmatter(
       [
         "---",
@@ -46,28 +120,31 @@ describe("parseFrontmatter", () => {
         "name: foo # trailing comment",
         "sticky: bar#not-a-comment",
         'quoted: "keep # this"',
-        "  # comment inside a map",
         "metadata:",
-        "  a: 1 # strip me",
+        "  # nested comment",
+        "  value: \"1\" # strip me",
         "---",
         "",
       ].join("\n")
     );
+
     expect(parsed?.data).toEqual({
       name: "foo",
       sticky: "bar#not-a-comment",
       quoted: "keep # this",
-      metadata: { a: "1" },
+      metadata: { value: "1" },
     });
   });
 
-  it("handles CRLF line endings", () => {
-    const parsed = parseFrontmatter("---\r\nname: x\r\nmetadata:\r\n  a: b\r\n---\r\nbody line\r\n");
+  it("handles CRLF delimiters while preserving body line endings", () => {
+    const parsed = parseFrontmatter(
+      "---\r\nname: x\r\nmetadata:\r\n  a: b\r\n---\r\nbody line\r\n"
+    );
     expect(parsed?.data).toEqual({ name: "x", metadata: { a: "b" } });
     expect(parsed?.body).toBe("body line\r\n");
   });
 
-  it("returns null when the document does not start with a frontmatter block", () => {
+  it("returns null without an opening frontmatter delimiter", () => {
     expect(parseFrontmatter("# Just markdown\n---\nname: x\n---\n")).toBeNull();
     expect(parseFrontmatter("name: x\n")).toBeNull();
     expect(parseFrontmatter("")).toBeNull();
@@ -80,56 +157,68 @@ describe("parseFrontmatter", () => {
     expect(() => parseFrontmatter("---")).toThrow(/not closed/);
   });
 
-  it("throws on tab indentation", () => {
-    expect(() => parseFrontmatter("---\n\tname: x\n---\n")).toThrow(/tab/);
-    expect(() => parseFrontmatter("---\nmetadata:\n \ta: b\n---\n")).toThrow(/tab/);
+  it("rejects duplicate top-level and nested keys", () => {
+    expect(() => parseFrontmatter("---\nname: x\nname: y\n---\n")).toThrow(/duplicate key "name"/);
+    expect(() => parseFrontmatter('---\nname: x\n"name": y\n---\n')).toThrow(
+      /duplicate key "name"/
+    );
+    expect(() =>
+      parseFrontmatter("---\nmetadata:\n  owner: a\n  owner: b\n---\n")
+    ).toThrow(/duplicate key "owner"/);
   });
 
-  it("throws on indented content under a scalar key", () => {
-    expect(() => parseFrontmatter("---\nname: x\n  bad: y\n---\n")).toThrow(/indent/);
+  it("rejects aliases, anchors, tags, and tabs", () => {
+    expect(() => parseFrontmatter("---\na: &anchor value\n---\n")).toThrow(/aliases.*tags/);
+    expect(() => parseFrontmatter("---\na: *anchor\n---\n")).toThrow(/aliases.*tags/);
+    expect(() => parseFrontmatter("---\na: !custom value\n---\n")).toThrow(/aliases.*tags/);
+    expect(() => parseFrontmatter("---\n\tname: x\n---\n")).toThrow(/tabs/);
+    expect(() => parseFrontmatter('---\nname: "x\ty"\n---\n')).toThrow(/tabs/);
+    expect(() => parseFrontmatter("---\na: |\n  x\ty\n---\n")).toThrow(/tabs/);
   });
 
-  it("throws on YAML outside the supported subset", () => {
-    expect(() => parseFrontmatter("---\n- item\n---\n")).toThrow(/unsupported YAML/);
-    expect(() => parseFrontmatter("---\nmetadata:\n    deep: x\n---\n")).toThrow(/2-space/);
-    expect(() => parseFrontmatter("---\nkey:no-space\n---\n")).toThrow(/unsupported YAML/);
+  it("rejects sequences, flow collections, and deeper structures", () => {
+    expect(() => parseFrontmatter("---\n- item\n---\n")).toThrow(/only mappings/);
+    expect(() => parseFrontmatter("---\na: [one, two]\n---\n")).toThrow(/flow collections/);
+    expect(() => parseFrontmatter("---\na: { nested: value }\n---\n")).toThrow(/flow collections/);
+    expect(() =>
+      parseFrontmatter("---\nmetadata:\n  nested:\n    deep: x\n---\n")
+    ).toThrow(/deep structure/);
+    expect(() => parseFrontmatter("---\nmetadata:\n  - item\n---\n")).toThrow(/only mappings/);
+    expect(() => parseFrontmatter("---\na: |2\n  text\n---\n")).toThrow(/chomping indicators/);
+  });
+
+  it("rejects malformed mappings and scalar indentation", () => {
+    expect(() => parseFrontmatter("---\nkey:no-space\n---\n")).toThrow(/only mappings/);
     expect(() => parseFrontmatter("---\n: empty-key\n---\n")).toThrow(/empty key/);
+    expect(() => parseFrontmatter("---\nname: x\n  bad: y\n---\n")).toThrow(/indentation/);
   });
 
   it("decodes double-quoted escapes and single-quoted doubled quotes", () => {
     const parsed = parseFrontmatter(
-      '---\na: "line\\nbreak\\t\\"q\\""\nb: \'it\'\'s\'\n---\n'
+      '---\na: "line\\nbreak\\t\\"q\\""\nb: \'it\'\'s\'\nc: "\\u263a"\n---\n'
     );
     expect(parsed?.data.a).toBe('line\nbreak\t"q"');
     expect(parsed?.data.b).toBe("it's");
+    expect(parsed?.data.c).toBe("☺");
   });
 
-  it("rejects unterminated and malformed quoted scalars", () => {
+  it("rejects unterminated, malformed, and invalid Unicode quoted scalars", () => {
     expect(() => parseFrontmatter('---\na: "unterminated\n---\n')).toThrow(/unterminated/);
     expect(() => parseFrontmatter("---\na: 'unterminated\n---\n")).toThrow(/unterminated/);
     expect(() => parseFrontmatter('---\na: "bad" trailing\n---\n')).toThrow(
       /after quoted scalar/
     );
-  });
-
-  it("treats an empty value with no nested entries as an empty string", () => {
-    const parsed = parseFrontmatter("---\nname: x\ndescription:\n---\n");
-    expect(parsed?.data.description).toBe("");
-  });
-
-  it("parses block sequences into string arrays", () => {
-    const parsed = parseFrontmatter(
-      "---\nname: x\nallowed-tools:\n  - Bash(git:*)\n  - Read\n---\n"
+    expect(() => parseFrontmatter('---\na: "bad"#comment\n---\n')).toThrow(
+      /after quoted scalar/
     );
-    expect(parsed?.data["allowed-tools"]).toEqual(["Bash(git:*)", "Read"]);
+    expect(() => parseFrontmatter('---\na: "\\q"\n---\n')).toThrow(/unsupported escape/);
+    expect(() => parseFrontmatter('---\na: "\\U00110000"\n---\n')).toThrow(
+      /Unicode code point/
+    );
   });
 
-  it("rejects mixing sequence items and map entries in one block", () => {
-    expect(() =>
-      parseFrontmatter("---\nmetadata:\n  a: b\n  - item\n---\n")
-    ).toThrow(/mix/);
-    expect(() =>
-      parseFrontmatter("---\nmetadata:\n  - item\n  a: b\n---\n")
-    ).toThrow(/mix/);
+  it("parses an empty value as null", () => {
+    const parsed = parseFrontmatter("---\nname: x\ndescription:\n---\n");
+    expect(parsed?.data.description).toBeNull();
   });
 });
