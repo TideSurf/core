@@ -498,7 +498,7 @@ describe("session recovery", () => {
     } finally {
       await stop(running);
     }
-  });
+  }, 20_000);
 
   it("shuts down on SIGTERM and removes session state", async () => {
     if (process.platform === "win32") return;

@@ -277,26 +277,37 @@ export function isProcessRunning(pid: number): boolean {
   }
 }
 
-function processCommandLine(pid: number): string | undefined {
+function queryWindowsCommandLine(pid: number): string | undefined {
   try {
-    if (process.platform === "win32") {
-      return execFileSync(
-        "powershell",
-        [
-          "-NoProfile",
-          "-Command",
-          `(Get-CimInstance Win32_Process -Filter 'ProcessId=${pid}').CommandLine`,
-        ],
-        { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 2_000 }
-      );
-    }
-    return execFileSync("ps", ["-p", String(pid), "-o", "command="], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    });
+    return execFileSync(
+      "powershell",
+      [
+        "-NoProfile",
+        "-Command",
+        `(Get-CimInstance Win32_Process -Filter 'ProcessId=${pid}').CommandLine`,
+      ],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 5_000 }
+    );
   } catch {
     return undefined;
   }
+}
+
+function processCommandLine(pid: number): string | undefined {
+  if (process.platform !== "win32") {
+    try {
+      return execFileSync("ps", ["-p", String(pid), "-o", "command="], {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+    } catch {
+      return undefined;
+    }
+  }
+  // A loaded Windows host can take seconds to answer a CIM query. Timing
+  // out must fail closed (never signal), but it must not permanently blind
+  // stale-daemon recovery, so allow one retry before giving up.
+  return queryWindowsCommandLine(pid) ?? queryWindowsCommandLine(pid);
 }
 
 /**
