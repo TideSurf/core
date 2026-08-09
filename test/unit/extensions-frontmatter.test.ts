@@ -44,15 +44,37 @@ describe("parseFrontmatter", () => {
     expect(parsed?.body).toBe("# Body\n");
   });
 
-  it("parses one nested string map with null-prototype objects", () => {
+  it("parses one nested string map with any consistent valid indentation", () => {
     const parsed = parseFrontmatter(
-      "---\nname: x\ndescription: d\nmetadata:\n  author: team\n  version: \"1.0\"\n---\nbody"
+      "---\nname: x\ndescription: d\nmetadata:\n    author: team\n    version: \"1.0\"\n---\nbody"
     );
 
     expect(Object.getPrototypeOf(parsed?.data)).toBeNull();
     expect(Object.getPrototypeOf(parsed?.data.metadata)).toBeNull();
     expect(parsed?.data.metadata).toEqual({ author: "team", version: "1.0" });
     expect(parsed?.body).toBe("body");
+  });
+
+  it("parses simple flow mappings without enabling nested flow structures", () => {
+    const parsed = parseFrontmatter(
+      [
+        "---",
+        'metadata: { author: example-org, version: "1.0", note: \'one, two: ok\' }',
+        "empty: {}",
+        'trailing: { owner: "team", } # allowed trailing comma',
+        "---",
+        "",
+      ].join("\n")
+    );
+
+    expect(Object.getPrototypeOf(parsed?.data.metadata)).toBeNull();
+    expect(parsed?.data.metadata).toEqual({
+      author: "example-org",
+      version: "1.0",
+      note: "one, two: ok",
+    });
+    expect(parsed?.data.empty).toEqual({});
+    expect(parsed?.data.trailing).toEqual({ owner: "team" });
   });
 
   it("keeps prototype-like keys as own properties", () => {
@@ -109,6 +131,33 @@ describe("parseFrontmatter", () => {
       "---\nmetadata:\n  note: >-\n    line one\n    line two\n---\n"
     );
     expect(parsed?.data.metadata).toEqual({ note: "line one line two" });
+  });
+
+  it("honors explicit block indentation indicators in either YAML order", () => {
+    const parsed = parseFrontmatter(
+      [
+        "---",
+        "literal: |2",
+        "  first",
+        "    indented",
+        "folded: >2-",
+        "  line one",
+        "  line two",
+        "reverse: |-2",
+        "  final",
+        "metadata:",
+        "    note: >-2",
+        "      nested one",
+        "      nested two",
+        "---",
+        "",
+      ].join("\n")
+    );
+
+    expect(parsed?.data.literal).toBe("first\n  indented\n");
+    expect(parsed?.data.folded).toBe("line one line two");
+    expect(parsed?.data.reverse).toBe("final");
+    expect(parsed?.data.metadata).toEqual({ note: "nested one nested two" });
   });
 
   it("ignores comments and blank lines and only strips separated inline comments", () => {
@@ -176,15 +225,30 @@ describe("parseFrontmatter", () => {
     expect(() => parseFrontmatter("---\na: |\n  x\ty\n---\n")).toThrow(/tabs/);
   });
 
-  it("rejects sequences, flow collections, and deeper structures", () => {
+  it("rejects sequences, nested flow collections, and deeper structures", () => {
     expect(() => parseFrontmatter("---\n- item\n---\n")).toThrow(/only mappings/);
-    expect(() => parseFrontmatter("---\na: [one, two]\n---\n")).toThrow(/flow collections/);
-    expect(() => parseFrontmatter("---\na: { nested: value }\n---\n")).toThrow(/flow collections/);
+    expect(() => parseFrontmatter("---\na: [one, two]\n---\n")).toThrow(/flow sequences/);
     expect(() =>
-      parseFrontmatter("---\nmetadata:\n  nested:\n    deep: x\n---\n")
+      parseFrontmatter("---\na: { nested: { deep: value } }\n---\n")
+    ).toThrow(/nested flow collections/);
+    expect(() =>
+      parseFrontmatter("---\nmetadata:\n    nested:\n        deep: x\n---\n")
     ).toThrow(/deep structure/);
-    expect(() => parseFrontmatter("---\nmetadata:\n  - item\n---\n")).toThrow(/only mappings/);
-    expect(() => parseFrontmatter("---\na: |2\n  text\n---\n")).toThrow(/chomping indicators/);
+    expect(() => parseFrontmatter("---\nmetadata:\n    - item\n---\n")).toThrow(/only mappings/);
+  });
+
+  it("rejects malformed flow mappings, duplicate flow keys, and invalid block indicators", () => {
+    expect(() => parseFrontmatter("---\na: { owner: one, owner: two }\n---\n")).toThrow(
+      /duplicate key "owner"/
+    );
+    expect(() => parseFrontmatter("---\na: { owner }\n---\n")).toThrow(/no key separator/);
+    expect(() => parseFrontmatter("---\na: { owner: [one] }\n---\n")).toThrow(/flow/);
+    expect(() => parseFrontmatter("---\na: { owner: *alias }\n---\n")).toThrow(/aliases/);
+    for (const header of ["|0", "|22", "|2+-", ">++"]) {
+      expect(() => parseFrontmatter(`---\na: ${header}\n  text\n---\n`)).toThrow(
+        /invalid block scalar header/
+      );
+    }
   });
 
   it("rejects malformed mappings and scalar indentation", () => {

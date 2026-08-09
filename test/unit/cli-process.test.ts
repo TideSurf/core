@@ -1,6 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import { spawn, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   SESSION_PROTOCOL_VERSION,
@@ -29,11 +31,19 @@ function cliWithInput(input: string, ...args: string[]) {
   return runCli(args, new TextEncoder().encode(input));
 }
 
-function runCli(args: string[], stdin?: Uint8Array) {
+function cliWithEnv(env: Record<string, string>, ...args: string[]) {
+  return runCli(args, undefined, { ...process.env, ...env });
+}
+
+function runCli(
+  args: string[],
+  stdin?: Uint8Array,
+  env: Record<string, string | undefined> = process.env
+) {
   const result = Bun.spawnSync({
     cmd: [process.execPath, join(root, "src", "cli.ts"), ...args],
     cwd: root,
-    env: process.env,
+    env,
     stdin,
     stdout: "pipe",
     stderr: "pipe",
@@ -93,6 +103,40 @@ describe("CLI process behavior", () => {
     const output = JSON.parse(json.stdout) as { success: boolean; data: unknown[] };
     expect(output.success).toBe(true);
     expect(output.data).toHaveLength(20);
+  });
+
+  it("preserves plain skill document text exactly before optional bundled files", () => {
+    const temporary = mkdtempSync(join(tmpdir(), "tidesurf-cli-skill-"));
+    try {
+      const skills = join(temporary, "skills");
+      const directory = join(skills, "exact-output");
+      mkdirSync(directory, { recursive: true });
+      const raw = [
+        "---\r",
+        "name: exact-output\r",
+        "description: Exact output\r",
+        "---\r",
+        "# Body with café   ",
+      ].join("\n");
+      writeFileSync(join(directory, "SKILL.md"), raw);
+      const env = {
+        TIDESURF_EXTENSIONS: "user",
+        TIDESURF_SKILLS_DIR: skills,
+        TIDESURF_PLUGINS_DIR: join(temporary, "plugins"),
+      };
+
+      const documentOnly = cliWithEnv(env, "skills", "exact-output");
+      expect(documentOnly.code).toBe(0);
+      expect(documentOnly.stderr).toBe("");
+      expect(documentOnly.stdout).toBe(raw);
+
+      writeFileSync(join(directory, "notes.txt"), "notes\n");
+      const withFiles = cliWithEnv(env, "skills", "exact-output");
+      expect(withFiles.code).toBe(0);
+      expect(withFiles.stdout).toBe(`${raw}\nBundled files:\n  notes.txt\n`);
+    } finally {
+      rmSync(temporary, { recursive: true, force: true });
+    }
   });
 
   it("uses exit 2 for an unknown command", () => {

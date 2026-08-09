@@ -88,6 +88,22 @@ describe("loadSkillDirectory", () => {
     expect(skill?.files).toEqual(["notes.md", "scripts/run.sh"]);
   });
 
+  it("accepts common flow metadata and explicit description indentation", () => {
+    const dir = join(makeTemp(), "yaml-conformant");
+    writeSkill(dir, [
+      "name: yaml-conformant",
+      "description: >2-",
+      "  Uses common",
+      "  Agent Skills YAML",
+      'metadata: { author: example-org, version: "1.0" }',
+    ]);
+
+    const { skill, diagnostics } = loadSkillDirectory(dir, "project");
+    expect(diagnostics).toEqual([]);
+    expect(skill?.description).toBe("Uses common Agent Skills YAML");
+    expect(skill?.metadata).toEqual({ author: "example-org", version: "1.0" });
+  });
+
   it("sets the plugin field", () => {
     const dir = join(makeTemp(), "plug-skill");
     writeSkill(dir, ["name: plug-skill", "description: From a plugin"]);
@@ -247,6 +263,41 @@ describe("loadSkillDirectory", () => {
 });
 
 describe("loadSkillDocument", () => {
+  it("revalidates every discovered metadata field before returning the activation document", () => {
+    const dir = join(makeTemp(), "stable-metadata");
+    const original = [
+      "name: stable-metadata",
+      "description: Original description",
+      "license: Apache-2.0",
+      "compatibility: node >= 18",
+      "allowed-tools: Bash Read",
+      "metadata:",
+      "  author: team",
+      '  version: "1.0"',
+    ];
+    writeSkill(dir, original, "original body\n");
+    const { skill } = loadSkillDirectory(dir, "project");
+    expect(skill).toBeDefined();
+
+    const changedDocuments = [
+      original.map((line) => line === "description: Original description" ? "description: Changed" : line),
+      original.map((line) => line === "license: Apache-2.0" ? "license: MIT" : line),
+      original.map((line) => line === "compatibility: node >= 18" ? "compatibility: bun" : line),
+      original.map((line) => line === "allowed-tools: Bash Read" ? "allowed-tools: Read" : line),
+      original.map((line) => line === "  author: team" ? "  author: another-team" : line),
+      original.filter((line) => line !== '  version: "1.0"'),
+    ];
+    for (const lines of changedDocuments) {
+      writeSkill(dir, lines, "replacement body\n");
+      expect(() => loadSkillDocument(skill!)).toThrow(/metadata no longer matches/);
+    }
+
+    const currentRaw = writeSkill(dir, original, "replacement body\n");
+    const document = loadSkillDocument(skill!);
+    expect(document.raw).toBe(currentRaw);
+    expect(document.body).toBe("replacement body\n");
+  });
+
   it("returns the exact raw document, body, and sorted resource files", () => {
     const root = makeTemp();
     const dir = join(root, "documented");

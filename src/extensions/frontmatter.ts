@@ -13,6 +13,7 @@ interface ParsedQuoted {
 interface BlockHeader {
   readonly style: "literal" | "folded";
   readonly chomping: "clip" | "strip" | "keep";
+  readonly indentation?: number;
 }
 
 interface ParsedBlockScalar {
@@ -130,6 +131,126 @@ function parseQuoted(text: string, lineNumber: number): string {
   return parsed.value;
 }
 
+function parseFlowMapping(text: string, lineNumber: number): MutableMap {
+  let quote: "single" | "double" | undefined;
+  let closing = -1;
+  for (let index = 1; index < text.length; index += 1) {
+    const char = text[index];
+    if (quote === "double") {
+      if (char === "\\") index += 1;
+      else if (char === '"') quote = undefined;
+      continue;
+    }
+    if (quote === "single") {
+      if (char === "'" && text[index + 1] === "'") index += 1;
+      else if (char === "'") quote = undefined;
+      continue;
+    }
+    if (char === '"') {
+      quote = "double";
+      continue;
+    }
+    if (char === "'") {
+      quote = "single";
+      continue;
+    }
+    if (char === "{" || char === "[") {
+      throw new Error(
+        `frontmatter line ${lineNumber}: nested flow collections are not supported`
+      );
+    }
+    if (char === "]") {
+      throw new Error(`frontmatter line ${lineNumber}: flow sequences are not supported`);
+    }
+    if (char === "#" && text[index - 1] === " ") {
+      throw new Error(
+        `frontmatter line ${lineNumber}: comments inside flow mappings are not supported`
+      );
+    }
+    if (char === "}") {
+      closing = index;
+      break;
+    }
+  }
+  if (quote !== undefined) {
+    throw new Error(`frontmatter line ${lineNumber}: unterminated quoted flow scalar`);
+  }
+  if (closing === -1) {
+    throw new Error(`frontmatter line ${lineNumber}: unterminated flow mapping`);
+  }
+  const rest = text.slice(closing + 1);
+  if (rest.trim() !== "" && !/^ +#/.test(rest)) {
+    throw new Error(`frontmatter line ${lineNumber}: unexpected content after flow mapping`);
+  }
+
+  const content = text.slice(1, closing);
+  const entries: string[] = [];
+  quote = undefined;
+  let start = 0;
+  for (let index = 0; index < content.length; index += 1) {
+    const char = content[index];
+    if (quote === "double") {
+      if (char === "\\") index += 1;
+      else if (char === '"') quote = undefined;
+      continue;
+    }
+    if (quote === "single") {
+      if (char === "'" && content[index + 1] === "'") index += 1;
+      else if (char === "'") quote = undefined;
+      continue;
+    }
+    if (char === '"') quote = "double";
+    else if (char === "'") quote = "single";
+    else if (char === ",") {
+      entries.push(content.slice(start, index));
+      start = index + 1;
+    }
+  }
+  entries.push(content.slice(start));
+
+  const value = nullMap();
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index].trim();
+    if (entry === "") {
+      const emptyMapping = entries.length === 1 && content.trim() === "";
+      const trailingComma = index === entries.length - 1 && content.trimEnd().endsWith(",");
+      if (emptyMapping || trailingComma) continue;
+      throw new Error(`frontmatter line ${lineNumber}: empty flow mapping entry`);
+    }
+
+    let entryQuote: "single" | "double" | undefined;
+    let colon = -1;
+    for (let cursor = 0; cursor < entry.length; cursor += 1) {
+      const char = entry[cursor];
+      if (entryQuote === "double") {
+        if (char === "\\") cursor += 1;
+        else if (char === '"') entryQuote = undefined;
+        continue;
+      }
+      if (entryQuote === "single") {
+        if (char === "'" && entry[cursor + 1] === "'") cursor += 1;
+        else if (char === "'") entryQuote = undefined;
+        continue;
+      }
+      if (char === '"') entryQuote = "double";
+      else if (char === "'") entryQuote = "single";
+      else if (char === ":") {
+        colon = cursor;
+        break;
+      }
+    }
+    if (colon === -1) {
+      throw new Error(`frontmatter line ${lineNumber}: flow mapping entry has no key separator`);
+    }
+    const key = parseKey(entry.slice(0, colon), lineNumber);
+    if (Object.hasOwn(value, key)) {
+      throw new Error(`frontmatter line ${lineNumber}: duplicate key "${key}"`);
+    }
+    value[key] = parseScalar(entry.slice(colon + 1), lineNumber);
+  }
+  return value;
+}
+
 function parseNumber(value: string): number | undefined {
   const normalized = value.replaceAll("_", "");
   if (/^[-+]?0b[01]+$/i.test(normalized)) {
@@ -162,8 +283,8 @@ function parsePlainScalar(value: string, lineNumber: number): unknown {
   if (/^[*!&]/.test(value)) {
     throw new Error(`frontmatter line ${lineNumber}: YAML aliases, anchors, and tags are not allowed`);
   }
-  if (/^[\[{]/.test(value)) {
-    throw new Error(`frontmatter line ${lineNumber}: flow collections are not supported`);
+  if (value.startsWith("[")) {
+    throw new Error(`frontmatter line ${lineNumber}: flow sequences are not supported`);
   }
   if (/^[|>]/.test(value)) {
     throw new Error(`frontmatter line ${lineNumber}: unsupported block scalar header`);
@@ -180,6 +301,7 @@ function parseScalar(rawValue: string, lineNumber: number): unknown {
   if (trimmed.startsWith('"') || trimmed.startsWith("'")) {
     return parseQuoted(trimmed, lineNumber);
   }
+  if (trimmed.startsWith("{")) return parseFlowMapping(trimmed, lineNumber);
   const plain = stripPlainComment(rawValue);
   if (plain === "") return null;
   return parsePlainScalar(plain, lineNumber);
@@ -242,15 +364,18 @@ function splitKeyValue(line: string, lineNumber: number): { key: string; value: 
 function parseBlockHeader(rawValue: string, lineNumber: number): BlockHeader | undefined {
   const value = stripPlainComment(rawValue);
   if (!value.startsWith("|") && !value.startsWith(">")) return undefined;
-  const match = /^([|>])([+-]?)$/.exec(value);
+  const match = /^([|>])(?:(?:([1-9])([+-]?)|([+-])([1-9]?)))?$/.exec(value);
   if (match === null) {
-    throw new Error(
-      `frontmatter line ${lineNumber}: only block scalar chomping indicators are supported`
-    );
+    throw new Error(`frontmatter line ${lineNumber}: invalid block scalar header`);
   }
+  const chomping = match[3] || match[4] || "";
+  const indentation = match[2] || match[5];
   return {
     style: match[1] === "|" ? "literal" : "folded",
-    chomping: match[2] === "-" ? "strip" : match[2] === "+" ? "keep" : "clip",
+    chomping: chomping === "-" ? "strip" : chomping === "+" ? "keep" : "clip",
+    ...(indentation === undefined || indentation === ""
+      ? {}
+      : { indentation: Number(indentation) }),
   };
 }
 
@@ -302,7 +427,9 @@ function parseBlockScalar(
   parentIndent: number,
   header: BlockHeader
 ): ParsedBlockScalar {
-  let contentIndent: number | undefined;
+  let contentIndent = header.indentation === undefined
+    ? undefined
+    : parentIndent + header.indentation;
   let boundary = lines.length;
   for (let index = start; index < lines.length; index += 1) {
     const line = lines[index];
@@ -312,12 +439,12 @@ function parseBlockScalar(
       boundary = index;
       break;
     }
-    if (indent < parentIndent + 2) {
+    if (contentIndent !== undefined && indent < contentIndent) {
       throw new Error(
-        `frontmatter line ${index + 2}: block scalar content requires at least 2-space indentation`
+        `frontmatter line ${index + 2}: block scalar content requires ${contentIndent}-space indentation`
       );
     }
-    contentIndent = indent;
+    contentIndent ??= indent;
     break;
   }
 
@@ -353,7 +480,12 @@ function nextContentLine(lines: readonly string[], start: number): number | unde
   return undefined;
 }
 
-function parseMap(lines: readonly string[], start: number, indent: 0 | 2): ParsedMap {
+function parseMap(
+  lines: readonly string[],
+  start: number,
+  indent: number,
+  depth: number
+): ParsedMap {
   const value = nullMap();
   let index = start;
   while (index < lines.length) {
@@ -391,12 +523,12 @@ function parseMap(lines: readonly string[], start: number, indent: 0 | 2): Parse
       if (childLine !== undefined) {
         const childIndent = leadingSpaces(lines[childLine]);
         if (childIndent > indent) {
-          if (indent === 2 || childIndent !== indent + 2) {
+          if (depth >= 1) {
             throw new Error(
-              `frontmatter line ${childLine + 2}: unsupported deep structure (nested maps require exactly 2-space indentation)`
+              `frontmatter line ${childLine + 2}: unsupported deep structure (only one nested mapping level is supported)`
             );
           }
-          const child = parseMap(lines, index + 1, 2);
+          const child = parseMap(lines, index + 1, childIndent, depth + 1);
           value[key] = child.value;
           index = child.next;
           continue;
@@ -419,7 +551,7 @@ function parseBlock(lines: readonly string[]): Record<string, unknown> {
       throw new Error(`frontmatter line ${index + 2}: tabs are not allowed`);
     }
   }
-  const parsed = parseMap(lines, 0, 0);
+  const parsed = parseMap(lines, 0, 0, 0);
   if (parsed.next !== lines.length) {
     throw new Error(`frontmatter line ${parsed.next + 2}: unsupported YAML structure`);
   }

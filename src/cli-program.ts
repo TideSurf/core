@@ -465,7 +465,7 @@ async function listSkills(invocation: ParsedInvocation): Promise<number> {
       body: document.body,
     }, "");
   } else {
-    writeLine(document.raw.trimEnd());
+    process.stdout.write(document.raw);
     if (document.files.length > 0) {
       writeLine(`\nBundled files:\n${document.files.map((file) => `  ${file}`).join("\n")}`);
     }

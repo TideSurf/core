@@ -21,9 +21,8 @@ const CANONICAL_PLUGIN_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/plugin.
 const CANONICAL_MCP_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json";
 const MAX_CONFIG_BYTES = 1024 * 1024;
 const MAX_MCP_SERVERS = 128;
-const COMMAND_TOKEN_PATTERN = /^[A-Za-z0-9_+.-]+$/;
-const COMMAND_FORBIDDEN_PATTERN = /[\s;&|<>()$`{}\[\]!#]/;
-const WINDOWS_ABSOLUTE_PATTERN = /^[A-Za-z]:[\\/]/;
+const WINDOWS_DRIVE_PATH_PATTERN = /^[A-Za-z]:/;
+const COMMAND_PLACEHOLDER_PATTERN = /\$\{PLUGIN_(?:ROOT|DATA)\}/;
 const KNOWN_MANIFEST_FIELDS = new Set([
   "$schema",
   "name",
@@ -364,17 +363,21 @@ function validateCommand(
   if (typeof command !== "string" || command === "") {
     return { error: 'type "stdio" requires a non-empty command string' };
   }
-  if (COMMAND_FORBIDDEN_PATTERN.test(command)) {
-    return { error: `command "${command}" contains whitespace or shell metacharacters` };
+  if (command.includes("\0")) {
+    return { error: "command must not contain a NUL byte" };
   }
-  if (command.startsWith("~")) {
-    return { error: `command "${command}" must not use "~"` };
+  if (COMMAND_PLACEHOLDER_PATTERN.test(command)) {
+    return { error: `command "${command}" must not contain plugin placeholders` };
   }
-  if (isAbsolute(command) || WINDOWS_ABSOLUTE_PATTERN.test(command)) {
-    return { error: `command "${command}" must not be an absolute path` };
+  if (isAbsolute(command) || WINDOWS_DRIVE_PATH_PATTERN.test(command)) {
+    return { error: `command "${command}" must not be an absolute or drive-relative path` };
   }
 
   if (command.startsWith("./")) {
+    const segments = command.slice(2).split(/[\\/]/);
+    if (segments.includes("..")) {
+      return { error: `command "${command}" must not contain path traversal` };
+    }
     const lexical = resolve(ctx.pluginRoot, command);
     if (!isContained(ctx.pluginRoot, lexical)) {
       return { error: `command "${command}" resolves outside the plugin root` };
@@ -389,10 +392,20 @@ function validateCommand(
     return { command: canonical };
   }
 
-  if (COMMAND_TOKEN_PATTERN.test(command)) return { command };
-  return {
-    error: `command "${command}" must be a bare executable name or a relative path starting with "./"`,
-  };
+  if (
+    command === "." ||
+    command === ".." ||
+    command.includes("/") ||
+    command.includes("\\")
+  ) {
+    return {
+      error: `command "${command}" must be a bare executable name or a plugin-relative path starting with "./"`,
+    };
+  }
+  // Stdio transports use spawn with shell disabled. Every remaining string is
+  // one literal executable token; shell syntax and whitespace have no special
+  // meaning and are therefore valid filename characters.
+  return { command };
 }
 
 function reportServer(ctx: McpContext, serverName: string, message: string): void {
@@ -784,7 +797,7 @@ function loadPluginSkills(
       continue;
     }
 
-    const result = loadSkillDirectory(skillDirectory.path, source, pluginName);
+    const result = loadSkillDirectory(skillDirectory.path, source, pluginName, pluginRoot);
     for (const diagnostic of result.diagnostics) {
       diagnostics.push({
         plugin: pluginName,

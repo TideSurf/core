@@ -15,6 +15,7 @@ import {
   pluginDataDirectory,
   validatePluginName,
 } from "../../src/extensions/plugins.js";
+import { loadSkillDocument } from "../../src/extensions/skills.js";
 
 const PLUGIN_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json";
 const MCP_SCHEMA = "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json";
@@ -352,6 +353,25 @@ describe("plugin.json conformance", () => {
 });
 
 describe("skills fixed-location and per-skill boundaries", () => {
+  it("carries the canonical plugin root into activation and rejects a swapped skill directory", () => {
+    const dir = join(makeTemp(), "my-plugin");
+    writePlugin(dir);
+    const skillDirectory = join(dir, "skills", "guarded");
+    writeSkill(skillDirectory, "guarded", "Guarded");
+
+    const { plugin, diagnostics } = loadPlugin(dir, "user", makeTemp());
+    expect(diagnostics).toEqual([]);
+    const skill = plugin?.skills[0];
+    expect(skill?.pluginRoot).toBe(realpathSync(dir));
+
+    const outside = join(makeTemp(), "guarded");
+    writeSkill(outside, "guarded", "Guarded");
+    rmSync(skillDirectory, { recursive: true, force: true });
+    symlinkSync(outside, skillDirectory, "dir");
+
+    expect(() => loadSkillDocument(skill!)).toThrow(/outside the plugin root/);
+  });
+
   it("loads only immediate valid skills and isolates an invalid sibling", () => {
     const dir = join(makeTemp(), "my-plugin");
     writePlugin(dir);
@@ -570,17 +590,50 @@ describe("MCP server schema and stdio semantics", () => {
     expect(plugin?.mcpServers[0].cwd).toBe(plugin?.dataDirectory);
   });
 
-  it("rejects non-token, absolute, non-plugin-relative, and traversal commands per server", () => {
+  it("accepts literal no-shell executable tokens and ./ paths with filename characters", () => {
+    const bareCommands = [
+      "node",
+      "node server.js",
+      "run()$[]{}!#",
+      "semi;and&&pipe|redirect<>`quoted`",
+      " leading and trailing ",
+      "~runner",
+    ];
+    const servers = Object.fromEntries([
+      ...bareCommands.map((command, index) => [
+        `bare-${index}`,
+        { type: "stdio", command },
+      ]),
+      ["relative", { type: "stdio", command: "./bin/run ()$[]{}!#" }],
+    ]);
+
+    const { plugin, diagnostics } = loadServers(servers);
+    expect(diagnostics).toEqual([]);
+    expect(plugin?.mcpServers.slice(0, bareCommands.length).map((server) => server.command)).toEqual(
+      bareCommands
+    );
+    expect(plugin?.mcpServers.at(-1)?.command).toBe(
+      join(plugin!.directory, "bin", "run ()$[]{}!#")
+    );
+  });
+
+  it("rejects NUL, placeholders, absolute, non-./ relative, and traversal commands", () => {
     const commands = [
+      "bad\0command",
       "/usr/bin/node",
       "C:\\bin\\node.exe",
+      "C:bin\\node.exe",
       "~/bin/run",
-      "node server.js",
-      "a;b",
-      "a&&b",
       "foo/bar",
+      "foo\\bar",
       "../bin/run",
+      ".",
+      "..",
       "./../bin/run",
+      "./bin/../run",
+      "${PLUGIN_ROOT}",
+      "run-${PLUGIN_DATA}",
+      "./${PLUGIN_ROOT}/run",
     ];
     const servers: Record<string, unknown> = {
       good: { type: "stdio", command: "node" },
