@@ -3,8 +3,9 @@
   "mcpServers": {
     "tidesurf": {
       "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@tidesurf/core", "mcp"]
+      "command": "node",
+      "args": ["${PLUGIN_ROOT}/dist/cli.js", "mcp"],
+      "cwd": "${PLUGIN_ROOT}"
     }
   }
 }

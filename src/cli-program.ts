@@ -606,9 +606,17 @@ async function runMcp(invocation: ParsedInvocation): Promise<number> {
     connect(transport: unknown): Promise<void>;
     close(): Promise<void>;
   };
+  type McpRuntimeTransport = {
+    start(): Promise<void>;
+    send(message: unknown, options?: unknown): Promise<void>;
+    close(): Promise<void>;
+    onclose?: () => void;
+    onerror?: (error: Error) => void;
+    onmessage?: (message: unknown, extra?: unknown) => void;
+  };
   let externalModules: [
     { McpServer: new (info: { name: string; version: string }, options?: { instructions?: string }) => McpRuntimeServer },
-    { StdioServerTransport: new () => unknown },
+    { StdioServerTransport: new () => McpRuntimeTransport },
     { z: { fromJSONSchema(schema: unknown): unknown } },
   ];
   try {
@@ -651,66 +659,44 @@ async function runMcp(invocation: ParsedInvocation): Promise<number> {
 
   const log = invocation.quiet
     ? () => undefined
-    : (message: string) => writeLine(`[tidesurf] ${message}`, process.stderr);
+    : (value: string) => writeLine(`[tidesurf] ${value}`, process.stderr);
   for (const diagnostic of extensions.diagnostics) {
     log(`extensions: ${diagnostic}`);
   }
 
-  let pluginProxy: { close(): Promise<void> } | undefined;
-  if (extensions.plugins.some((plugin) => plugin.mcpServers.length > 0)) {
-    const clientModules = await Promise.all([
-      import("@modelcontextprotocol/sdk/client/index.js").catch(() => undefined),
-      import("@modelcontextprotocol/sdk/client/stdio.js").catch(() => undefined),
-      import("@modelcontextprotocol/sdk/client/streamableHttp.js").catch(() => undefined),
-    ]);
-    const [clientModule, stdioModule, httpModule] = clientModules;
-    if (!clientModule || !stdioModule || !httpModule) {
-      log("plugin MCP servers disabled: MCP SDK client modules are unavailable");
-    } else {
-      const { proxyPluginMcpServers } = await import("./mcp/plugin-proxy.js");
-      pluginProxy = await proxyPluginMcpServers({
-        server,
-        plugins: extensions.plugins,
-        log,
-        factories: {
-          createClient: () =>
-            new clientModule.Client({ name: "tidesurf", version: VERSION }),
-          createStdioTransport: (params) =>
-            new stdioModule.StdioClientTransport({
-              ...params,
-              args: [...params.args],
-            }),
-          createHttpTransport: (params) =>
-            new httpModule.StreamableHTTPClientTransport(new URL(params.url), {
-              requestInit: params.headers ? { headers: params.headers } : undefined,
-            }),
-          createInputSchema: (schema) =>
-            inputSchemaFactory(
-              schema as Parameters<typeof inputSchemaFactory>[0]
-            ),
-        },
-      });
-    }
-  }
-
+  const pluginStartupAbort = new AbortController();
+  type ClosablePluginProxy = { close(): Promise<void> };
+  let pluginProxy: ClosablePluginProxy | undefined;
+  let pluginStartupPromise: Promise<ClosablePluginProxy> | undefined;
   let closingPromise: Promise<void> | null = null;
-  const close = () => {
-    closingPromise ??= Promise.all([
-      controller.close(),
-      server.close(),
-      pluginProxy?.close() ?? Promise.resolve(),
-    ]).then(() => undefined);
+  const close = (): Promise<void> => {
+    if (closingPromise !== null) return closingPromise;
+    pluginStartupAbort.abort(new Error("MCP server is shutting down"));
+    closingPromise = Promise.allSettled([
+      Promise.resolve().then(() => controller.close()),
+      Promise.resolve().then(() => server.close()),
+      Promise.resolve().then(async () => {
+        const proxy = pluginProxy ?? await pluginStartupPromise;
+        await proxy?.close();
+      }),
+    ]).then((results) => {
+      for (const result of results) {
+        if (result.status === "rejected") {
+          log(`MCP cleanup failed: ${message(result.reason)}`);
+        }
+      }
+    });
     return closingPromise;
   };
   // A wedged in-flight tool can keep close() pending forever; SIGINT,
   // SIGTERM, and stdin EOF must still terminate the process, so every exit
-  // path races the graceful close against a bounded grace period.
+  // path races the all-settled cleanup against a bounded grace period.
   const closeWithGrace = (): Promise<void> => {
     let graceTimer!: ReturnType<typeof setTimeout>;
     return Promise.race([
       close(),
-      new Promise<void>((resolve) => {
-        graceTimer = setTimeout(resolve, MCP_CLOSE_GRACE_MS);
+      new Promise<void>((resolveGrace) => {
+        graceTimer = setTimeout(resolveGrace, MCP_CLOSE_GRACE_MS);
       }),
     ]).finally(() => clearTimeout(graceTimer));
   };
@@ -730,18 +716,116 @@ async function runMcp(invocation: ParsedInvocation): Promise<number> {
       })
       .finally(() => process.exit(process.exitCode ?? 0));
   };
+
+  // These handlers must exist before any untrusted plugin process is started.
   process.once("SIGINT", () => shutdown(130));
   process.once("SIGTERM", () => shutdown(143));
   process.stdin.once("end", closeOnInputEnd);
   process.stdin.once("close", closeOnInputEnd);
-  try {
-    await server.connect(new StdioServerTransport());
-  } catch (error) {
-    try {
-      await close();
-    } catch (closeError) {
-      printError(closeError);
+
+  // Start reading stdio now so EOF is observable during plugin startup, but
+  // hold protocol messages until registration is complete. This keeps the
+  // first tools/list deterministic without sacrificing early shutdown.
+  const rawTransport = new StdioServerTransport();
+  const queuedMessages: Array<{ message: unknown; extra?: unknown }> = [];
+  let releasedMessages = false;
+  const hostTransport: McpRuntimeTransport = {
+    start: async () => {
+      rawTransport.onclose = () => hostTransport.onclose?.();
+      rawTransport.onerror = (error) => hostTransport.onerror?.(error);
+      rawTransport.onmessage = (message, extra) => {
+        if (releasedMessages) hostTransport.onmessage?.(message, extra);
+        else queuedMessages.push({ message, extra });
+      };
+      await rawTransport.start();
+    },
+    send: (value, sendOptions) => rawTransport.send(value, sendOptions),
+    close: async () => {
+      queuedMessages.length = 0;
+      await rawTransport.close();
+    },
+  };
+  const releaseHostMessages = (): void => {
+    if (releasedMessages) return;
+    releasedMessages = true;
+    for (const entry of queuedMessages.splice(0)) {
+      hostTransport.onmessage?.(entry.message, entry.extra);
     }
+  };
+
+  const hasPluginServers = extensions.plugins.some(
+    (plugin) => plugin.mcpServers.length > 0
+  );
+  const nestedPluginChild = process.env["TIDESURF_PLUGIN_MCP_CHILD"] === "1";
+  const proxyPlugins =
+    hasPluginServers &&
+    !invocation.sessionConfig.readOnly &&
+    !nestedPluginChild;
+  try {
+    await server.connect(hostTransport);
+
+    if (proxyPlugins) {
+      const clientModules = await Promise.all([
+        import("@modelcontextprotocol/sdk/client/index.js").catch(() => undefined),
+        import("@modelcontextprotocol/sdk/client/stdio.js").catch(() => undefined),
+        import("@modelcontextprotocol/sdk/client/streamableHttp.js").catch(() => undefined),
+      ]);
+      const [clientModule, stdioModule, httpModule] = clientModules;
+      if (!clientModule || !stdioModule || !httpModule) {
+        log("plugin MCP servers disabled: MCP SDK client modules are unavailable");
+      } else {
+        const { proxyPluginMcpServers } = await import("./mcp/plugin-proxy.js");
+        pluginStartupPromise = proxyPluginMcpServers({
+          server,
+          plugins: extensions.plugins,
+          log,
+          signal: pluginStartupAbort.signal,
+          factories: {
+            createClient: () => {
+              const client = new clientModule.Client({
+                name: "tidesurf",
+                version: VERSION,
+              });
+              return {
+                connect: (transport, requestOptions) =>
+                  client.connect(
+                    transport as Parameters<typeof client.connect>[0],
+                    requestOptions
+                  ),
+                listTools: (params, requestOptions) =>
+                  client.listTools(params, requestOptions),
+                callTool: (params, _resultSchema, requestOptions) =>
+                  client.callTool(params, undefined, requestOptions),
+                close: () => client.close(),
+              };
+            },
+            createStdioTransport: (params) =>
+              new stdioModule.StdioClientTransport({
+                ...params,
+                args: [...params.args],
+              }),
+            createHttpTransport: (params) =>
+              new httpModule.StreamableHTTPClientTransport(new URL(params.url), {
+                requestInit: params.headers ? { headers: params.headers } : undefined,
+              }),
+            createInputSchema: (schema) =>
+              inputSchemaFactory(
+                schema as Parameters<typeof inputSchemaFactory>[0]
+              ),
+          },
+        });
+        const startedProxy = await pluginStartupPromise;
+        pluginProxy = startedProxy;
+        if (closingPromise !== null) await startedProxy.close();
+      }
+    } else if (hasPluginServers && invocation.sessionConfig.readOnly) {
+      log("plugin MCP servers disabled in read-only mode");
+    } else if (hasPluginServers && nestedPluginChild) {
+      log("plugin MCP servers disabled in nested plugin MCP child");
+    }
+    releaseHostMessages();
+  } catch (error) {
+    await closeWithGrace();
     throw error;
   }
   if (!invocation.quiet) writeLine("[tidesurf] MCP server ready on stdio", process.stderr);

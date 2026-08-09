@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import { createHash } from "node:crypto";
 import {
   mkdirSync,
   mkdtempSync,
@@ -100,19 +101,73 @@ describe("validatePluginName", () => {
 });
 
 describe("pluginDataDirectory", () => {
-  it("keeps the legacy two-string call and returns a canonical absolute path", () => {
+  it("keeps the legacy two-string call as a canonical user-scoped path", () => {
     const home = makeTemp();
-    const expected = join(realpathSync(home), ".tidesurf", "plugin-data", "my-plugin");
+    const expected = join(
+      realpathSync(home),
+      ".tidesurf",
+      "plugin-data",
+      "user",
+      "my-plugin"
+    );
     expect(pluginDataDirectory(home, "my-plugin")).toBe(expected);
     expect(isAbsolute(pluginDataDirectory(home, "my-plugin"))).toBe(true);
   });
 
-  it("precomputes the same instance data directory on LoadedPlugin", () => {
+  it("scopes LoadedPlugin data by user or canonical project identity", () => {
     const home = makeTemp();
-    const dir = join(makeTemp(), "my-plugin");
-    writePlugin(dir);
-    const { plugin } = loadPlugin(dir, "project", home);
-    expect(plugin?.dataDirectory).toBe(pluginDataDirectory(home, "my-plugin"));
+    const userDir = join(makeTemp(), "my-plugin");
+    writePlugin(userDir);
+    const user = loadPlugin(userDir, "user", home).plugin!;
+    expect(user.dataDirectory).toBe(pluginDataDirectory(home, "my-plugin"));
+
+    const project = makeTemp();
+    const projectDir = join(project, ".tidesurf", "plugins", "my-plugin");
+    writePlugin(projectDir);
+    const loaded = loadPlugin(projectDir, "project", home).plugin!;
+    const projectId = createHash("sha256")
+      .update(realpathSync(project))
+      .digest("hex")
+      .slice(0, 16);
+    expect(loaded.dataDirectory).toBe(
+      join(
+        realpathSync(home),
+        ".tidesurf",
+        "plugin-data",
+        "project",
+        projectId,
+        "my-plugin"
+      )
+    );
+    expect(loaded.dataDirectory).not.toBe(user.dataDirectory);
+  });
+
+  it("isolates equal project plugin names across canonical roots", () => {
+    const home = makeTemp();
+    const projects = [makeTemp(), makeTemp()];
+    const dataDirectories = projects.map((project) => {
+      const directory = join(project, ".tidesurf", "plugins", "my-plugin");
+      writePlugin(directory);
+      return loadPlugin(directory, "project", home).plugin!.dataDirectory;
+    });
+    expect(dataDirectories[0]).not.toBe(dataDirectories[1]);
+  });
+
+  it("hashes the canonical project root rather than a symlink alias", () => {
+    const home = makeTemp();
+    const project = makeTemp();
+    const directory = join(project, ".tidesurf", "plugins", "my-plugin");
+    writePlugin(directory);
+    const alias = join(makeTemp(), "project-alias");
+    symlinkSync(project, alias, "dir");
+
+    const direct = loadPlugin(directory, "project", home).plugin!;
+    const throughAlias = loadPlugin(
+      join(alias, ".tidesurf", "plugins", "my-plugin"),
+      "project",
+      home
+    ).plugin!;
+    expect(throughAlias.dataDirectory).toBe(direct.dataDirectory);
   });
 });
 

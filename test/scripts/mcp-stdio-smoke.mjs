@@ -2,10 +2,13 @@ import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { createInterface } from "node:readline";
 
-const cli = process.argv[2];
-if (!cli) throw new Error("Usage: mcp-stdio-smoke.mjs <cli.js>");
+const command = process.argv[2];
+const args = process.argv.slice(3);
+if (!command || args.length === 0) {
+  throw new Error("Usage: mcp-stdio-smoke.mjs <command> <args...>");
+}
 
-const child = spawn(process.execPath, [cli, "mcp", "--quiet"], {
+const child = spawn(command, args, {
   stdio: ["pipe", "pipe", "inherit"],
   // The canonical tool count assumes no user- or project-installed
   // extensions; disable them so the check is environment-independent.

@@ -19,14 +19,26 @@ interface McpImageContent {
 export interface McpCallResult {
   content: Array<McpTextContent | McpImageContent>;
   isError?: boolean;
+  structuredContent?: Record<string, unknown>;
+}
+
+export interface McpRequestHandlerExtra {
+  readonly signal: AbortSignal;
+}
+
+export interface McpToolRegistration {
+  remove(): void | Promise<void>;
 }
 
 export interface McpServerLike {
   registerTool(
     name: string,
     config: { description: string; inputSchema: unknown },
-    handler: (input: Record<string, unknown>) => Promise<McpCallResult>
-  ): unknown;
+    handler: (
+      input: Record<string, unknown>,
+      extra: McpRequestHandlerExtra
+    ) => Promise<McpCallResult>
+  ): McpToolRegistration;
 }
 
 interface LaunchBrowserResult {

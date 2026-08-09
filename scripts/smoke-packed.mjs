@@ -197,6 +197,25 @@ function main() {
         throw new Error(`Packed artifact contains removed module: ${stalePath}`);
       }
     }
+    const installedMcp = JSON.parse(
+      readFileSync(join(packageRoot, "mcp.json"), "utf8")
+    );
+    const declaredMcp = installedMcp?.mcpServers?.tidesurf;
+    const expectedMcpArgs = ["${PLUGIN_ROOT}/dist/cli.js", "mcp"];
+    if (
+      declaredMcp?.type !== "stdio" ||
+      declaredMcp.command !== "node" ||
+      JSON.stringify(declaredMcp.args) !== JSON.stringify(expectedMcpArgs) ||
+      declaredMcp.cwd !== "${PLUGIN_ROOT}"
+    ) {
+      throw new Error(
+        `Packed mcp.json must declare the local Node CLI, received ${JSON.stringify(declaredMcp)}`
+      );
+    }
+    const expandPluginRoot = (value) =>
+      value.replaceAll("${PLUGIN_ROOT}", packageRoot);
+    const declaredMcpArgs = declaredMcp.args.map(expandPluginRoot);
+    const declaredMcpCwd = expandPluginRoot(declaredMcp.cwd);
 
     run(bin, ["--help"]);
     assertVersion(run(process.execPath, [cliPath, "--version"]), "Node");
@@ -230,10 +249,14 @@ function main() {
     cli("bun", cliPath, bunSession, "stop");
 
     const mcpSmoke = join(root, "test", "scripts", "mcp-stdio-smoke.mjs");
-    run(process.execPath, [mcpSmoke, cliPath]);
-    run("bun", [mcpSmoke, cliPath]);
+    run(
+      process.execPath,
+      [mcpSmoke, declaredMcp.command, ...declaredMcpArgs],
+      { cwd: declaredMcpCwd }
+    );
+    run("bun", [mcpSmoke, "bun", cliPath, "mcp", "--quiet"]);
     process.stdout.write(
-      "Packed CLI and MCP smoke passed under Node and Bun, including omit-optional behavior.\n"
+      "Packed CLI and declared local MCP command smoke passed under Node and Bun, including omit-optional behavior.\n"
     );
   } finally {
     if (cliPath) {

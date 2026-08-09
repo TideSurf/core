@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   closeSync,
   fstatSync,
@@ -81,8 +82,15 @@ export interface LoadedPlugin {
   readonly mcpServers: readonly PluginMcpServer[];
   readonly diagnostics: readonly PluginDiagnostic[];
   readonly mcpDisabled?: string;
-  /** Precomputed absolute filesystem-resolved data root for this loaded instance. */
-  readonly dataDirectory?: string;
+  /** Precomputed absolute data root scoped to this loaded plugin instance. */
+  readonly dataDirectory: string;
+}
+
+export interface PluginDataIdentity {
+  readonly name: string;
+  readonly source: "project" | "user";
+  /** Canonical project root. Required for project-scoped identities. */
+  readonly projectRoot?: string;
 }
 
 interface PluginManifestDraft {
@@ -144,13 +152,63 @@ export function validatePluginName(name: unknown): string | undefined {
 }
 
 /**
- * Return the absolute, filesystem-resolved data directory used for a plugin.
- * The two-string signature is retained for callers that have not yet switched
- * to LoadedPlugin.dataDirectory.
+ * Return the absolute data directory used for a plugin. The two-string call is
+ * retained and represents a user-scoped plugin; loaded instances use the
+ * identity overload so equal project plugin names cannot share state.
  */
-export function pluginDataDirectory(home: string, pluginName: string): string {
-  const candidate = resolve(home, ".tidesurf", "plugin-data", pluginName);
-  return canonicalPotentialPath(candidate) ?? candidate;
+export function pluginDataDirectory(home: string, pluginName: string): string;
+export function pluginDataDirectory(home: string, identity: PluginDataIdentity): string;
+export function pluginDataDirectory(
+  home: string,
+  plugin: string | PluginDataIdentity
+): string {
+  const identity: PluginDataIdentity = typeof plugin === "string"
+    ? { name: plugin, source: "user" }
+    : plugin;
+  const nameError = validatePluginName(identity.name);
+  if (nameError !== undefined) {
+    throw new Error(`invalid plugin data identity: ${nameError}`);
+  }
+
+  const canonicalHome = canonicalPotentialPath(resolve(home)) ?? resolve(home);
+  if (identity.source === "user") {
+    return resolve(
+      canonicalHome,
+      ".tidesurf",
+      "plugin-data",
+      "user",
+      identity.name
+    );
+  }
+  if (!identity.projectRoot) {
+    throw new Error("project plugin data identity requires a canonical project root");
+  }
+  const canonicalRoot =
+    canonicalPotentialPath(resolve(identity.projectRoot)) ??
+    resolve(identity.projectRoot);
+  const projectId = createHash("sha256")
+    .update(canonicalRoot)
+    .digest("hex")
+    .slice(0, 16);
+  return resolve(
+    canonicalHome,
+    ".tidesurf",
+    "plugin-data",
+    "project",
+    projectId,
+    identity.name
+  );
+}
+
+function inferProjectRoot(pluginLocation: string): string {
+  const pluginsDirectory = dirname(pluginLocation);
+  const tidesurfDirectory = dirname(pluginsDirectory);
+  const candidate =
+    basename(pluginsDirectory) === "plugins" &&
+    basename(tidesurfDirectory) === ".tidesurf"
+      ? dirname(tidesurfDirectory)
+      : dirname(pluginLocation);
+  return canonicalPotentialPath(candidate) ?? resolve(candidate);
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -874,7 +932,16 @@ export function loadPlugin(
   if (Array.isArray(doc.keywords)) manifest.keywords = doc.keywords as string[];
   if (extensions !== undefined) manifest.extensions = extensions;
 
-  const dataDirectory = pluginDataDirectory(home, name);
+  const dataDirectory = pluginDataDirectory(
+    home,
+    source === "project"
+      ? {
+          name,
+          source,
+          projectRoot: inferProjectRoot(resolve(directory)),
+        }
+      : { name, source }
+  );
   const skills = loadPluginSkills(pluginRoot, source, name, diagnostics);
   const mcp = loadMcpServers(pluginRoot, name, dataDirectory, diagnostics);
 

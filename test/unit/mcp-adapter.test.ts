@@ -9,8 +9,13 @@ import type { ToolExecutor } from "../../src/tools/registry.js";
 
 interface Registration {
   config: { description: string; inputSchema: unknown };
-  handler: (input: Record<string, unknown>) => Promise<McpCallResult>;
+  handler: (
+    input: Record<string, unknown>,
+    extra: { signal: AbortSignal }
+  ) => Promise<McpCallResult>;
 }
+
+const HANDLER_EXTRA = { signal: new AbortController().signal };
 
 class FakeServer implements McpServerLike {
   readonly tools = new Map<string, Registration>();
@@ -19,8 +24,9 @@ class FakeServer implements McpServerLike {
     name: string,
     config: Registration["config"],
     handler: Registration["handler"]
-  ): void {
+  ): { remove(): void } {
     this.tools.set(name, { config, handler });
+    return { remove: () => { this.tools.delete(name); } };
   }
 }
 
@@ -71,7 +77,7 @@ describe("registerMcpTools", () => {
     });
     const server = setup(execute);
 
-    const result = await server.tools.get("list_tabs")!.handler({});
+    const result = await server.tools.get("list_tabs")!.handler({}, HANDLER_EXTRA);
 
     expect(execute).toHaveBeenCalledWith({ name: "list_tabs", input: {} });
     expect(result).toEqual({
@@ -87,7 +93,7 @@ describe("registerMcpTools", () => {
       error: "No active page",
     }));
 
-    const result = await server.tools.get("get_state")!.handler({});
+    const result = await server.tools.get("get_state")!.handler({}, HANDLER_EXTRA);
 
     expect(result).toEqual({
       content: [{ type: "text", text: "No active page" }],
@@ -98,7 +104,7 @@ describe("registerMcpTools", () => {
   it("converts screenshot data to MCP image content", async () => {
     const server = setup(async () => ({ success: true, data: "cG5n" }));
 
-    const result = await server.tools.get("screenshot")!.handler({});
+    const result = await server.tools.get("screenshot")!.handler({}, HANDLER_EXTRA);
 
     expect(result).toEqual({
       content: [{ type: "image", data: "cG5n", mimeType: "image/png" }],
@@ -110,7 +116,7 @@ describe("registerMcpTools", () => {
 
     const result = await server.tools
       .get("launch_browser")!
-      .handler({ headless: false });
+      .handler({ headless: false }, HANDLER_EXTRA);
 
     expect(result).toEqual({
       content: [{ type: "text", text: "Browser launched (headful)." }],
