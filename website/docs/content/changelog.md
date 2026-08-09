@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+## 0.7.0 (2026-08-09)
+
+Agent Plugins edition.
+
+### Added
+
+- TideSurf hosts Agent Plugins (agent-plugins.org spec v1.0.0) and Agent Skills (agentskills.io). Plugins load from `.tidesurf/plugins/` (project) and `~/.tidesurf/plugins/` (user); skills load from `.agents/skills/` and `.tidesurf/skills/` under both scopes, plus each plugin's own `skills/` directory. `plugin.json` and `mcp.json` are validated against the closed v1.0.0 schemas, `SKILL.md` frontmatter follows the Agent Skills rules (name pattern, 1-1024 character description, directory-name match), and failures are isolated per component: a bad skill or server entry is skipped with a diagnostic, never blocking siblings.
+- Two new canonical tools expose skills to agents with progressive disclosure: `list_skills` (catalog of name, description, source) and `read_skill` (full document plus bundled file list). Both are read-only and browser-free: they never launch or wait on the browser, and they work in read-only mode.
+- `tidesurf mcp` publishes the skill catalog in its server instructions and proxies plugin-declared MCP servers: stdio servers are spawned with `PLUGIN_ROOT`/`PLUGIN_DATA` (persistent per-plugin data directory under `~/.tidesurf/plugin-data/`), streamable-http servers are connected remotely, and their tools register as `<plugin>__<tool>`. Placeholders expand once, plugin paths must stay inside the plugin directory, deprecated `sse` entries are skipped, and a crashed plugin server never takes the host down.
+- New CLI commands: `tidesurf skills [name]` lists the catalog or prints one skill document, `tidesurf plugins` lists plugins with their skills, MCP servers, and validation diagnostics. Discovery re-runs per call, so installing a skill takes effect without a session restart.
+- Root overrides and policy: `TIDESURF_PLUGINS_DIR` and `TIDESURF_SKILLS_DIR` replace the default roots (path-delimiter separated), and `TIDESURF_EXTENSIONS=user|off` skips project-scoped extensions or disables extension loading entirely. Project scope wins name collisions; duplicates are reported and skipped.
+- TideSurf itself ships as an Agent Plugin: the package root now carries `plugin.json`, `mcp.json`, and `skills/tidesurf-browser/` (workflow skill plus a full tool reference), so compatible clients (VS Code, Cursor, Copilot, Codex, Kiro) can register TideSurf directly, and any skills-compatible agent can install the skill with `npx skills add TideSurf/core`.
+- SDK: the extensions API is exported (`loadExtensions`, `resolveExtensionRoots`, `extensionsPolicyFromEnv`, `findSkill`, `skillCatalog`, `loadPlugin`, `loadSkillDirectory`, `validatePluginName`, `validateSkillName`, `parseFrontmatter`, `pluginDataDirectory`) with its types.
+
+### Security
+
+- Page-controlled link and iframe URLs can no longer forge element action markers. Compressed URLs keep the page's exact encoding by design, including `[`, `]`, `(`, and `)`; those characters are now backslash-escaped when a URL is interpolated into `[id](url)` or `[iframe: url]` markers, closing a marker-forgery and phishing vector that survived the 0.6.3 text-escaping fix. Token-budget estimation counts the escaped length exactly.
+- A failed `TideSurf.launch` no longer leaves a verified owned-browser claim behind. `launchChrome` records endpoint ownership before `connect()` runs; when that connect failed, the rollback killed Chrome but kept the claim, so a foreign Chrome recycling the port would later pass ownership verification without a re-check and receive owned-browser treatment (browser-wide permission resets). The rollback now releases the endpoint claim and the orphan record, matching the normal close path.
+
+### Fixed
+
+- Minimal-mode heading summaries are no longer double-escaped: a heading `Tom & Jerry <3` reads `## Tom &amp; Jerry &lt;3` in every mode. Synthesized (pre-escaped) heading text is now emitted verbatim while raw `#text` children keep their escaping, and the token estimator matches.
+- `readPage` `maxTokens` now reserves the page header with the same CJK weighting as the body budget, so CJK-heavy titles no longer push output over budget (a 39-character CJK header previously reserved only 39 of its 105 weighted units).
+- Session startup fails fast when the recorded daemon dies before becoming ready: after a 500 ms grace window (so an orphaned daemon that outlives its spawner can still finish starting), the client errors with the log path instead of burning the full 10-second startup timeout.
+- Skills installed as symlinked directories are now discovered. The `skills` CLI's recommended install method symlinks skill directories, and the loader's lstat-only walk skipped them; root scans now follow directory symlinks (the inside-skill file walk still does not).
+- `allowed-tools` frontmatter written as a YAML block sequence (common in real-world skills) now parses and joins into the space-separated form instead of rejecting the whole skill; the frontmatter subset parser learned one-level block sequences and rejects mixed map/sequence blocks with a clear error.
+
 ## 0.6.3 (2026-07-18)
 
 KIMI K3 edition.
