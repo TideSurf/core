@@ -702,7 +702,13 @@ async function isExpectedDaemonProcess(
   paths: SessionPaths
 ): Promise<boolean> {
   if (!state.startupId) return false;
-  const argv = await processArgv(state.pid);
+  let argv = await processArgv(state.pid);
+  if (argv === undefined && process.platform === "win32") {
+    // A loaded Windows host can stall the single CIM query past its budget.
+    // One retry with a fresh deadline keeps verification available without
+    // weakening it: an unanswered query still fails closed.
+    argv = await processArgv(state.pid);
+  }
   return Boolean(argv && matchesDaemonArgv(argv, {
     stateFile: paths.stateFile,
     startupToken: state.startupId,
