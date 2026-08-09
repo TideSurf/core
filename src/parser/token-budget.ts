@@ -13,6 +13,7 @@ import { formatTruncation, truncateGraphemes } from "./truncation.js";
 import {
   compressUrlWithContext,
   createUrlCompressionContext,
+  escapeUrlMarkers,
   type UrlCompressionContext,
 } from "./url-compressor.js";
 
@@ -186,6 +187,15 @@ function plainTextSize(text: string | undefined, cjkWeight = 1): number {
   return size;
 }
 
+/**
+ * Weighted length of an already-composed string in budget units. Use this
+ * for reserving wrapper text (page header) from a token budget so CJK-heavy
+ * headers do not drift the output over budget.
+ */
+export function weightedTextLength(text: string, cjkWeight = 1): number {
+  return plainTextSize(text, cjkWeight);
+}
+
 function hasText(text: string | undefined): boolean {
   if (!text) return false;
   // Match String.trim whitespace while keeping already-trimmed parser text fast.
@@ -226,7 +236,7 @@ function estimateOwnSize(
   if (node.tag === "link") {
     const href = attributes["href"];
     const hrefSize = href
-      ? compressUrlWithContext(href, url).length
+      ? escapeUrlMarkers(compressUrlWithContext(href, url)).length
       : 0;
     const fallbackSize = hasNonInteractiveText
       ? 0
@@ -275,7 +285,7 @@ function estimateOwnSize(
   if (node.tag === "iframe") {
     const src = attributes["src"];
     const srcSize = src
-      ? compressUrlWithContext(src, url).length + 14
+      ? escapeUrlMarkers(compressUrlWithContext(src, url)).length + 14
       : 0;
     const emptySize = attributes["status"] === "inaccessible"
       ? IFRAME_INACCESSIBLE_SIZE
@@ -285,8 +295,9 @@ function estimateOwnSize(
   if (HEADING_TAGS.has(node.tag)) {
     // The serializer emits `${prefix} ${content}` plus a newline, so the
     // overhead is the per-tag prefix length + 2 (h4-h6 use "####").
+    // Element-node heading text is a synthesized, pre-escaped summary.
     const prefixLength = HEADING_MAP[node.tag]?.length ?? 2;
-    return indentation + escapedTextSize(node.text, cjkWeight) + prefixLength + 2;
+    return indentation + plainTextSize(node.text, cjkWeight) + prefixLength + 2;
   }
   if (node.tag === "above" || node.tag === "below") {
     // Summary text is pre-escaped at composition time and emitted verbatim.

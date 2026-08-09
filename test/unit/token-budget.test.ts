@@ -1,4 +1,4 @@
-import { estimateTokens, pruneToFit } from "../../src/parser/token-budget.js";
+import { estimateTokens, pruneToFit, weightedTextLength } from "../../src/parser/token-budget.js";
 import { pageHeader, serialize, wrapPage } from "../../src/parser/serializer.js";
 import { filterMinimal } from "../../src/parser/mode-filter.js";
 import type { OSNode } from "../../src/types.js";
@@ -18,6 +18,17 @@ describe("estimateTokens", () => {
   it("rejects invalid token ratios", () => {
     expect(() => estimateTokens("text", 0)).toThrow(ValidationError);
     expect(() => estimateTokens("text", Number.NaN)).toThrow(ValidationError);
+  });
+});
+
+describe("weightedTextLength", () => {
+  it("counts Latin text at one unit per character", () => {
+    expect(weightedTextLength("example.com/search", 4)).toBe(18);
+  });
+
+  it("weights CJK code points at the full weight", () => {
+    expect(weightedTextLength("タイトル", 4)).toBe(16);
+    expect(weightedTextLength("abタイトル", 4)).toBe(18);
   });
 });
 

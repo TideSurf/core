@@ -461,6 +461,7 @@ async function waitForReady(
 ): Promise<SessionState> {
   const deadline = Date.now() + timeoutMs;
   let lastError: unknown;
+  let deadSince: number | undefined;
   let pollInterval = READY_POLL_INITIAL_MS;
   while (Date.now() < deadline) {
     const state = readSessionState(paths);
@@ -476,6 +477,27 @@ async function waitForReady(
       } catch (error) {
         lastError = error;
       }
+    }
+    // Fail fast when the recorded startup is definitively dead: a daemon
+    // that exits before writing ready would otherwise burn the whole
+    // timeout. The pending state written by the spawner carries the
+    // spawner's pid, so never fast-fail our own pid; and give an orphaned
+    // daemon (spawner killed mid-startup) a short grace window to write
+    // ready itself before declaring the startup dead.
+    if (
+      state &&
+      !state.ready &&
+      state.pid !== process.pid &&
+      !isProcessRunning(state.pid)
+    ) {
+      deadSince ??= Date.now();
+      if (Date.now() - deadSince >= 500) {
+        throw new SessionProtocolError(
+          `Session daemon ${state.pid} exited before becoming ready. Log: ${paths.logFile}`
+        );
+      }
+    } else {
+      deadSince = undefined;
     }
     // Back off exponentially: the daemon writes ready exactly once, so
     // aggressive sync-I/O polling buys nothing.

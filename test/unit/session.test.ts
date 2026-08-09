@@ -829,3 +829,56 @@ describe("session recovery", () => {
     }
   });
 });
+
+describe("startup failure handling", () => {
+  it("fails fast when the recorded startup dies before becoming ready", async () => {
+    const name = `unit-${randomUUID()}`;
+    const paths = getSessionPaths(name);
+    const sleeper = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
+      stdio: "ignore",
+    });
+    const startupId = randomUUID();
+    try {
+      await once(sleeper, "spawn");
+      if (typeof sleeper.pid !== "number") throw new Error("sleeper has no pid");
+      writeSessionState(paths, {
+        protocol: SESSION_PROTOCOL_VERSION,
+        version: VERSION,
+        session: name,
+        secret: "0".repeat(64),
+        socketPath: paths.socketPath,
+        config,
+        pid: sleeper.pid,
+        ready: false,
+        startupId,
+      });
+      writeFileSync(
+        paths.lockFile,
+        `${JSON.stringify({ pid: sleeper.pid, startupId, createdAt: Date.now() })}\n`,
+        { mode: 0o600 }
+      );
+      setTimeout(() => {
+        try {
+          sleeper.kill("SIGKILL");
+        } catch {
+          // already gone
+        }
+      }, 200);
+
+      const started = Date.now();
+      await expect(
+        ensureSession({ session: name, config, entryPath, timeoutMs: 10_000 })
+      ).rejects.toThrow(/exited before becoming ready/);
+      // Without the dead-startup check this burns the full 10s timeout.
+      expect(Date.now() - started).toBeLessThan(5_000);
+    } finally {
+      try {
+        sleeper.kill("SIGKILL");
+      } catch {
+        // already gone
+      }
+      removeSessionFiles(paths, true);
+      rmSync(paths.lockFile, { force: true });
+    }
+  }, 15_000);
+});

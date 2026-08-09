@@ -14,7 +14,7 @@ import * as cdp from "./connection.js";
 import { captureDOMSnapshot } from "./snapshot.js";
 import { walkDOM } from "../parser/dom-walker.js";
 import { serialize, wrapPage, pageHeader } from "../parser/serializer.js";
-import { pruneToFit } from "../parser/token-budget.js";
+import { pruneToFit, weightedTextLength } from "../parser/token-budget.js";
 import { filterViewportOnly } from "../parser/viewport-filter.js";
 import { filterInteractive, filterMinimal } from "../parser/mode-filter.js";
 import { truncateGraphemes } from "../parser/truncation.js";
@@ -192,7 +192,9 @@ export class SurfingPage {
     if (options.maxTokens) {
       // The header (title + URL meta) is prepended after pruning, so reserve
       // its exact size from the budget first; otherwise output drifts over.
-      const headerSize = pageHeader(url, title, scrollPosition).length + 2;
+      // The reservation must use the same CJK weighting as the budget units
+      // (pruneToFit defaults to charsPerToken 4), not raw UTF-16 length.
+      const headerSize = weightedTextLength(pageHeader(url, title, scrollPosition), 4) + 2;
       nodes = pruneToFit(nodes, {
         maxTokens: options.maxTokens,
         pageUrl: url,

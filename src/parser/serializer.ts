@@ -3,6 +3,7 @@ import {
   compressUrl,
   compressUrlWithContext,
   createUrlCompressionContext,
+  escapeUrlMarkers,
   type UrlCompressionContext,
 } from "./url-compressor.js";
 import { formatTruncation } from "./truncation.js";
@@ -227,7 +228,7 @@ function serializeNodes(
       const { struck, flags } = getElementState(node, node.attributes["aria-disabled"] === "true");
       let line: string;
       if (compHref) {
-        line = `[${id}](${compHref}${newTab})${text ? " " + text : ""}${flags}`;
+        line = `[${id}](${escapeUrlMarkers(compHref)}${newTab})${text ? " " + text : ""}${flags}`;
       } else {
         line = `[${id}]${text ? " " + text : ""}${flags}`;
       }
@@ -294,7 +295,7 @@ function serializeNodes(
     if (node.tag === "iframe") {
       if (node.children.length > 0) {
         const src = node.attributes["src"];
-        parts.push(`${pad}[iframe: ${src ? compressUrlWithContext(src, context.url) : "inline"}]`);
+        parts.push(`${pad}[iframe: ${src ? escapeUrlMarkers(compressUrlWithContext(src, context.url)) : "inline"}]`);
         pushIfNotEmpty(
           parts,
           serializeNodes(node.children, indent + 1, context)
@@ -307,7 +308,7 @@ function serializeNodes(
           const src = node.attributes["src"];
           parts.push(
             src
-              ? `${pad}[iframe: ${compressUrlWithContext(src, context.url)}]`
+              ? `${pad}[iframe: ${escapeUrlMarkers(compressUrlWithContext(src, context.url))}]`
               : pad + IFRAME_UNKNOWN_PLACEHOLDER
           );
         }
@@ -529,7 +530,10 @@ function serializeHeadingContent(
 ): string {
   const parts: string[] = [];
   const text = serializableText(node);
-  if (text) parts.push(escapeHtml(text));
+  // #text nodes carry raw page text and need escaping. Element nodes only
+  // carry text when a mode filter synthesized it (minimal-mode landmark
+  // summaries), and that text is already escaped at composition time.
+  if (text) parts.push(node.tag === "#text" ? escapeHtml(text) : text);
 
   for (const child of node.children) {
     if (child.id) {

@@ -18,6 +18,17 @@ export interface UrlCompressionContext {
   cache: Map<string, string>;
 }
 
+/**
+ * Compressed URLs are interpolated into `[id](url)` and `[iframe: url]`
+ * action markers, but compression intentionally preserves the page's exact
+ * path and query encoding, including `[`, `]`, `(`, and `)`. Escape those
+ * characters at the structural boundary so a page-controlled URL can never
+ * close its marker early or forge another marker like [B1].
+ */
+export function escapeUrlMarkers(url: string): string {
+  return url.replaceAll(/[\[\]()]/g, (char) => `\\${char}`);
+}
+
 export function createUrlCompressionContext(
   pageUrl?: string
 ): UrlCompressionContext {

@@ -332,6 +332,15 @@ export class TideSurf {
           new ChromeLaunchError("Owned Chrome did not stop during setup rollback")
         );
       }
+      // The browser is dead: drop the ownership claim launchChrome recorded
+      // and the orphan record, so a foreign Chrome that recycles this port is
+      // never treated as TideSurf-owned (browser-wide permission resets) and
+      // the reaper never scans a stale entry. The disconnect-event cleanup
+      // never ran because no connection was established.
+      if (typeof proc.pid === "number") {
+        unregisterOrphanedBrowser(process.pid, proc.pid);
+      }
+      releaseOwnedBrowserEndpoint(host, port);
       if (ownsTempDir && exited) {
         try {
           await rm(userDataDir, { recursive: true, force: true });
