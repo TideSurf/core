@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.7.1 (2026-08-09)
+
+### Fixed
+
+- Windows stale-session recovery no longer goes blind on loaded hosts: the PowerShell command-line query that verifies a daemon before signaling it now has a 5-second budget with one retry instead of a single 2-second attempt. Verification still fails closed — a process that cannot be identified is never signaled — but a slow query no longer permanently disables orphaned-daemon reaping.
+
+
 ## 0.7.0 (2026-08-09)
 
 Agent Plugins edition.

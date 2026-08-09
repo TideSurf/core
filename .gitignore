@@ -10,8 +10,8 @@ coverage/
 .tmp-npm-cache/
 .impeccable.md
 
-# Chrome user data from TideSurf sessions
-tidesurf-*
+# Chrome user data from TideSurf sessions (repo-root temp profiles)
+/tidesurf-*
 
 # OS junk
 Thumbs.db

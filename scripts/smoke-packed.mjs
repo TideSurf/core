@@ -127,6 +127,29 @@ function main() {
     if (!existsSync(packedPath) || !statSync(packedPath).isFile()) {
       throw new Error(`npm pack did not create ${packed.filename}`);
     }
+    // The shipped Agent Plugin artifacts must survive packing; an ignore
+    // rule once swallowed skills/ from git, and CI packs from a checkout.
+    const packedFiles = new Set(
+      Array.isArray(packed.files)
+        ? packed.files
+            .map((entry) =>
+              typeof entry === "object" && entry !== null
+                ? entry.path
+                : undefined
+            )
+            .filter((path) => typeof path === "string")
+        : []
+    );
+    for (const required of [
+      "plugin.json",
+      "mcp.json",
+      "skills/tidesurf-browser/SKILL.md",
+      "skills/tidesurf-browser/references/tool-reference.md",
+    ]) {
+      if (!packedFiles.has(required)) {
+        throw new Error(`packed tarball is missing ${required}`);
+      }
+    }
 
     run(npm, [
       "install",
