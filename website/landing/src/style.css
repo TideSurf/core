@@ -236,47 +236,100 @@ pre {
   background: color-mix(in srgb, var(--paper-2) 92%, transparent);
 }
 
-/* Hover halo: brand-hued rainbow ring behind the install command. */
-@property --glow-angle {
-  syntax: "<angle>";
-  inherits: false;
-  initial-value: 0deg;
+/* Install method dropdown: opens on hover/focus, selects the copied command. */
+.install-caret {
+  flex: 0 0 auto;
+  width: 1.9rem;
+  min-height: 2.75rem;
+  padding: 0;
+  margin-right: 0.35rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-3);
+  transition: color 150ms ease;
 }
 
-.install::before {
-  content: "";
+.install-caret:hover,
+.install-caret:focus-visible {
+  color: var(--ink);
+  outline: none;
+}
+
+.install-caret svg {
+  transition: transform 160ms ease;
+}
+
+.install:hover .install-caret svg,
+.install:focus-within .install-caret svg,
+.install.is-open .install-caret svg {
+  transform: rotate(180deg);
+}
+
+.install-menu {
   position: absolute;
-  inset: -6px;
-  z-index: -1;
-  background: conic-gradient(
-    from var(--glow-angle),
-    var(--c-rust),
-    var(--c-gold),
-    var(--c-green),
-    var(--c-teal),
-    #6e56cf,
-    var(--c-rust)
-  );
-  filter: blur(8px) saturate(170%);
+  top: calc(100% + 2px);
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  padding: 0.25rem;
+  background: var(--paper);
+  border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--ink) 16%, transparent);
   opacity: 0;
-  transition: opacity 240ms ease;
+  visibility: hidden;
+  transform: translateY(-3px);
+  transition:
+    opacity 150ms ease,
+    transform 150ms ease,
+    visibility 0s linear 150ms;
 }
 
-.install:hover::before,
-.install:focus-within::before {
-  opacity: 0.9;
-  animation: glow-spin 3.5s linear infinite;
+.install:hover .install-menu,
+.install:focus-within .install-menu,
+.install.is-open .install-menu {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+  transition-delay: 0s;
 }
 
-[data-theme="light"] .install::before {
-  mix-blend-mode: multiply;
-  filter: blur(8px) saturate(220%);
+.install-option {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.55rem 0.65rem;
+  text-align: left;
+  font-family: var(--mono);
+  font-size: 0.88rem;
+  color: var(--ink-2);
+  transition: background-color 120ms ease, color 120ms ease;
 }
 
-@keyframes glow-spin {
-  to {
-    --glow-angle: 360deg;
-  }
+.install-option:hover,
+.install-option:focus-visible {
+  background: color-mix(in srgb, var(--accent-soft) 24%, var(--paper));
+  color: var(--ink);
+  outline: none;
+}
+
+.install-kind {
+  flex: 0 0 2.6rem;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+
+.install-option[aria-selected="true"] .install-kind {
+  color: var(--accent-ink);
+}
+
+.install-cmd {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .install code {
@@ -297,10 +350,8 @@ pre {
 }
 
 @media (prefers-reduced-motion: reduce), (prefers-reduced-data: reduce) {
-  .install::before {
-    animation: none;
-  }
-
+  .install-menu,
+  .install-caret svg,
   .install code,
   .install code.roll-out {
     transition: none;
@@ -380,7 +431,7 @@ pre {
 .proof,
 .live-loop,
 .capabilities,
-.install {
+.agent-install {
   display: flex;
   flex-direction: column;
   gap: clamp(2rem, 5vw, 3.2rem);

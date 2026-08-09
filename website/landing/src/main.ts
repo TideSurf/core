@@ -8,36 +8,87 @@ const INSTALL_COMMANDS = [
   "bun add --global @tidesurf/core",
 ];
 
-function initInstallRotator(): void {
-  const box = document.querySelector<HTMLElement>(".install");
+function initInstallPicker(): void {
+  const box = document.getElementById("install-picker");
   const text = document.getElementById("install-command-text");
   const copy = document.querySelector<HTMLButtonElement>("#install-copy-btn");
-  if (!box || !text || !copy || prefersReducedMotion()) return;
+  const caret = document.querySelector<HTMLButtonElement>("#install-menu-btn");
+  const menu = document.getElementById("install-menu");
+  if (!box || !text || !copy || !caret || !menu) return;
 
-  let index = 0;
-  let paused = false;
-  const setPaused = (value: boolean) => () => {
-    paused = value;
+  const options = Array.from(
+    menu.querySelectorAll<HTMLButtonElement>('[role="option"]')
+  );
+  if (options.length === 0) return;
+
+  const setOpen = (open: boolean): void => {
+    box.classList.toggle("is-open", open);
+    caret.setAttribute("aria-expanded", String(open));
   };
-  box.addEventListener("pointerenter", setPaused(true));
-  box.addEventListener("pointerleave", setPaused(false));
-  box.addEventListener("focusin", setPaused(true));
-  box.addEventListener("focusout", setPaused(false));
 
-  setInterval(() => {
-    if (paused || document.hidden) return;
-    index = (index + 1) % INSTALL_COMMANDS.length;
-    const next = INSTALL_COMMANDS[index];
-    text.classList.add("roll-out");
-    setTimeout(() => {
-      text.textContent = next;
-      copy.dataset.copy = next;
-      text.classList.remove("roll-out");
-      text.classList.add("roll-in");
-      void text.offsetHeight;
-      text.classList.remove("roll-in");
-    }, 190);
-  }, 3200);
+  const apply = (command: string): void => {
+    const commit = (): void => {
+      text.textContent = command;
+      copy.dataset.copy = command;
+    };
+    if (prefersReducedMotion()) {
+      commit();
+    } else {
+      text.classList.add("roll-out");
+      setTimeout(() => {
+        commit();
+        text.classList.remove("roll-out");
+        text.classList.add("roll-in");
+        void text.offsetHeight;
+        text.classList.remove("roll-in");
+      }, 190);
+    }
+    for (const option of options) {
+      option.setAttribute(
+        "aria-selected",
+        String(option.dataset.command === command)
+      );
+    }
+  };
+
+  for (const option of options) {
+    option.addEventListener("click", () => {
+      const command = option.dataset.command;
+      if (command && INSTALL_COMMANDS.includes(command)) apply(command);
+      setOpen(false);
+      caret.focus();
+    });
+  }
+
+  caret.addEventListener("click", () => {
+    setOpen(!box.classList.contains("is-open"));
+  });
+
+  document.addEventListener("pointerdown", (event) => {
+    if (event.target instanceof Node && !box.contains(event.target)) {
+      setOpen(false);
+    }
+  });
+
+  box.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      setOpen(false);
+      caret.focus();
+      return;
+    }
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    event.preventDefault();
+    setOpen(true);
+    const current = options.indexOf(
+      document.activeElement as HTMLButtonElement
+    );
+    const delta = event.key === "ArrowDown" ? 1 : -1;
+    const next =
+      current === -1
+        ? options[delta === 1 ? 0 : options.length - 1]
+        : options[(current + delta + options.length) % options.length];
+    next.focus();
+  });
 }
 
 function initCopyButtons(): void {
@@ -299,7 +350,7 @@ function init(): void {
   initTheme();
   initScrollTone();
   initCopyButtons();
-  initInstallRotator();
+  initInstallPicker();
   initWaves();
 }
 

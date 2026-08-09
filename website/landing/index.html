@@ -55,7 +55,7 @@
                 <h1 id="hero-title">Agents Surfing</h1>
                 <p class="hero-lede">Run browser tools from the shell. TideSurf keeps Chromium state between commands and turns the live DOM into compact text with current action handles.</p>
                 <div class="hero-actions" aria-label="Primary actions">
-                    <div class="install">
+                    <div class="install" id="install-picker">
                         <span class="prompt" aria-hidden="true">$</span>
                         <code id="install-command-text">brew install TideSurf/tap/tidesurf</code>
                         <button type="button" class="copy-btn patch-control" id="install-copy-btn" data-copy="brew install TideSurf/tap/tidesurf" aria-label="Copy install command">
@@ -63,6 +63,14 @@
                             <svg class="icon-check" viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6.5"/></svg>
                             <span class="copy-status visually-hidden" aria-live="polite"></span>
                         </button>
+                        <button type="button" class="install-caret" id="install-menu-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="Choose install method">
+                            <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.5l4 4 4-4"/></svg>
+                        </button>
+                        <div class="install-menu" id="install-menu" role="listbox" aria-label="Install method">
+                            <button type="button" class="install-option" role="option" aria-selected="true" data-command="brew install TideSurf/tap/tidesurf"><span class="install-kind">brew</span><span class="install-cmd">brew install TideSurf/tap/tidesurf</span></button>
+                            <button type="button" class="install-option" role="option" aria-selected="false" data-command="npm install --global @tidesurf/core"><span class="install-kind">npm</span><span class="install-cmd">npm install --global @tidesurf/core</span></button>
+                            <button type="button" class="install-option" role="option" aria-selected="false" data-command="bun add --global @tidesurf/core"><span class="install-kind">bun</span><span class="install-cmd">bun add --global @tidesurf/core</span></button>
+                        </div>
                     </div>
                     <a class="patch-control" href="#proof" style="--patch-color: var(--c-rust)">Take a look</a>
                 </div>
@@ -179,7 +187,7 @@ FORM F1
                 </dl>
             </section>
 
-            <section class="install" id="install" aria-labelledby="install-title">
+            <section class="agent-install" id="install" aria-labelledby="install-title">
                 <header class="section-intro compact-intro">
                     <h2 id="install-title">Install it as your agent tool.</h2>
                     <p>One package speaks both open packaging standards: TideSurf is an Agent Plugin with a bundled Agent Skill, and a host that loads yours.</p>
