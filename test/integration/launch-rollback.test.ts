@@ -1,4 +1,5 @@
-import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { afterAll, beforeAll, describe, expect, it, spyOn } from "bun:test";
+import { ChildProcess } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -12,6 +13,8 @@ import { join } from "node:path";
 import { TideSurf } from "../../src/tidesurf.js";
 import {
   isOwnedBrowserEndpoint,
+  releaseOwnedBrowserEndpoint,
+  unregisterOrphanedBrowser,
   verifyOwnedBrowserEndpoint,
 } from "../../src/cdp/launcher.js";
 
@@ -108,6 +111,8 @@ afterAll(() => {
 
 describe("launch rollback", () => {
   it("releases the owned-endpoint claim and orphan record when connect fails", async () => {
+    rmSync(portFile, { force: true });
+    rmSync(pidFile, { force: true });
     await expect(
       TideSurf.launch({
         chromePath: join(fixtureDir, "fake-chrome"),
@@ -126,5 +131,60 @@ describe("launch rollback", () => {
       `${process.pid}-${chromePid}.json`
     );
     expect(existsSync(orphanRecord)).toBe(false);
+  }, 30_000);
+
+  it("retains ownership and orphan bookkeeping when launch rollback cannot terminate", async () => {
+    rmSync(portFile, { force: true });
+    rmSync(pidFile, { force: true });
+    const killSpy = spyOn(ChildProcess.prototype, "kill").mockImplementation(() => {
+      throw new Error("signal rejected");
+    });
+    let failure: unknown;
+    try {
+      await TideSurf.launch({
+        chromePath: join(fixtureDir, "fake-chrome"),
+        timeout: 10_000,
+      });
+    } catch (error) {
+      failure = error;
+    } finally {
+      killSpy.mockRestore();
+    }
+
+    expect(failure).toBeInstanceOf(Error);
+    const port = readNumberFile(portFile);
+    const chromePid = readNumberFile(pidFile);
+    const orphanRecord = join(
+      tmpdir(),
+      "tidesurf-orphans",
+      `${process.pid}-${chromePid}.json`
+    );
+    const record = JSON.parse(readFileSync(orphanRecord, "utf8")) as {
+      userDataDir: string;
+    };
+
+    try {
+      expect(isOwnedBrowserEndpoint("127.0.0.1", port)).toBe(true);
+      expect(await verifyOwnedBrowserEndpoint("127.0.0.1", port)).toBe(true);
+      expect(existsSync(orphanRecord)).toBe(true);
+    } finally {
+      try {
+        process.kill(chromePid, "SIGKILL");
+      } catch {
+        // already stopped
+      }
+      const deadline = Date.now() + 2_000;
+      while (Date.now() < deadline) {
+        try {
+          process.kill(chromePid, 0);
+          await new Promise((resolveDelay) => setTimeout(resolveDelay, 20));
+        } catch {
+          break;
+        }
+      }
+      unregisterOrphanedBrowser(process.pid, chromePid);
+      releaseOwnedBrowserEndpoint("127.0.0.1", port);
+      rmSync(record.userDataDir, { recursive: true, force: true });
+    }
   }, 30_000);
 });

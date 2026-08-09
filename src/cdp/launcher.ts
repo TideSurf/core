@@ -540,16 +540,76 @@ function pidIsAlive(pid: number): boolean {
   }
 }
 
-function processCommandLine(pid: number): string | undefined {
+function parsePosixArguments(commandLine: string): string[] | undefined {
+  const args: string[] = [];
+  let value = "";
+  let started = false;
+  let quote: "'" | '"' | null = null;
+  let escaped = false;
+  for (const character of commandLine.trim()) {
+    if (escaped) {
+      value += character;
+      started = true;
+      escaped = false;
+    } else if (character === "\\" && quote !== "'") {
+      escaped = true;
+      started = true;
+    } else if (quote) {
+      if (character === quote) quote = null;
+      else value += character;
+      started = true;
+    } else if (character === "'" || character === '"') {
+      quote = character;
+      started = true;
+    } else if (/\s/.test(character)) {
+      if (started) {
+        args.push(value);
+        value = "";
+        started = false;
+      }
+    } else {
+      value += character;
+      started = true;
+    }
+  }
+  if (escaped) value += "\\";
+  if (quote) return undefined;
+  if (started) args.push(value);
+  return args;
+}
+
+function processArguments(pid: number): string[] | undefined {
   if (process.platform === "win32") return undefined;
+  if (process.platform === "linux") {
+    try {
+      const args = readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0");
+      if (args.at(-1) === "") args.pop();
+      return args.length > 0 ? args : undefined;
+    } catch {
+      return undefined;
+    }
+  }
   try {
-    return execFileSync("ps", ["-p", String(pid), "-o", "command="], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
+    const commandLine = execFileSync(
+      "ps",
+      ["-ww", "-p", String(pid), "-o", "command="],
+      {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }
+    );
+    return parsePosixArguments(commandLine);
   } catch {
     return undefined;
   }
+}
+
+function hasOwnedProfileArgument(args: readonly string[], userDataDir: string): boolean {
+  const joined = `--user-data-dir=${userDataDir}`;
+  return args.some((value, index) =>
+    value === joined ||
+    (value === "--user-data-dir" && args[index + 1] === userDataDir)
+  );
 }
 
 function isOwnedTempProfileDir(userDataDir: string): boolean {
@@ -594,12 +654,12 @@ export async function reapOrphanedBrowsers(): Promise<void> {
     // The owner is dead. Decide whether the recorded Chrome still runs.
     let chromeAlive = pidIsAlive(chromePid);
     if (chromeAlive) {
-      const commandLine = processCommandLine(chromePid);
-      if (commandLine === undefined) {
+      const args = processArguments(chromePid);
+      if (args === undefined) {
         // Cannot verify the process identity (e.g. Windows): leave it alone.
         continue;
       }
-      if (!commandLine.includes(userDataDir)) {
+      if (!hasOwnedProfileArgument(args, userDataDir)) {
         // The pid was recycled by an unrelated process; the recorded
         // Chrome is actually gone.
         chromeAlive = false;
@@ -617,17 +677,25 @@ export async function reapOrphanedBrowsers(): Promise<void> {
         await delay(25);
       }
       if (pidIsAlive(chromePid)) {
-        try {
-          process.kill(chromePid, "SIGKILL");
-        } catch {
-          // already gone
-        }
-        const killDeadline = Date.now() + 1_000;
-        while (pidIsAlive(chromePid) && Date.now() < killDeadline) {
-          await delay(25);
+        // SIGTERM may have exited the browser and allowed its pid to be
+        // recycled. Re-prove the exact profile argv before SIGKILL.
+        const args = processArguments(chromePid);
+        if (args === undefined) continue;
+        if (!hasOwnedProfileArgument(args, userDataDir)) {
+          chromeAlive = false;
+        } else {
+          try {
+            process.kill(chromePid, "SIGKILL");
+          } catch {
+            // already gone
+          }
+          const killDeadline = Date.now() + 1_000;
+          while (pidIsAlive(chromePid) && Date.now() < killDeadline) {
+            await delay(25);
+          }
         }
       }
-      if (pidIsAlive(chromePid)) continue; // survived both signals; retry later
+      if (chromeAlive && pidIsAlive(chromePid)) continue; // retry later
     }
 
     if (ownsTempDir && isOwnedTempProfileDir(userDataDir)) {
@@ -647,18 +715,43 @@ export async function reapOrphanedBrowsers(): Promise<void> {
 
 function captureStartupStderr(stream: Readable | null): {
   read: () => string;
+  announcedEndpoint: () => DevToolsActivePort | null;
   stop: () => void;
 } {
   const limit = 8_192;
   let tail = "";
+  let announced: DevToolsActivePort | null = null;
+  const readAnnouncement = (): DevToolsActivePort | null => {
+    const matches = [...tail.matchAll(/DevTools listening on (ws:\/\/\S+)/g)];
+    const value = matches.at(-1)?.[1];
+    if (!value) return null;
+    try {
+      const endpoint = new URL(value);
+      const port = Number(endpoint.port);
+      if (
+        endpoint.protocol !== "ws:" ||
+        !Number.isInteger(port) ||
+        port < 1 ||
+        port > 65_535 ||
+        !endpoint.pathname.startsWith("/devtools/browser/")
+      ) {
+        return null;
+      }
+      return { port, browserPath: endpoint.pathname };
+    } catch {
+      return null;
+    }
+  };
   const onData = (chunk: Buffer | string) => {
     tail += typeof chunk === "string" ? chunk : chunk.toString("utf8");
+    announced ??= readAnnouncement();
     if (tail.length > limit) tail = tail.slice(-limit);
   };
   stream?.on("data", onData);
   stream?.resume();
   return {
     read: () => tail.trim(),
+    announcedEndpoint: () => announced ?? readAnnouncement(),
     stop: () => stream?.removeListener("data", onData),
   };
 }
@@ -773,7 +866,8 @@ async function waitForLaunchedBrowser(
   requestedPort: number,
   userDataDir: string,
   timeout: number,
-  readStderr: () => string
+  readStderr: () => string,
+  readAnnouncedEndpoint: () => DevToolsActivePort | null
 ): Promise<DiscoverResult> {
   const deadline = Date.now() + timeout;
   let lastError: unknown;
@@ -789,48 +883,102 @@ async function waitForLaunchedBrowser(
       );
     }
 
-    let port = requestedPort;
     let active: DevToolsActivePort | null = null;
-    if (port === 0) {
-      try {
-        active = readDevToolsActivePort(userDataDir);
-        port = active?.port ?? 0;
-        if (!active) malformedMarkerSince = undefined;
-      } catch (error) {
-        lastError = error;
-        if (error instanceof ChromeLaunchError) {
-          malformedMarkerSince ??= Date.now();
-          if (Date.now() - malformedMarkerSince >= 250) throw error;
-        }
+    try {
+      active = readDevToolsActivePort(userDataDir);
+      if (!active) malformedMarkerSince = undefined;
+    } catch (error) {
+      lastError = error;
+      if (error instanceof ChromeLaunchError) {
+        malformedMarkerSince ??= Date.now();
+        if (Date.now() - malformedMarkerSince >= 250) throw error;
       }
     }
 
-    if (port !== 0) {
-      malformedMarkerSince = undefined;
-      try {
-        const probeTimeout = Math.min(500, Math.max(1, deadline - Date.now()));
-        const targets = active
-          ? await inspectMarkedEndpoint(active, probeTimeout, "Chrome readiness")
-          : await withTimeout(
-            CDP.List({ port, host: LOCAL_CDP_HOST, useHostName: true }),
-            probeTimeout,
-            "Chrome readiness"
-          );
-        const page = targets.find(
-          (target) => target.type === "page"
-        );
-        if (page) {
-          return {
-            port,
-            host: LOCAL_CDP_HOST,
-            targetId: page.id,
-            browserPath: active?.browserPath,
-          };
+    try {
+      const probeTimeout = Math.min(500, Math.max(1, deadline - Date.now()));
+      let port: number;
+      let browserPath: string;
+      let targets: Awaited<ReturnType<typeof CDP.List>>;
+
+      if (requestedPort === 0) {
+        if (!active) {
+          await delay(50);
+          continue;
         }
-      } catch (error) {
-        if (error instanceof DevToolsEndpointMismatchError) throw error;
-        lastError = error;
+        malformedMarkerSince = undefined;
+        port = active.port;
+        browserPath = active.browserPath;
+        targets = await inspectMarkedEndpoint(
+          active,
+          probeTimeout,
+          "Chrome readiness"
+        );
+      } else if (active) {
+        malformedMarkerSince = undefined;
+        if (active.port !== requestedPort) {
+          throw new DevToolsEndpointMismatchError(
+            `Launched profile reported DevTools port ${active.port}, expected ${requestedPort}`
+          );
+        }
+        port = requestedPort;
+        browserPath = active.browserPath;
+        targets = await inspectMarkedEndpoint(
+          active,
+          probeTimeout,
+          "Chrome readiness"
+        );
+      } else {
+        // An explicit port can be stolen after the availability probe. Do not
+        // trust /json/list alone: require the child process's own DevTools
+        // announcement, then match its browser websocket identity to Version.
+        const announced = readAnnouncedEndpoint();
+        if (!announced) {
+          lastError = new ChromeLaunchError(
+            "Waiting for the launched Chrome process to identify its DevTools endpoint"
+          );
+          await delay(50);
+          continue;
+        }
+        if (announced.port !== requestedPort) {
+          throw new DevToolsEndpointMismatchError(
+            `Launched Chrome announced DevTools port ${announced.port}, expected ${requestedPort}`
+          );
+        }
+        port = requestedPort;
+        browserPath = announced.browserPath;
+        const [version, listedTargets] = await withTimeout(
+          Promise.all([
+            CDP.Version({ port, host: LOCAL_CDP_HOST, useHostName: true }),
+            CDP.List({ port, host: LOCAL_CDP_HOST, useHostName: true }),
+          ]),
+          probeTimeout,
+          "Chrome readiness"
+        );
+        const actualPath = browserPathFromVersion(version);
+        if (actualPath !== browserPath) {
+          throw new DevToolsEndpointMismatchError(
+            `Launched Chrome browser endpoint ${browserPath} does not match ${actualPath}`
+          );
+        }
+        targets = listedTargets;
       }
+
+      const page = targets.find((target) => target.type === "page");
+      if (page) {
+        return {
+          port,
+          host: LOCAL_CDP_HOST,
+          targetId: page.id,
+          browserPath,
+        };
+      }
+      lastError = new ChromeLaunchError(
+        `Chrome is available on ${LOCAL_CDP_HOST}:${port}, but it has no page target`
+      );
+    } catch (error) {
+      if (error instanceof DevToolsEndpointMismatchError) throw error;
+      lastError = error;
     }
 
     await delay(50);
@@ -908,6 +1056,18 @@ export async function launchChrome(options: LaunchOptions = {}): Promise<LaunchR
     launchedProcess.once("error", () => {
       spawnFailedProcesses.add(launchedProcess);
     });
+    // Record ownership immediately after spawn. If startup rollback cannot
+    // terminate the child, a later process still has enough bookkeeping to
+    // reap it and preserve its profile.
+    if (typeof launchedProcess.pid === "number") {
+      registerOrphanedBrowser({
+        chromePid: launchedProcess.pid,
+        parentPid: process.pid,
+        userDataDir,
+        ownsTempDir,
+        createdAt: Date.now(),
+      });
+    }
     launchedProcess.stdout?.resume();
     const stderr = captureStartupStderr(launchedProcess.stderr);
 
@@ -923,39 +1083,21 @@ export async function launchChrome(options: LaunchOptions = {}): Promise<LaunchR
         requestedPort,
         userDataDir,
         options.timeout ?? 15_000,
-        stderr.read
+        stderr.read,
+        stderr.announcedEndpoint
       ),
       spawnFailure,
     ]).finally(() => {
       if (onSpawnError) launchedProcess.removeListener("error", onSpawnError);
       stderr.stop();
     });
-    let browserPath = endpoint.browserPath;
+    const browserPath = endpoint.browserPath;
     if (!browserPath) {
-      // Explicit-port launches probe via /json/list only; record the browser's
-      // identity now so later connections can re-verify ownership (the port
-      // may be recycled by a foreign Chrome after this browser dies).
-      try {
-        const version = await withTimeout(
-          CDP.Version({ port: endpoint.port, host: LOCAL_CDP_HOST, useHostName: true }),
-          1_000,
-          "Chrome identity"
-        );
-        browserPath = browserPathFromVersion(version);
-      } catch {
-        browserPath = undefined;
-      }
+      throw new ChromeLaunchError(
+        "Could not prove that the DevTools endpoint belongs to the launched Chrome"
+      );
     }
     registerOwnedBrowserEndpoint(endpoint.host, endpoint.port, browserPath);
-    if (typeof launchedProcess.pid === "number") {
-      registerOrphanedBrowser({
-        chromePid: launchedProcess.pid,
-        parentPid: process.pid,
-        userDataDir,
-        ownsTempDir,
-        createdAt: Date.now(),
-      });
-    }
     return {
       process: launchedProcess,
       ...endpoint,
@@ -964,7 +1106,7 @@ export async function launchChrome(options: LaunchOptions = {}): Promise<LaunchR
     };
   } catch (error) {
     const exited = proc ? await terminateChromeProcess(proc) : true;
-    if (proc && typeof proc.pid === "number") {
+    if (exited && proc && typeof proc.pid === "number") {
       unregisterOrphanedBrowser(process.pid, proc.pid);
     }
     const launchError = error instanceof ChromeLaunchError

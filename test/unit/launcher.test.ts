@@ -6,10 +6,13 @@ import {
   isOwnedBrowserEndpoint,
   launchChrome,
   parseDevToolsActivePort,
+  releaseOwnedBrowserEndpoint,
   readDevToolsActivePort,
   resolveChromeExecutable,
   terminateChromeProcess,
+  unregisterOrphanedBrowser,
 } from "../../src/cdp/launcher.js";
+import type { ChildProcess } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -23,6 +26,10 @@ import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CDPConnectionError, ChromeLaunchError } from "../../src/errors.js";
+import type { CDPConnection } from "../../src/cdp/connection.js";
+import { SurfingPage } from "../../src/cdp/page.js";
+import type { TabManager } from "../../src/cdp/tab-manager.js";
+import { TideSurf } from "../../src/tidesurf.js";
 
 async function listen(server: Server, host?: string): Promise<number> {
   await new Promise<void>((resolveListen, rejectListen) => {
@@ -592,7 +599,7 @@ setInterval(() => {}, 1000);
     }
   }, 20_000);
 
-  it("records a launched endpoint as an owned browser", async () => {
+  it("retains owned endpoint and orphan bookkeeping when close cannot terminate", async () => {
     if (process.platform === "win32") return;
     const server = createDevToolsServer("/devtools/browser/owned", [
       { id: "owned-page", type: "page" },
@@ -622,6 +629,7 @@ setInterval(() => {}, 1000);
 
     expect(isOwnedBrowserEndpoint("127.0.0.1", port)).toBe(false);
     let launched: Awaited<ReturnType<typeof launchChrome>> | undefined;
+    let originalKill: ChildProcess["kill"] | undefined;
     try {
       launched = await launchChrome({
         chromePath: fakeChrome,
@@ -630,8 +638,51 @@ setInterval(() => {}, 1000);
       });
       expect(launched.port).toBe(port);
       expect(isOwnedBrowserEndpoint(launched.host, launched.port)).toBe(true);
+      if (typeof launched.process.pid !== "number") {
+        throw new Error("fake Chrome has no pid");
+      }
+      const orphanRecord = join(
+        tmpdir(),
+        "tidesurf-orphans",
+        `${process.pid}-${launched.process.pid}.json`
+      );
+      expect(existsSync(orphanRecord)).toBe(true);
+
+      const conn = {
+        client: { close: async () => {} },
+      } as unknown as CDPConnection;
+      const surf = Reflect.construct(TideSurf, [
+        launched.process,
+        new SurfingPage(conn),
+        {} as TabManager,
+        profile,
+        false,
+        false,
+        "owned-page",
+        undefined,
+        [],
+        {},
+        undefined,
+        launched.host,
+        launched.port,
+      ]) as TideSurf;
+      originalKill = launched.process.kill;
+      Reflect.set(launched.process, "kill", () => {
+        throw new Error("signal rejected");
+      });
+
+      await expect(surf.close()).rejects.toBeInstanceOf(ChromeLaunchError);
+      expect(isOwnedBrowserEndpoint(launched.host, launched.port)).toBe(true);
+      expect(existsSync(orphanRecord)).toBe(true);
     } finally {
-      if (launched) await terminateChromeProcess(launched.process, 500);
+      if (launched) {
+        if (originalKill) Reflect.set(launched.process, "kill", originalKill);
+        await terminateChromeProcess(launched.process, 500);
+        if (typeof launched.process.pid === "number") {
+          unregisterOrphanedBrowser(process.pid, launched.process.pid);
+        }
+        releaseOwnedBrowserEndpoint(launched.host, launched.port);
+      }
       await closeServer(server);
       rmSync(root, { recursive: true, force: true });
     }
@@ -729,6 +780,86 @@ setInterval(() => {}, 1000);
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it("rejects a foreign endpoint that steals an explicit port after the probe", async () => {
+    if (process.platform === "win32") return;
+    const reservation = createServer();
+    const port = await listen(reservation, "127.0.0.1");
+    await closeServer(reservation);
+
+    const root = mkdtempSync(join(tmpdir(), "tidesurf-explicit-foreign-"));
+    const profile = join(root, "profile");
+    const foreignPidFile = join(root, "foreign.pid");
+    const fakeChrome = join(root, "fake-chrome");
+    const foreignSource = `
+const http = require("node:http");
+const port = Number(process.env.TIDESURF_FOREIGN_PORT);
+const server = http.createServer((request, response) => {
+  let body;
+  if (request.url === "/json/version") {
+    body = { webSocketDebuggerUrl: "ws://127.0.0.1:" + port + "/devtools/browser/foreign" };
+  } else if (request.url === "/json/list" || request.url === "/json") {
+    body = [{ id: "foreign-page", type: "page" }];
+  } else {
+    response.writeHead(404);
+    response.end();
+    return;
+  }
+  response.writeHead(200, { "content-type": "application/json", connection: "close" });
+  response.end(JSON.stringify(body));
+});
+server.listen(port, "127.0.0.1");
+setInterval(() => {}, 1000);
+`;
+    writeFileSync(
+      fakeChrome,
+      `#!/usr/bin/env node
+const { spawn } = require("node:child_process");
+const { writeFileSync } = require("node:fs");
+const portArg = process.argv.find((value) => value.startsWith("--remote-debugging-port="));
+if (!portArg) process.exit(2);
+const port = portArg.slice("--remote-debugging-port=".length);
+const foreign = spawn(process.execPath, ["-e", ${JSON.stringify(foreignSource)}], {
+  env: { ...process.env, TIDESURF_FOREIGN_PORT: port },
+  stdio: "ignore",
+});
+writeFileSync(${JSON.stringify(foreignPidFile)}, String(foreign.pid));
+const stop = () => {
+  try { foreign.kill("SIGKILL"); } catch {}
+  process.exit(0);
+};
+process.on("SIGTERM", stop);
+process.on("SIGINT", stop);
+setInterval(() => {}, 1000);
+`,
+      { mode: 0o755 }
+    );
+    chmodSync(fakeChrome, 0o755);
+
+    try {
+      await expect(
+        launchChrome({
+          chromePath: fakeChrome,
+          userDataDir: profile,
+          port,
+          timeout: 1_200,
+        })
+      ).rejects.toThrow("Timed out waiting for Chrome DevTools");
+      expect(isOwnedBrowserEndpoint("127.0.0.1", port)).toBe(false);
+    } finally {
+      if (existsSync(foreignPidFile)) {
+        const foreignPid = Number(readFileSync(foreignPidFile, "utf8"));
+        if (Number.isInteger(foreignPid) && foreignPid > 0) {
+          try {
+            process.kill(foreignPid, "SIGKILL");
+          } catch {
+            // already stopped with the fake parent
+          }
+        }
+      }
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 10_000);
 
   it("fails fast on a malformed launch marker and cleans the child/profile", async () => {
     if (process.platform === "win32") return;

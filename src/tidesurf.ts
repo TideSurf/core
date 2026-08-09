@@ -332,15 +332,15 @@ export class TideSurf {
           new ChromeLaunchError("Owned Chrome did not stop during setup rollback")
         );
       }
-      // The browser is dead: drop the ownership claim launchChrome recorded
-      // and the orphan record, so a foreign Chrome that recycles this port is
-      // never treated as TideSurf-owned (browser-wide permission resets) and
-      // the reaper never scans a stale entry. The disconnect-event cleanup
-      // never ran because no connection was established.
-      if (typeof proc.pid === "number") {
-        unregisterOrphanedBrowser(process.pid, proc.pid);
+      // Drop ownership only after termination is confirmed. If rollback could
+      // not stop Chrome, retain both the endpoint claim and orphan record so
+      // the live owned process is not forgotten and can be reaped later.
+      if (exited) {
+        if (typeof proc.pid === "number") {
+          unregisterOrphanedBrowser(process.pid, proc.pid);
+        }
+        releaseOwnedBrowserEndpoint(host, port);
       }
-      releaseOwnedBrowserEndpoint(host, port);
       if (ownsTempDir && exited) {
         try {
           await rm(userDataDir, { recursive: true, force: true });
@@ -748,13 +748,12 @@ export class TideSurf {
     );
 
     const proc = this.chromeProcess;
-    this.chromeProcess = null;
     const exited = proc ? await terminateChromeProcess(proc) : true;
 
-    if (proc) {
-      // The browser is gone: drop ownership and orphan-registry records so a
-      // foreign Chrome that later occupies this endpoint is never treated
-      // as TideSurf-owned.
+    if (proc && exited) {
+      this.chromeProcess = null;
+      // The browser is confirmed gone: now drop endpoint ownership and the
+      // orphan record. Failed termination deliberately retains both.
       if (typeof proc.pid === "number") {
         unregisterOrphanedBrowser(process.pid, proc.pid);
       }
