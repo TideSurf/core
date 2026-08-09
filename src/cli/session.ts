@@ -61,6 +61,7 @@ export interface SessionPaths {
   directory: string;
   stateFile: string;
   lockFile: string;
+  mutationFile: string;
   logFile: string;
   socketPath: string;
 }
@@ -184,7 +185,7 @@ export function getSessionPaths(sessionName: string): SessionPaths {
   let key = sessionKey(directory, session);
   if (
     process.platform !== "win32" &&
-    Buffer.byteLength(join(directory, `${key}.sock`)) >
+    Buffer.byteLength(join(directory, `${key}.g-${"x".repeat(10)}.sock`)) >
       MAX_UNIX_SOCKET_PATH_BYTES
   ) {
     const owner = process.getuid?.() ?? "user";
@@ -215,8 +216,23 @@ export function getSessionPaths(sessionName: string): SessionPaths {
     socketPath,
     stateFile: join(directory, `${key}.json`),
     lockFile: join(directory, `${key}.lock`),
+    mutationFile: join(directory, `${key}.mutation`),
     logFile: join(directory, `${key}.log`),
   };
+}
+
+/** Give each daemon generation its own endpoint so late close is harmless. */
+export function getSessionGenerationSocketPath(
+  paths: SessionPaths,
+  startupId: string
+): string {
+  const generation = createHash("sha256")
+    .update(startupId)
+    .digest("hex")
+    .slice(0, 10);
+  return process.platform === "win32"
+    ? `${paths.socketPath}-${generation}`
+    : paths.socketPath.replace(/\.sock$/, `.g-${generation}.sock`);
 }
 
 function isMissingOrMalformedJson(error: unknown): boolean {
@@ -238,8 +254,14 @@ export function readSessionState(paths: SessionPaths): SessionState | null {
       return null;
     }
     const state = parsed as Record<string, unknown>;
+    const startupId = state["startupId"];
+    const socketPath = state["socketPath"];
+    const validSocketPath = socketPath === paths.socketPath || (
+      typeof startupId === "string" &&
+      socketPath === getSessionGenerationSocketPath(paths, startupId)
+    );
     if (
-      state["socketPath"] !== paths.socketPath ||
+      !validSocketPath ||
       typeof state["secret"] !== "string" ||
       !Number.isInteger(state["pid"]) ||
       (state["pid"] as number) <= 0 ||
@@ -260,10 +282,125 @@ export function readSessionState(paths: SessionPaths): SessionState | null {
   }
 }
 
-export function writeSessionState(paths: SessionPaths, state: SessionState): void {
+interface SessionMutationLease {
+  readonly token: string;
+  release(): void;
+}
+
+const MUTATION_LOCK_WAIT_MS = 500;
+const MUTATION_RETRY_ARRAY = new Int32Array(new SharedArrayBuffer(4));
+
+function tryAcquireSessionMutationLock(
+  paths: SessionPaths
+): SessionMutationLease | null {
+  const token = randomUUID();
+  let descriptor: number;
+  try {
+    descriptor = openSync(paths.mutationFile, "wx", 0o600);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") return null;
+    throw error;
+  }
+  try {
+    writeFileSync(descriptor, `${JSON.stringify({ pid: process.pid, token })}\n`);
+  } catch (error) {
+    closeSync(descriptor);
+    rmSync(paths.mutationFile, { force: true });
+    throw error;
+  }
+  closeSync(descriptor);
+  let released = false;
+  return {
+    token,
+    release: () => {
+      if (released) return;
+      released = true;
+      // Cooperative publishers cannot replace an extant exclusive lock. The
+      // token check also makes release fail closed if an external actor has
+      // tampered with the lock path.
+      try {
+        const current = JSON.parse(
+          readFileSync(paths.mutationFile, "utf8")
+        ) as { token?: unknown };
+        if (current.token === token) rmSync(paths.mutationFile, { force: true });
+      } catch {
+        // A missing or altered lock is never grounds to unlink another lease.
+      }
+    },
+  };
+}
+
+function withSessionMutationLockSync<T>(
+  paths: SessionPaths,
+  operation: () => T
+): T {
+  const deadline = Date.now() + MUTATION_LOCK_WAIT_MS;
+  let lease: SessionMutationLease | null = null;
+  while (!(lease = tryAcquireSessionMutationLock(paths))) {
+    if (Date.now() >= deadline) {
+      throw new SessionStateError(
+        `Session lifecycle mutation is busy: ${paths.stateFile}`
+      );
+    }
+    Atomics.wait(MUTATION_RETRY_ARRAY, 0, 0, 2);
+  }
+  try {
+    return operation();
+  } finally {
+    lease.release();
+  }
+}
+
+async function acquireSessionMutationLock(
+  paths: SessionPaths,
+  timeoutMs: number
+): Promise<SessionMutationLease> {
+  const deadline = Date.now() + timeoutMs;
+  let lease: SessionMutationLease | null = null;
+  while (!(lease = tryAcquireSessionMutationLock(paths))) {
+    if (Date.now() >= deadline) {
+      throw new SessionStateError(
+        `Session lifecycle mutation is busy: ${paths.stateFile}`
+      );
+    }
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 5));
+  }
+  return lease;
+}
+
+/**
+ * Serialize an asynchronous endpoint publication with every state publisher
+ * and remover. A crashed lease is deliberately not stolen: lifecycle
+ * availability fails closed rather than risking a replacement generation.
+ */
+export async function withSessionMutationLock<T>(
+  paths: SessionPaths,
+  operation: () => T | Promise<T>,
+  timeoutMs = 2_000
+): Promise<T> {
+  const lease = await acquireSessionMutationLock(paths, timeoutMs);
+  try {
+    return await operation();
+  } finally {
+    lease.release();
+  }
+}
+
+function writeSessionStateUnlocked(
+  paths: SessionPaths,
+  state: SessionState
+): void {
   const temporary = `${paths.stateFile}.${process.pid}.${randomUUID()}.tmp`;
-  writeFileSync(temporary, `${JSON.stringify(state)}\n`, { mode: 0o600 });
-  renameSync(temporary, paths.stateFile);
+  try {
+    writeFileSync(temporary, `${JSON.stringify(state)}\n`, { mode: 0o600 });
+    renameSync(temporary, paths.stateFile);
+  } finally {
+    rmSync(temporary, { force: true });
+  }
+}
+
+export function writeSessionState(paths: SessionPaths, state: SessionState): void {
+  withSessionMutationLockSync(paths, () => writeSessionStateUnlocked(paths, state));
 }
 
 function isSameSessionGeneration(
@@ -293,6 +430,44 @@ export function writeSessionStateIfCurrent(
   expected: SessionState,
   next: SessionState
 ): boolean {
+  return withSessionMutationLockSync(paths, () => {
+    const lock = readStartupLock(paths);
+    if (
+      !isSameSessionGeneration(readSessionState(paths), expected) ||
+      (lock !== null && lock.startupId !== expected.startupId)
+    ) {
+      return false;
+    }
+    writeSessionStateUnlocked(paths, next);
+    return true;
+  });
+}
+
+export function removeSessionFiles(paths: SessionPaths, removeLog = false): void {
+  withSessionMutationLockSync(paths, () => {
+    const current = readSessionState(paths);
+    if (process.platform !== "win32") {
+      if (current) rmSync(current.socketPath, { force: true });
+      if (!current || current.socketPath !== paths.socketPath) {
+        rmSync(paths.socketPath, { force: true });
+      }
+    }
+    rmSync(paths.stateFile, { force: true });
+    rmSync(paths.lockFile, { force: true });
+    if (removeLog) rmSync(paths.logFile, { force: true });
+  });
+}
+
+/**
+ * Remove shared session artifacts only while they still belong to `expected`.
+ * The ownership check and final mutations share one exclusive lease, while
+ * the endpoint path itself is generation-specific.
+ */
+function removeSessionFilesIfCurrentUnlocked(
+  paths: SessionPaths,
+  expected: SessionState,
+  removeLog: boolean
+): boolean {
   const lock = readStartupLock(paths);
   if (
     !isSameSessionGeneration(readSessionState(paths), expected) ||
@@ -300,52 +475,26 @@ export function writeSessionStateIfCurrent(
   ) {
     return false;
   }
-  writeSessionState(paths, next);
+
+  // The caller's mutation lease covers the ownership check and every final
+  // unlink, closing the former generation-check TOCTOU window.
+  if (process.platform !== "win32") {
+    rmSync(expected.socketPath, { force: true });
+  }
+  if (removeLog) rmSync(paths.logFile, { force: true });
+  rmSync(paths.stateFile, { force: true });
+  removeStartupLockUnlocked(paths, expected.startupId);
   return true;
 }
 
-export function removeSessionFiles(paths: SessionPaths, removeLog = false): void {
-  rmSync(paths.stateFile, { force: true });
-  rmSync(paths.lockFile, { force: true });
-  if (process.platform !== "win32") rmSync(paths.socketPath, { force: true });
-  if (removeLog) rmSync(paths.logFile, { force: true });
-}
-
-/**
- * Remove shared session artifacts only while they still belong to `expected`.
- * The state file is removed last so a replacement generation makes every
- * preceding identity check fail closed rather than losing its endpoint.
- */
 export function removeSessionFilesIfCurrent(
   paths: SessionPaths,
   expected: SessionState,
   removeLog = false
 ): boolean {
-  const stillOwned = () => {
-    const lock = readStartupLock(paths);
-    return (
-      isSameSessionGeneration(readSessionState(paths), expected) &&
-      (lock === null || lock.startupId === expected.startupId)
-    );
-  };
-  if (!stillOwned()) return false;
-
-  if (process.platform !== "win32") {
-    rmSync(paths.socketPath, { force: true });
-  }
-  if (!stillOwned()) return false;
-
-  if (removeLog) {
-    rmSync(paths.logFile, { force: true });
-    if (!stillOwned()) return false;
-  }
-
-  rmSync(paths.stateFile, { force: true });
-  // Keep this generation's lock until every shared artifact is gone. A rival
-  // startup must claim a different lock before it can publish replacement
-  // state, which makes the checks above fail before touching its files.
-  removeStartupLock(paths, expected.startupId);
-  return true;
+  return withSessionMutationLockSync(paths, () =>
+    removeSessionFilesIfCurrentUnlocked(paths, expected, removeLog)
+  );
 }
 
 /** Remove only this generation's startup lock. */
@@ -353,8 +502,32 @@ export function removeSessionLockIfCurrent(
   paths: SessionPaths,
   expected: SessionState
 ): boolean {
-  if (!isSessionStateCurrent(paths, expected)) return false;
-  return removeStartupLock(paths, expected.startupId);
+  return withSessionMutationLockSync(paths, () => {
+    if (!isSessionStateCurrent(paths, expected)) return false;
+    return removeStartupLockUnlocked(paths, expected.startupId);
+  });
+}
+
+/**
+ * Remove a stale Unix endpoint and publish a server only while `expected`
+ * owns state. The async bind is covered by the same mutation lease as the
+ * final unlink, so no replacement state publisher can enter that window.
+ */
+export async function publishSessionEndpointIfCurrent(
+  paths: SessionPaths,
+  expected: SessionState,
+  publish: () => void | Promise<void>
+): Promise<boolean> {
+  return withSessionMutationLock(paths, async () => {
+    if (!isSameSessionGeneration(readSessionState(paths), expected)) return false;
+    const lock = readStartupLock(paths);
+    if (lock !== null && lock.startupId !== expected.startupId) return false;
+    if (process.platform !== "win32") {
+      rmSync(expected.socketPath, { force: true });
+    }
+    await publish();
+    return true;
+  });
 }
 
 export function isProcessRunning(pid: number): boolean {
@@ -536,36 +709,73 @@ async function isExpectedDaemonProcess(
   }));
 }
 
-async function terminateDaemon(
+export type DaemonTerminationOutcome =
+  | "not-running"
+  | "terminated"
+  | "identity-unverified"
+  | "survived";
+
+/**
+ * Signal a recorded daemon only after proving its complete startup identity.
+ * The explicit outcome forces callers to distinguish confirmed death from an
+ * unverifiable or surviving live pid.
+ */
+export async function terminateDaemon(
   state: SessionState,
   paths: SessionPaths
-): Promise<void> {
+): Promise<DaemonTerminationOutcome> {
   const { pid } = state;
-  if (pid === process.pid) return;
-  if (!(await isExpectedDaemonProcess(state, paths))) return;
+  if (!isProcessRunning(pid)) return "not-running";
+  if (pid === process.pid) return "identity-unverified";
+  if (!(await isExpectedDaemonProcess(state, paths))) {
+    return isProcessRunning(pid) ? "identity-unverified" : "not-running";
+  }
   try {
     process.kill(pid, "SIGTERM");
   } catch {
-    return;
+    return isProcessRunning(pid) ? "survived" : "terminated";
   }
   const termDeadline = Date.now() + 5_000;
   while (isProcessRunning(pid) && Date.now() < termDeadline) {
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
   }
-  if (!isProcessRunning(pid)) return;
+  if (!isProcessRunning(pid)) return "terminated";
 
   // The pid can be recycled after SIGTERM. Re-read its complete argv before
   // escalating so SIGKILL is never sent on the strength of an old handle.
-  if (!(await isExpectedDaemonProcess(state, paths))) return;
+  if (!(await isExpectedDaemonProcess(state, paths))) {
+    return isProcessRunning(pid) ? "identity-unverified" : "terminated";
+  }
   try {
     process.kill(pid, "SIGKILL");
   } catch {
-    return;
+    return isProcessRunning(pid) ? "survived" : "terminated";
   }
   const killDeadline = Date.now() + 1_000;
   while (isProcessRunning(pid) && Date.now() < killDeadline) {
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
   }
+  return isProcessRunning(pid) ? "survived" : "terminated";
+}
+
+function assertDaemonCanBeReplaced(
+  state: SessionState,
+  outcome: DaemonTerminationOutcome
+): void {
+  if (outcome === "terminated" || outcome === "not-running") return;
+  const reason = outcome === "identity-unverified"
+    ? "its command identity could not be verified"
+    : "it survived SIGTERM and SIGKILL";
+  throw new SessionStateError(
+    `Refusing to replace live session daemon ${state.pid}: ${reason}`
+  );
+}
+
+async function terminateDaemonForReplacement(
+  state: SessionState,
+  paths: SessionPaths
+): Promise<void> {
+  assertDaemonCanBeReplaced(state, await terminateDaemon(state, paths));
 }
 
 function removeEndpointFiles(
@@ -806,7 +1016,7 @@ function readStartupLock(paths: SessionPaths): StartupLock | null {
   }
 }
 
-function removeStartupLock(
+function removeStartupLockUnlocked(
   paths: SessionPaths,
   startupId: string | undefined
 ): boolean {
@@ -817,26 +1027,37 @@ function removeStartupLock(
   return true;
 }
 
+function removeStartupLock(
+  paths: SessionPaths,
+  startupId: string | undefined
+): boolean {
+  return withSessionMutationLockSync(paths, () =>
+    removeStartupLockUnlocked(paths, startupId)
+  );
+}
+
 // Delete only the exact lock instance we observed. A replacement startup can
 // reuse the canonical path without an older finally block deleting its lock.
 function removeObservedLock(
   paths: SessionPaths,
   observed: StartupLock | null
 ): void {
-  const latest = readStartupLock(paths);
-  if (observed) {
-    if (
-      !latest ||
-      latest.pid !== observed.pid ||
-      latest.startupId !== observed.startupId ||
-      latest.createdAt !== observed.createdAt
-    ) {
+  withSessionMutationLockSync(paths, () => {
+    const latest = readStartupLock(paths);
+    if (observed) {
+      if (
+        !latest ||
+        latest.pid !== observed.pid ||
+        latest.startupId !== observed.startupId ||
+        latest.createdAt !== observed.createdAt
+      ) {
+        return;
+      }
+    } else if (latest !== null) {
       return;
     }
-  } else if (latest !== null) {
-    return;
-  }
-  rmSync(paths.lockFile, { force: true });
+    rmSync(paths.lockFile, { force: true });
+  });
 }
 
 export interface EnsureSessionOptions {
@@ -875,7 +1096,9 @@ async function ensureSessionAttempt(
       return verifyCompatibleSession(current, options);
     } catch (error) {
       if (isProcessRunning(current.pid) && !isStaleEndpointError(error)) throw error;
-      if (isProcessRunning(current.pid)) await terminateDaemon(current, paths);
+      if (isProcessRunning(current.pid)) {
+        await terminateDaemonForReplacement(current, paths);
+      }
       removeEndpointFiles(paths, current);
     }
   }
@@ -894,6 +1117,7 @@ async function ensureSessionAttempt(
       await sendSessionRequest(latest, { method: "ping" }, 500);
       return verifyCompatibleSession(latest, options);
     }
+    await terminateDaemonForReplacement(current, paths);
     removeEndpointFiles(paths, current);
     removeObservedLock(paths, lock);
   }
@@ -914,9 +1138,11 @@ async function ensureSessionAttempt(
           startupId,
           createdAt: Date.now(),
         };
-        writeFileSync(paths.lockFile, `${JSON.stringify(candidateLock)}\n`, {
-          flag: "wx",
-          mode: 0o600,
+        withSessionMutationLockSync(paths, () => {
+          writeFileSync(paths.lockFile, `${JSON.stringify(candidateLock)}\n`, {
+            flag: "wx",
+            mode: 0o600,
+          });
         });
         ownedLock = candidateLock;
         ownsLock = true;
@@ -947,6 +1173,10 @@ async function ensureSessionAttempt(
           await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
           continue;
         }
+        if (current && !current.ready && isProcessRunning(current.pid)) {
+          await terminateDaemonForReplacement(current, paths);
+          removeEndpointFiles(paths, current);
+        }
         removeObservedLock(paths, lock);
       }
     }
@@ -961,7 +1191,9 @@ async function ensureSessionAttempt(
         return verifyCompatibleSession(raced, options);
       } catch (error) {
         if (isProcessRunning(raced.pid) && !isStaleEndpointError(error)) throw error;
-        if (isProcessRunning(raced.pid)) await terminateDaemon(raced, paths);
+        if (isProcessRunning(raced.pid)) {
+          await terminateDaemonForReplacement(raced, paths);
+        }
         removeEndpointFiles(paths, raced);
       }
     }
@@ -972,7 +1204,7 @@ async function ensureSessionAttempt(
       version: VERSION,
       session: options.session,
       secret,
-      socketPath: paths.socketPath,
+      socketPath: getSessionGenerationSocketPath(paths, startupId),
       config: options.config,
       pid: process.pid,
       ready: false,
@@ -1086,7 +1318,9 @@ export async function ensureSessionRequest<T>(
       };
     } catch (error) {
       if (!isStaleEndpointError(error)) throw error;
-      if (isProcessRunning(compatible.pid)) await terminateDaemon(compatible, paths);
+      if (isProcessRunning(compatible.pid)) {
+        await terminateDaemonForReplacement(compatible, paths);
+      }
       removeEndpointFiles(paths, compatible);
     }
   }
@@ -1152,7 +1386,9 @@ export async function sendLiveSessionRequest<T>(
     };
   } catch (error) {
     if (!isStaleEndpointError(error)) throw error;
-    if (isProcessRunning(ready.pid)) await terminateDaemon(ready, paths);
+    if (isProcessRunning(ready.pid)) {
+      await terminateDaemonForReplacement(ready, paths);
+    }
     removeSessionFilesIfCurrent(paths, ready);
     return null;
   }

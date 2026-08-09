@@ -7,11 +7,25 @@ export interface DaemonStartArgs {
   startupToken: string;
 }
 
+const ENCODED_PATH_PREFIX = "base64url:";
+
+function encodeStateFile(path: string): string {
+  return `${ENCODED_PATH_PREFIX}${Buffer.from(path, "utf8").toString("base64url")}`;
+}
+
+function decodeStateFile(value: string): string | undefined {
+  if (!value.startsWith(ENCODED_PATH_PREFIX)) return undefined;
+  const encoded = value.slice(ENCODED_PATH_PREFIX.length);
+  if (!encoded) return undefined;
+  const decoded = Buffer.from(encoded, "base64url").toString("utf8");
+  return encodeStateFile(decoded) === value ? decoded : undefined;
+}
+
 export function buildDaemonArgv(args: DaemonStartArgs): string[] {
   return [
     DAEMON_COMMAND,
     "--state-file",
-    args.stateFile,
+    encodeStateFile(args.stateFile),
     "--startup-token",
     args.startupToken,
   ];
@@ -19,24 +33,25 @@ export function buildDaemonArgv(args: DaemonStartArgs): string[] {
 
 function daemonArgvError(): Error {
   const error = new Error(
-    "Daemon requires exactly __daemon --state-file <path> --startup-token <token>"
+    "Daemon requires exactly __daemon --state-file <encoded-path> --startup-token <token>"
   );
   error.name = "SessionProtocolError";
   return error;
 }
 
 export function parseDaemonArgv(argv: string[]): DaemonStartArgs {
+  const stateFile = argv[2] ? decodeStateFile(argv[2]) : undefined;
   if (
     argv.length !== 5 ||
     argv[0] !== DAEMON_COMMAND ||
     argv[1] !== "--state-file" ||
-    !argv[2] ||
+    !stateFile ||
     argv[3] !== "--startup-token" ||
     !argv[4]
   ) {
     throw daemonArgvError();
   }
-  return { stateFile: argv[2], startupToken: argv[4] };
+  return { stateFile, startupToken: argv[4] };
 }
 
 /** Match the complete internal daemon argv suffix using exact tokens. */

@@ -47,17 +47,45 @@ function endpointFromUrl(value: string): { host: string; port: number } {
   return { host: url.hostname.replace(/^\[|\]$/g, ""), port };
 }
 
-/** Grace period for in-flight operations before close() proceeds anyway. */
-const CLOSE_DRAIN_TIMEOUT_MS = 10_000;
+/** Must finish before stale daemon recovery escalates to SIGKILL at 5s. */
+const DEFAULT_CLOSE_TIMEOUT_MS = 4_000;
+
+function closeTimeout(label: string): CDPConnectionError {
+  return new CDPConnectionError(
+    `${label} did not finish before the browser close deadline`
+  );
+}
+
+async function settleByDeadline<T>(
+  promise: Promise<T>,
+  deadline: number,
+  label: string
+): Promise<T> {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) throw closeTimeout(label);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(closeTimeout(label)), remaining);
+        timer.unref?.();
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 export class BrowserController {
   private readonly config: SessionConfig;
   private browser: TideSurf | null = null;
   private source: "launched" | "attached" | undefined;
   private opening: Promise<TideSurf> | null = null;
-  private disposal: Promise<void> | null = null;
   private operationTail: Promise<void> = Promise.resolve();
   private readonly browserFreeOperations = new Set<Promise<unknown>>();
+  private readonly browsersToClose = new Set<TideSurf>();
+  private readonly browserCloseAttempts = new Map<TideSurf, Promise<void>>();
   private closing: Promise<void> | null = null;
   private closed = false;
   private readonly dispatchOptions: ToolDispatchOptions;
@@ -106,15 +134,10 @@ export class BrowserController {
     if (connected) return browser;
     this.browser = null;
     this.source = undefined;
-    // Track the disposal so acquire() can wait for the old Chrome to fully
-    // terminate before relaunching with the same profile (a fire-and-forget
-    // close races the relaunch into "profile is already active").
-    const disposal = browser.close()
-      .catch(() => undefined)
-      .finally(() => {
-        if (this.disposal === disposal) this.disposal = null;
-      });
-    this.disposal = disposal;
+    // Preserve failed disposal for a later acquire()/close() retry. Starting
+    // it now tears down CDP promptly instead of waiting behind queued work.
+    this.retainBrowserForClose(browser);
+    void this.startBrowserClose(browser).catch(() => undefined);
     return null;
   }
 
@@ -157,18 +180,42 @@ export class BrowserController {
     const browser = this.liveBrowser();
     if (browser) return browser;
     if (!this.opening) {
-      this.opening = (async () => {
-        // Serialize acquisition behind any in-flight disposal of a dead
-        // handle's browser (fast-path: no disposal, no deferral).
-        const pendingDisposal = this.disposal;
-        if (pendingDisposal) await pendingDisposal;
-        return this.acquire();
-      })().then((browser) => {
-        this.browser = browser;
-        return browser;
-      }).finally(() => {
-        this.opening = null;
-      });
+      const opening = (async () => {
+        // A dead browser's failed close is retried before reusing its profile.
+        // Keep the empty fast path synchronous so an accepted acquisition
+        // starts before a same-turn close request can cancel it.
+        if (this.browsersToClose.size > 0) {
+          await this.closeRetainedBrowsers(
+            Date.now() + Math.min(
+              this.config.timeout ?? DEFAULT_CLOSE_TIMEOUT_MS,
+              DEFAULT_CLOSE_TIMEOUT_MS
+            )
+          );
+        }
+        if (this.closed) {
+          throw new CDPConnectionError("Browser controller is closed");
+        }
+        const acquired = await this.acquire();
+        if (this.closed) {
+          // close() never waits unbounded for acquisition. If it resolves
+          // after the deadline, this continuation still owns and cleans it.
+          this.source = undefined;
+          this.retainBrowserForClose(acquired);
+          void this.startBrowserClose(acquired).catch(() => undefined);
+          return acquired;
+        }
+        this.browser = acquired;
+        return acquired;
+      })();
+      this.opening = opening;
+      void opening.then(
+        () => {
+          if (this.opening === opening) this.opening = null;
+        },
+        () => {
+          if (this.opening === opening) this.opening = null;
+        }
+      );
     }
     return this.opening;
   }
@@ -350,30 +397,101 @@ export class BrowserController {
     return result;
   }
 
-  async close(): Promise<void> {
+  private retainBrowserForClose(browser: TideSurf): void {
+    this.browsersToClose.add(browser);
+  }
+
+  private startBrowserClose(
+    browser: TideSurf,
+    deadline = Date.now() + DEFAULT_CLOSE_TIMEOUT_MS
+  ): Promise<void> {
+    const existing = this.browserCloseAttempts.get(browser);
+    if (existing) return existing;
+    this.retainBrowserForClose(browser);
+    const attempt = (async () => {
+      const close = browser.close as (deadline?: number) => Promise<void>;
+      await close.call(browser, deadline);
+      this.browsersToClose.delete(browser);
+    })();
+    this.browserCloseAttempts.set(browser, attempt);
+    void attempt.then(
+      () => {
+        if (this.browserCloseAttempts.get(browser) === attempt) {
+          this.browserCloseAttempts.delete(browser);
+        }
+      },
+      () => {
+        if (this.browserCloseAttempts.get(browser) === attempt) {
+          this.browserCloseAttempts.delete(browser);
+        }
+      }
+    );
+    return attempt;
+  }
+
+  private async closeRetainedBrowsers(deadline: number): Promise<void> {
+    const attempts = [...this.browsersToClose].map((browser) =>
+      this.startBrowserClose(browser, deadline)
+    );
+    if (attempts.length === 0) return;
+    const results = await settleByDeadline(
+      Promise.allSettled(attempts),
+      deadline,
+      "Browser disposal"
+    );
+    const failures = results.filter(
+      (result): result is PromiseRejectedResult => result.status === "rejected"
+    );
+    if (failures.length === 1 && failures[0].reason instanceof Error) {
+      throw failures[0].reason;
+    }
+    if (failures.length > 0) {
+      throw new CDPConnectionError("Failed to close browser controller resources", {
+        cause: new AggregateError(
+          failures.map((failure) => failure.reason),
+          "Browser controller close failures"
+        ),
+      });
+    }
+  }
+
+  async close(
+    deadline = Date.now() + DEFAULT_CLOSE_TIMEOUT_MS
+  ): Promise<void> {
     if (this.closing) return this.closing;
     this.closed = true;
-    this.closing = (async () => {
-      // Bound the drain: closing the browser tears down the CDP socket,
-      // which is also what unblocks a wedged in-flight operation.
-      let drainTimer!: ReturnType<typeof setTimeout>;
-      await Promise.race([
-        Promise.allSettled([
-          this.operationTail,
-          ...this.browserFreeOperations,
-        ]),
-        new Promise<void>((resolve) => {
-          drainTimer = setTimeout(resolve, CLOSE_DRAIN_TIMEOUT_MS);
-        }),
-      ]);
-      clearTimeout(drainTimer);
-      await this.opening?.catch(() => undefined);
-      await this.disposal;
+    const closing = (async () => {
       const browser = this.browser;
       this.browser = null;
       this.source = undefined;
-      if (browser) await browser.close();
+      if (browser) this.retainBrowserForClose(browser);
+
+      // Start browser cancellation before draining operations. Closing CDP is
+      // what unblocks most wedged browser work, and every wait below shares
+      // this one absolute deadline.
+      const resources = this.closeRetainedBrowsers(deadline);
+      const opening = this.opening;
+      const openingSettled = opening
+        ? opening.then(() => undefined, () => undefined)
+        : Promise.resolve();
+      const drain = Promise.allSettled([
+        this.operationTail,
+        ...this.browserFreeOperations,
+      ]);
+      await settleByDeadline(
+        Promise.all([resources, openingSettled, drain]),
+        deadline,
+        "Browser controller close"
+      );
+      // An acquisition can resolve while the first wait is settling and add a
+      // late browser. Close that retained handle with the remaining budget.
+      await this.closeRetainedBrowsers(deadline);
     })();
-    return this.closing;
+    this.closing = closing;
+    try {
+      await closing;
+    } finally {
+      if (this.closing === closing) this.closing = null;
+    }
   }
 }

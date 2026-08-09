@@ -166,6 +166,121 @@ describe("BrowserController browser-free lifecycle", () => {
   });
 });
 
+describe("BrowserController bounded close", () => {
+  it("returns by one deadline and cleans an acquisition that resolves late", async () => {
+    const controller = new BrowserController(sessionConfig());
+    const { surf } = surfInstance();
+    let releaseAcquire!: () => void;
+    let markAcquireStarted!: () => void;
+    const acquireGate = new Promise<void>((resolveAcquire) => {
+      releaseAcquire = resolveAcquire;
+    });
+    const acquireStarted = new Promise<void>((resolveStarted) => {
+      markAcquireStarted = resolveStarted;
+    });
+    const closeBrowser = mock(async () => {});
+    Reflect.set(surf, "close", closeBrowser);
+    Reflect.set(controller, "acquire", mock(async () => {
+      markAcquireStarted();
+      await acquireGate;
+      return surf;
+    }));
+
+    const opening = controller.getBrowser();
+    await acquireStarted;
+    const started = Date.now();
+    await expect(controller.close(Date.now() + 40)).rejects.toThrow(
+      "close deadline"
+    );
+    expect(Date.now() - started).toBeLessThan(500);
+
+    releaseAcquire();
+    await expect(opening).resolves.toBe(surf);
+    for (let attempt = 0; attempt < 20 && closeBrowser.mock.calls.length === 0; attempt++) {
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 5));
+    }
+    expect(closeBrowser).toHaveBeenCalledTimes(1);
+    await expect(controller.close(Date.now() + 200)).resolves.toBeUndefined();
+  });
+
+  it("does not await an unresolved dead-browser disposal after timeout", async () => {
+    const controller = new BrowserController(sessionConfig());
+    const { surf } = surfInstance();
+    let releaseClose!: () => void;
+    const closeGate = new Promise<void>((resolveClose) => {
+      releaseClose = resolveClose;
+    });
+    Reflect.set(surf, "close", mock(async () => closeGate));
+    Reflect.set(controller, "acquire", mock(async () => surf));
+    await controller.start();
+    markDisconnected(surf);
+    controller.status();
+
+    const started = Date.now();
+    await expect(controller.close(Date.now() + 40)).rejects.toThrow(
+      "close deadline"
+    );
+    expect(Date.now() - started).toBeLessThan(500);
+    releaseClose();
+    await expect(controller.close(Date.now() + 200)).resolves.toBeUndefined();
+  });
+
+  it("preserves a failed browser close for an explicit retry", async () => {
+    const controller = new BrowserController(sessionConfig());
+    const { surf } = surfInstance();
+    let closeCalls = 0;
+    Reflect.set(surf, "close", mock(async () => {
+      closeCalls++;
+      if (closeCalls === 1) throw new Error("first close failed");
+    }));
+    Reflect.set(controller, "acquire", mock(async () => surf));
+    await controller.start();
+
+    await expect(controller.close(Date.now() + 200)).rejects.toThrow(
+      "first close failed"
+    );
+    await expect(controller.close(Date.now() + 200)).resolves.toBeUndefined();
+    expect(closeCalls).toBe(2);
+  });
+
+  it("starts browser close before waiting for serialized work", async () => {
+    const controller = new BrowserController(sessionConfig());
+    const { surf } = surfInstance();
+    Reflect.set(controller, "acquire", mock(async () => surf));
+    await controller.start();
+
+    let releaseWork!: () => void;
+    let markWorkStarted!: () => void;
+    let markCloseStarted!: () => void;
+    const workGate = new Promise<void>((resolveWork) => {
+      releaseWork = resolveWork;
+    });
+    const workStarted = new Promise<void>((resolveStarted) => {
+      markWorkStarted = resolveStarted;
+    });
+    const closeStarted = new Promise<void>((resolveStarted) => {
+      markCloseStarted = resolveStarted;
+    });
+    Reflect.set(surf, "close", mock(async () => {
+      markCloseStarted();
+    }));
+    const runSerialized = Reflect.get(controller, "runSerialized") as (
+      operation: () => Promise<void>
+    ) => Promise<void>;
+    const work = runSerialized.call(controller, async () => {
+      markWorkStarted();
+      await workGate;
+    });
+    await workStarted;
+    const closing = controller.close(Date.now() + 500);
+
+    await closeStarted;
+    releaseWork();
+    await work;
+    await expect(closing).resolves.toBeUndefined();
+  });
+});
+
 describe("BrowserController pinned endpoints", () => {
   it("fails fast in connect mode without falling back to other browsers", async () => {
     const controller = new BrowserController(

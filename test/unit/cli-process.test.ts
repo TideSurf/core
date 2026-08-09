@@ -18,7 +18,10 @@ import {
   type SessionState,
 } from "../../src/cli/session.js";
 import { TOOL_REGISTRY } from "../../src/tools/registry.js";
-import { DAEMON_COMMAND } from "../../src/cli/daemon-argv.js";
+import {
+  DAEMON_COMMAND,
+  buildDaemonArgv,
+} from "../../src/cli/daemon-argv.js";
 import { VERSION } from "../../src/version.js";
 
 const root = join(import.meta.dir, "..", "..");
@@ -380,11 +383,7 @@ describe("orphaned daemon recovery", () => {
       ? [
           "-e",
           "setInterval(() => {}, 1000)",
-          DAEMON_COMMAND,
-          "--state-file",
-          stateFile,
-          "--startup-token",
-          startupToken,
+          ...buildDaemonArgv({ stateFile, startupToken }),
         ]
       : ["-e", "setInterval(() => {}, 1000)"];
     const child = spawn(process.execPath, args, { stdio: "ignore" });
@@ -438,6 +437,31 @@ describe("orphaned daemon recovery", () => {
     }
   }, 20_000);
 
+  it("verifies daemon identity when the runtime path contains whitespace", async () => {
+    if (process.platform === "win32") return;
+    const previousRuntime = process.env["XDG_RUNTIME_DIR"];
+    const runtime = join("/tmp", `ts runtime ${crypto.randomUUID().slice(0, 8)}`);
+    const session = `orphan-space-${crypto.randomUUID()}`;
+    process.env["XDG_RUNTIME_DIR"] = runtime;
+    const paths = getSessionPaths(session);
+    const fake = await spawnFakeDaemon(paths.stateFile);
+    writeSessionState(paths, orphanReadyState(session, paths, fake.pid!));
+    try {
+      await expect(
+        sendLiveSessionRequest(session, { method: "stop" }, 5_000)
+      ).resolves.toBeNull();
+      await awaitExit(fake);
+      expect(isProcessRunning(fake.pid!)).toBe(false);
+      expect(readSessionState(paths)).toBeNull();
+    } finally {
+      fake.kill("SIGKILL");
+      removeSessionFiles(paths, true);
+      rmSync(runtime, { recursive: true, force: true });
+      if (previousRuntime === undefined) delete process.env["XDG_RUNTIME_DIR"];
+      else process.env["XDG_RUNTIME_DIR"] = previousRuntime;
+    }
+  }, 20_000);
+
   it("never terminates a foreign process holding a recycled daemon pid", async () => {
     // A daemon that died without cleanup leaves its state file behind; when
     // the OS recycles the pid, the sleeper on that pid must NOT be signaled.
@@ -446,12 +470,13 @@ describe("orphaned daemon recovery", () => {
     const foreign = await spawnFakeDaemon(); // no daemon argv markers
     writeSessionState(paths, orphanReadyState(session, paths, foreign.pid!));
     try {
-      const response = await sendLiveSessionRequest(session, { method: "stop" }, 5_000);
-      expect(response).toBeNull();
-      // Give the recovery path time to (wrongly) signal the process.
-      await new Promise((resolveDelay) => setTimeout(resolveDelay, 1_000));
+      await expect(
+        sendLiveSessionRequest(session, { method: "stop" }, 5_000)
+      ).rejects.toThrow("command identity could not be verified");
+      // Give the recovery path time to (wrongly) signal or unlink ownership.
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
       expect(isProcessRunning(foreign.pid!)).toBe(true);
-      expect(readSessionState(paths)).toBeNull();
+      expect(readSessionState(paths)?.pid).toBe(foreign.pid);
     } finally {
       foreign.kill("SIGKILL");
       removeSessionFiles(paths, true);
@@ -464,11 +489,12 @@ describe("orphaned daemon recovery", () => {
     const decoy = await spawnFakeDaemon(paths.stateFile, "not-this-generation");
     writeSessionState(paths, orphanReadyState(session, paths, decoy.pid!));
     try {
-      const response = await sendLiveSessionRequest(session, { method: "stop" }, 5_000);
-      expect(response).toBeNull();
+      await expect(
+        sendLiveSessionRequest(session, { method: "stop" }, 5_000)
+      ).rejects.toThrow("command identity could not be verified");
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
       expect(isProcessRunning(decoy.pid!)).toBe(true);
-      expect(readSessionState(paths)).toBeNull();
+      expect(readSessionState(paths)?.pid).toBe(decoy.pid);
     } finally {
       decoy.kill("SIGKILL");
       await awaitExit(decoy);

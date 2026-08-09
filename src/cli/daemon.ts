@@ -1,12 +1,13 @@
 import { timingSafeEqual } from "node:crypto";
 import { connect, createServer, type Server, type Socket } from "node:net";
 import { resolve } from "node:path";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { BrowserController } from "./browser-controller.js";
 import {
   SESSION_PROTOCOL_VERSION,
   getSessionPaths,
   isSessionStateCurrent,
+  publishSessionEndpointIfCurrent,
   readSessionState,
   removeSessionFilesIfCurrent,
   removeSessionLockIfCurrent,
@@ -21,8 +22,35 @@ import { getToolSpec } from "../tools/registry.js";
 
 const MAX_REQUEST_BYTES = 1024 * 1024;
 const REQUEST_IDLE_TIMEOUT_MS = 30_000;
-/** Grace period for in-flight tools to finish before shutdown proceeds. */
-const SHUTDOWN_QUEUE_DRAIN_MS = 10_000;
+/** Must complete before stale recovery escalates SIGTERM to SIGKILL at 5s. */
+const DAEMON_SHUTDOWN_TIMEOUT_MS = 4_000;
+
+async function settleByDeadline<T>(
+  promise: Promise<T>,
+  deadline: number,
+  label: string
+): Promise<T> {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) {
+    throw new SessionProtocolError(`${label} exceeded the daemon shutdown deadline`);
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new SessionProtocolError(
+            `${label} exceeded the daemon shutdown deadline`
+          )),
+          remaining
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 interface IncomingRequest {
   id: string;
@@ -91,13 +119,14 @@ export interface DaemonController {
   status(): unknown;
   start(): Promise<unknown>;
   execute(name: string, input: Record<string, unknown>): Promise<ToolResult>;
-  close(): Promise<void>;
+  close(deadline?: number): Promise<void>;
 }
 
 export interface RunDaemonOptions {
   controllerFactory?: (config: SessionConfig) => DaemonController;
   installProcessHandlers?: boolean;
   startupToken?: string;
+  shutdownTimeoutMs?: number;
 }
 
 function errorDetails(error: unknown): { error: string; errorType: string } {
@@ -184,6 +213,13 @@ export async function runDaemon(
     ? options.controllerFactory(initial.config)
     : new BrowserController(initial.config);
   const expectedSecret = Buffer.from(initial.secret);
+  const shutdownTimeoutMs = options.shutdownTimeoutMs ?? DAEMON_SHUTDOWN_TIMEOUT_MS;
+  if (!Number.isFinite(shutdownTimeoutMs) || shutdownTimeoutMs <= 0) {
+    throw new SessionProtocolError("Daemon shutdown timeout must be positive");
+  }
+  let shutdownDeadline: number | undefined;
+  const getShutdownDeadline = () =>
+    shutdownDeadline ??= Date.now() + shutdownTimeoutMs;
   let server!: Server;
   let closing: Promise<void> | null = null;
   let serverClosing: Promise<void> | null = null;
@@ -202,19 +238,27 @@ export async function runDaemon(
     return serverClosing;
   };
 
-  const cleanupResources = (): Promise<Error | undefined> => {
+  const cleanupResources = (
+    deadline = getShutdownDeadline()
+  ): Promise<Error | undefined> => {
     if (resourceCleanup) return resourceCleanup;
     resourceCleanup = (async () => {
       const failures: string[] = [];
       try {
-        await controller.close();
+        // Start browser cancellation immediately. The controller receives the
+        // daemon's absolute deadline rather than a fresh stacked timeout.
+        await settleByDeadline(
+          Promise.resolve(controller.close(deadline)),
+          deadline,
+          "Browser shutdown"
+        );
       } catch (error) {
         failures.push(`browser shutdown: ${errorDetails(error).error}`);
       }
       if (failures.length === 0) {
         try {
-          // A replacement may have claimed the canonical paths while this
-          // generation was shutting down. In that case cleanup is a no-op.
+          // The socket path is generation-specific, so Node's delayed unlink
+          // on server.close() cannot target a replacement daemon's endpoint.
           removeSessionFilesIfCurrent(paths, claimed, true);
         } catch (error) {
           failures.push(`session cleanup: ${errorDetails(error).error}`);
@@ -231,23 +275,36 @@ export async function runDaemon(
   const shutdown = (exitCode = 0): Promise<void> => {
     if (closing) return closing;
     stopping = true;
+    const deadline = getShutdownDeadline();
     closing = (async () => {
       const serverClosed = stopListening();
       for (const socket of sockets) socket.destroy();
-      // Bound the drain: a tool configured with an extreme timeout must not
-      // stall shutdown until SIGKILL (which would orphan the owned Chrome).
-      let drainTimer!: ReturnType<typeof setTimeout>;
-      await Promise.race([
-        Promise.allSettled([queue, ...outOfBandTools]),
-        new Promise<void>((resolve) => {
-          drainTimer = setTimeout(resolve, SHUTDOWN_QUEUE_DRAIN_MS);
-        }),
+
+      // Resource cleanup starts before queue draining because closing CDP is
+      // the cancellation mechanism for wedged browser work. Drain, browser
+      // close, and server close all consume the same absolute deadline.
+      const cleanup = cleanupResources(deadline);
+      const drain = settleByDeadline(
+        Promise.allSettled([queue, ...outOfBandTools]).then(() => undefined),
+        deadline,
+        "Request drain"
+      ).catch(() => undefined);
+      const serverResult = settleByDeadline(
+        serverClosed,
+        deadline,
+        "Session server close"
+      ).then(() => undefined, (error) => error as Error);
+      const [cleanupError, , serverError] = await Promise.all([
+        cleanup,
+        drain,
+        serverResult,
       ]);
-      clearTimeout(drainTimer);
-      const cleanupError = await cleanupResources();
-      await serverClosed;
       if (cleanupError) {
         console.error(`[tidesurf] ${cleanupError.message}`);
+        exitCode = 1;
+      }
+      if (serverError) {
+        console.error(`[tidesurf] ${serverError.message}`);
         exitCode = 1;
       }
       process.exitCode = exitCode;
@@ -419,39 +476,36 @@ export async function runDaemon(
     throw new SessionProtocolError("Session state file changed during startup");
   }
 
-  if (process.platform !== "win32") {
-    if (await endpointInUse(paths.socketPath)) {
-      try {
-        await controller.close();
-      } catch (closeError) {
-        console.error(`[tidesurf] Browser shutdown failed: ${errorDetails(closeError).error}`);
-      }
-      throw new SessionProtocolError(
-        `Session "${initial.session}" is already served by a live daemon socket`
-      );
+  if (
+    process.platform !== "win32" &&
+    await endpointInUse(claimed.socketPath)
+  ) {
+    try {
+      await controller.close();
+    } catch (closeError) {
+      console.error(`[tidesurf] Browser shutdown failed: ${errorDetails(closeError).error}`);
     }
-    // The endpoint probe is asynchronous; a replacement can publish state
-    // while it is in flight. Re-check before unlinking the canonical socket.
-    if (!isSessionStateCurrent(paths, claimed)) {
-      try {
-        await controller.close();
-      } catch (closeError) {
-        console.error(`[tidesurf] Browser shutdown failed: ${errorDetails(closeError).error}`);
-      }
-      throw new SessionProtocolError("Session state file changed during startup");
-    }
-    rmSync(paths.socketPath, { force: true });
+    throw new SessionProtocolError(
+      `Session "${initial.session}" is already served by a live daemon socket`
+    );
   }
   server = createServer(handleSocket);
 
   try {
-    await new Promise<void>((resolveListen, rejectListen) => {
-      server.once("error", rejectListen);
-      server.listen(paths.socketPath, () => {
-        server.removeListener("error", rejectListen);
-        resolveListen();
-      });
-    });
+    const published = await publishSessionEndpointIfCurrent(
+      paths,
+      claimed,
+      () => new Promise<void>((resolveListen, rejectListen) => {
+        server.once("error", rejectListen);
+        server.listen(claimed.socketPath, () => {
+          server.removeListener("error", rejectListen);
+          resolveListen();
+        });
+      })
+    );
+    if (!published) {
+      throw new SessionProtocolError("Session state file changed during startup");
+    }
   } catch (error) {
     try {
       await controller.close();

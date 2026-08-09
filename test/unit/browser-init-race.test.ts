@@ -121,18 +121,20 @@ describe("BrowserController initialization", () => {
     await expect(controller.getBrowser()).rejects.toThrow("closed");
   });
 
-  it("does not retry a failed browser close", async () => {
+  it("retries a failed browser close", async () => {
+    let attempts = 0;
     const close = mock(async () => {
-      throw new Error("close failed");
+      attempts++;
+      if (attempts === 1) throw new Error("close failed");
     });
     replaceLaunch(mock(async () => fakeBrowser(close)));
     const controller = new BrowserController(config);
     await controller.getBrowser();
 
     await expect(controller.close()).rejects.toThrow("close failed");
-    await expect(controller.close()).rejects.toThrow("close failed");
+    await expect(controller.close()).resolves.toBeUndefined();
 
-    expect(close).toHaveBeenCalledTimes(1);
+    expect(close).toHaveBeenCalledTimes(2);
   });
 
   it("honors a configured acquisition timeout without a hidden floor", async () => {

@@ -16,6 +16,7 @@ import {
   SessionProtocolError,
   ensureSession,
   ensureSessionRequest,
+  getSessionGenerationSocketPath,
   getSessionPaths,
   isProcessRunning,
   readSessionState,
@@ -24,6 +25,7 @@ import {
   sendLiveSessionRequest,
   sendSessionRequest,
   validateSessionName,
+  withSessionMutationLock,
   writeSessionState,
   type SessionConfig,
   type SessionState,
@@ -345,10 +347,10 @@ describe("session recovery", () => {
     ).rejects.toThrow(`between 1 and ${MAX_SESSION_EXECUTION_TIMEOUT_MS}ms`);
   });
 
-  it("replaces state whose live PID has no socket", async () => {
+  it("fails closed when a live stale PID cannot be identified", async () => {
     const staleName = `stale-${randomUUID()}`;
     const paths = getSessionPaths(staleName);
-    writeSessionState(paths, {
+    const stale: SessionState = {
       protocol: SESSION_PROTOCOL_VERSION,
       version: VERSION,
       session: staleName,
@@ -357,15 +359,15 @@ describe("session recovery", () => {
       config,
       pid: process.pid,
       ready: true,
-    });
+    };
+    writeSessionState(paths, stale);
 
-    let recovered: SessionState | undefined;
     try {
-      recovered = await ensureSession({ session: staleName, config, entryPath });
-      expect(recovered.pid).not.toBe(process.pid);
-      expect(await sendSessionRequest(recovered, { method: "ping" })).toBeTruthy();
+      await expect(
+        ensureSession({ session: staleName, config, entryPath })
+      ).rejects.toThrow("command identity could not be verified");
+      expect(readSessionState(paths)?.secret).toBe(stale.secret);
     } finally {
-      await stop(recovered);
       removeSessionFiles(paths);
     }
   });
@@ -435,6 +437,83 @@ describe("session recovery", () => {
         );
       }
     } finally {
+      removeSessionFiles(paths, true);
+    }
+  });
+
+  it("serializes replacement publication at the final cleanup mutation", async () => {
+    const name = `mutation-window-${randomUUID()}`;
+    const paths = getSessionPaths(name);
+    const oldState: SessionState = {
+      protocol: SESSION_PROTOCOL_VERSION,
+      version: VERSION,
+      session: name,
+      secret: "3".repeat(64),
+      socketPath: paths.socketPath,
+      config,
+      pid: process.pid,
+      ready: true,
+      startupId: randomUUID(),
+    };
+    const replacement: SessionState = {
+      ...oldState,
+      secret: "4".repeat(64),
+      startupId: randomUUID(),
+    };
+    try {
+      writeSessionState(paths, oldState);
+      // This lease is the check-to-final-unlink window used by cleanup and
+      // endpoint publication. A replacement publisher cannot enter it.
+      await withSessionMutationLock(paths, () => {
+        expect(() => writeSessionState(paths, replacement)).toThrow(
+          "lifecycle mutation is busy"
+        );
+        expect(readSessionState(paths)?.startupId).toBe(oldState.startupId);
+      });
+
+      expect(removeSessionFilesIfCurrent(paths, oldState)).toBe(true);
+      writeSessionState(paths, replacement);
+      expect(removeSessionFilesIfCurrent(paths, oldState)).toBe(false);
+      expect(readSessionState(paths)?.startupId).toBe(replacement.startupId);
+    } finally {
+      removeSessionFiles(paths, true);
+    }
+  });
+
+  it("isolates a replacement endpoint from an old server's delayed unlink", async () => {
+    if (process.platform === "win32") return;
+    const name = `socket-generation-${randomUUID()}`;
+    const paths = getSessionPaths(name);
+    const oldId = randomUUID();
+    const replacementId = randomUUID();
+    const oldSocket = getSessionGenerationSocketPath(paths, oldId);
+    const replacementSocket = getSessionGenerationSocketPath(paths, replacementId);
+    const oldServer = createServer();
+    const replacementServer = createServer((socket) => socket.end("ok"));
+    try {
+      expect(oldSocket).not.toBe(replacementSocket);
+      oldServer.listen(oldSocket);
+      await once(oldServer, "listening");
+      replacementServer.listen(replacementSocket);
+      await once(replacementServer, "listening");
+
+      await new Promise<void>((resolveClose) => oldServer.close(() => resolveClose()));
+      expect(existsSync(replacementSocket)).toBe(true);
+      const socket = connectSocket(replacementSocket);
+      socket.setEncoding("utf8");
+      await once(socket, "connect");
+      const [chunk] = await once(socket, "data");
+      expect(chunk).toBe("ok");
+      socket.destroy();
+    } finally {
+      await new Promise<void>((resolveClose) => {
+        if (!oldServer.listening) return resolveClose();
+        oldServer.close(() => resolveClose());
+      });
+      await new Promise<void>((resolveClose) => {
+        if (!replacementServer.listening) return resolveClose();
+        replacementServer.close(() => resolveClose());
+      });
       removeSessionFiles(paths, true);
     }
   });
@@ -968,6 +1047,94 @@ describe("session recovery", () => {
       releaseBrowser();
       await browserTool.catch(() => undefined);
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
+      removeSessionFiles(paths, true);
+    }
+  });
+
+  it("starts browser cancellation immediately and uses one shutdown deadline", async () => {
+    const name = `stop-deadline-${randomUUID()}`;
+    const paths = getSessionPaths(name);
+    writeSessionState(paths, {
+      protocol: SESSION_PROTOCOL_VERSION,
+      version: VERSION,
+      session: name,
+      secret: "5".repeat(64),
+      socketPath: paths.socketPath,
+      config,
+      pid: process.pid,
+      ready: false,
+      startupId: randomUUID(),
+    });
+
+    let releaseTool!: () => void;
+    let releaseClose!: () => void;
+    let markToolStarted!: () => void;
+    let markCloseStarted!: () => void;
+    let closeDeadline: number | undefined;
+    const toolGate = new Promise<void>((resolveTool) => {
+      releaseTool = resolveTool;
+    });
+    const closeGate = new Promise<void>((resolveClose) => {
+      releaseClose = resolveClose;
+    });
+    const toolStarted = new Promise<void>((resolveStarted) => {
+      markToolStarted = resolveStarted;
+    });
+    const closeStarted = new Promise<void>((resolveStarted) => {
+      markCloseStarted = resolveStarted;
+    });
+    const controller: DaemonController = {
+      status: () => ({ running: false }),
+      start: async () => ({ running: false }),
+      execute: async () => {
+        markToolStarted();
+        await toolGate;
+        return { success: true };
+      },
+      close: async (deadline) => {
+        closeDeadline = deadline;
+        markCloseStarted();
+        await closeGate;
+      },
+    };
+    const previousExitCode = process.exitCode;
+    const errorLog = spyOn(console, "error").mockImplementation(() => {});
+
+    await runDaemon(paths.stateFile, {
+      controllerFactory: () => controller,
+      installProcessHandlers: false,
+      shutdownTimeoutMs: 80,
+    });
+    const ready = readSessionState(paths)!;
+    const tool = sendSessionRequest(ready, {
+      method: "tool",
+      name: "long",
+      input: {},
+    }, 500);
+
+    try {
+      await toolStarted;
+      const started = Date.now();
+      const stopping = sendSessionRequest(
+        ready,
+        { method: "stop" },
+        500
+      );
+      await closeStarted;
+      expect(closeDeadline).toBeDefined();
+      expect(closeDeadline! - started).toBeLessThanOrEqual(100);
+      await expect(stopping).rejects.toThrow("shutdown deadline");
+      // Two former stacked waits would take about 160ms. One absolute budget
+      // returns near the configured 80ms deadline instead.
+      expect(Date.now() - started).toBeLessThan(140);
+      expect(readSessionState(paths)).not.toBeNull();
+    } finally {
+      releaseClose();
+      releaseTool();
+      await tool.catch(() => undefined);
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
+      errorLog.mockRestore();
+      process.exitCode = previousExitCode;
       removeSessionFiles(paths, true);
     }
   });
