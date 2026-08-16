@@ -1,6 +1,6 @@
 ---
 name: tidesurf-browser
-description: Drive a real Chromium browser through the tidesurf CLI or MCP tools. Use when a task needs live web browsing: reading pages as compact, token-efficient text with action IDs; clicking, typing, selecting, and scrolling elements by ID; taking screenshots of the full page, viewport, or one element; managing tabs; handling file uploads and downloads; or extracting page data by selector. Works against a Chromium instance that tidesurf launches or attaches to over CDP.
+description: "Drive a real Chromium browser through the tidesurf CLI or MCP tools. Use when a task needs live web browsing: reading pages as compact, token-efficient text with action IDs; clicking, typing, selecting, and scrolling elements by ID; taking screenshots of the full page, viewport, or one element; managing tabs; handling file uploads and downloads; or extracting page data by selector. Works against a Chromium instance that tidesurf launches or attaches to over CDP."
 license: Apache-2.0
 metadata:
   version: "0.7.1"
